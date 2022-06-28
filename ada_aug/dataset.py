@@ -172,7 +172,7 @@ def get_dataloaders(dataset, batch, num_workers, dataroot, cutout,
         search_dataset = Subset(search_dataset, search_idx)
         search_dataset.labels = targets
         search_dataset.targets = targets
-        testset = torchvision.datasets.SVHN(root=dataroot, split='test', download=False, transform=None)
+        testset = torchvision.datasets.SVHN(root=dataroot, split='test', download=True, transform=None)
     else:
         raise ValueError('invalid dataset name=%s' % dataset)
 

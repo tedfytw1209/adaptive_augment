@@ -7,6 +7,8 @@ function run_reduced_svhn {
     BATCH=128
     LR=0.05
     WD=0.01
+    KOPS=1
+    TEMP=3
     SLR=0.001
     CUTOUT=0
     SF=1
@@ -20,6 +22,8 @@ function run_reduced_cifar10 {
     BATCH=128
     LR=0.1
     WD=0.0005
+    KOPS=1
+    TEMP=3
     SLR=0.001
     CUTOUT=16
     SF=3

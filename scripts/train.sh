@@ -9,8 +9,8 @@ function run_reduced_svhn {
     WD=0.01
     CUTOUT=0
     TRAIN_PORTION=1
-    GF=<PATH_TO_G_MODEL_DIR>
-    H=<PATH_TO_H_MODEL_DIR>
+    GF=/mnt/data2/teddy/adaptive_augment/search/reduced_svhn/20220629-000106-reduced_svhn_wresnet40_2_128_160_SLR0.001_SF1_cutout_0_lr0.05_wd0.01/
+    H=/mnt/data2/teddy/adaptive_augment/search/reduced_svhn/20220629-000106-reduced_svhn_wresnet40_2_128_160_SLR0.001_SF1_cutout_0_lr0.05_wd0.01/
     SDN=reduced_svhn
     GFN=wresnet40_2
     DELTA=0.4
@@ -27,8 +27,8 @@ function run_reduced_cifar10 {
     WD=0.0005
     CUTOUT=16
     TRAIN_PORTION=1
-    GF=<PATH_TO_G_MODEL_DIR>
-    H=<PATH_TO_H_MODEL_DIR>
+    GF='<PATH_TO_G_MODEL_DIR>'
+    H='<PATH_TO_H_MODEL_DIR>'
     SDN=reduced_cifar10
     GFN=wresnet40_2
     DELTA=0.3

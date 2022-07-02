@@ -27,8 +27,8 @@ function run_reduced_cifar10 {
     WD=0.0005
     CUTOUT=16
     TRAIN_PORTION=1
-    GF='<PATH_TO_G_MODEL_DIR>'
-    H='<PATH_TO_H_MODEL_DIR>'
+    GF='/mnt/data2/teddy/adaptive_augment/search/reduced_cifar10/20220701-111722-reduced_cifar10_wresnet40_2_128_200_SLR0.001_SF3_cutout_16_lr0.1_wd0.0005/'
+    H='/mnt/data2/teddy/adaptive_augment/search/reduced_cifar10/20220701-111722-reduced_cifar10_wresnet40_2_128_200_SLR0.001_SF3_cutout_16_lr0.1_wd0.0005/'
     SDN=reduced_cifar10
     GFN=wresnet40_2
     DELTA=0.3

@@ -4,6 +4,8 @@ import torchvision
 from sklearn.model_selection import StratifiedShuffleSplit
 from torch.utils.data import Sampler, Subset, SubsetRandomSampler
 from torchvision import transforms
+from datasets import EDFX,PTBXL,Chapman,WISDM
+import random
 
 
 _CIFAR_MEAN, _CIFAR_STD = (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)
@@ -88,6 +90,11 @@ def get_num_class(dataset):
         'reduced_cifar10': 10,
         'svhn': 10,
         'reduced_svhn': 10,
+        'edfx': 5,
+        'ptbxl_diagnostic': 44,
+        'ptbxl_subdiagnostic': 23,
+        'wisdm': 18,
+        'chapman': 12,
     }[dataset]
 
 
@@ -97,6 +104,11 @@ def get_num_channel(dataset):
         'reduced_cifar10': 3,
         'svhn': 3,
         'reduced_svhn': 3,
+        'edfx': 2,
+        'ptbxl_diagnostic': 12,
+        'ptbxl_subdiagnostic': 12,
+        'wisdm': 3,
+        'chapman': 12,
     }[dataset]
 
 
@@ -240,6 +252,169 @@ def get_dataloaders(dataset, batch, num_workers, dataroot, cutout,
         print(f'  |search: {len(searchloader)*search_divider}')
     return trainloader, validloader, searchloader, testloader
 
+def get_ts_dataloaders(dataset, batch, num_workers, dataroot, cutout,
+                    cutout_length, split=0.5, split_idx=0, target_lb=-1,
+                    search=True, search_divider=1, multilabel=False):
+    '''
+    If search is True, dataloader will give batches of image without after_transforms,
+    the transform will be done by augment agent
+    If search is False, used in benchmark training
+    '''
+    if 'cifar10' in dataset:
+        transform_train_pre = transforms.Compose([
+            transforms.RandomCrop(32, padding=4),
+            transforms.RandomHorizontalFlip(),
+        ])
+        transform_train_after = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize(_CIFAR_MEAN, _CIFAR_STD),
+        ])
+        transform_test = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize(_CIFAR_MEAN, _CIFAR_STD),
+        ])
+    else:   #default for time series dataset
+        transform_train_pre = transforms.Compose([
+        ])
+        transform_train_after = transforms.Compose([
+            transforms.ToTensor(),
+            #transforms.Normalize(_SVHN_MEAN, _SVHN_STD), assume already normalize
+        ])
+        transform_test = transforms.Compose([
+            transforms.ToTensor(),
+            #transforms.Normalize(_SVHN_MEAN, _SVHN_STD), assume already normalize
+        ])
+
+    #if cutout and cutout_length != 0:
+    #    transform_train_after.transforms.append(CutoutDefault(cutout_length))
+
+    if dataset == 'cifar10':
+        total_trainset = torchvision.datasets.CIFAR10(root=dataroot, train=True, download=True, transform=None)
+        search_dataset = None
+        testset = torchvision.datasets.CIFAR10(root=dataroot, train=False, download=True, transform=None)
+    elif dataset == 'reduced_cifar10':
+        search_dataset = torchvision.datasets.CIFAR10(root=dataroot, train=True, download=True, transform=None)
+        sss = StratifiedShuffleSplit(n_splits=1, test_size=45744, random_state=0)
+        sss = sss.split(list(range(len(search_dataset))), search_dataset.targets)
+        train_idx, valid_idx = next(sss)
+        targets = [search_dataset.targets[idx] for idx in train_idx]
+        total_trainset = Subset(search_dataset, train_idx)
+        total_trainset.targets = targets
+        targets = [search_dataset.targets[idx] for idx in valid_idx]
+        search_dataset = Subset(search_dataset, valid_idx)
+        search_dataset.targets = targets
+        testset = torchvision.datasets.CIFAR10(root=dataroot, train=False, download=True, transform=None)
+    elif dataset == 'svhn':
+        total_trainset = torchvision.datasets.SVHN(root=dataroot, split='train', download=True, transform=None)
+        testset = torchvision.datasets.SVHN(root=dataroot, split='test', download=True, transform=None)
+        search_dataset = None
+    elif dataset == 'reduced_svhn':
+        search_dataset = torchvision.datasets.SVHN(root=dataroot, split='train', download=True, transform=None)
+        sss = StratifiedShuffleSplit(n_splits=1, test_size=73257-1000, random_state=0)  # 1000 + 1000 trainset
+        sss = sss.split(list(range(len(search_dataset))), search_dataset.labels)
+        train_idx, search_idx = next(sss)
+        targets = [search_dataset.labels[idx] for idx in train_idx]
+        total_trainset = Subset(search_dataset, train_idx)
+        total_trainset.labels = targets
+        total_trainset.targets = targets
+        targets = [search_dataset.labels[idx] for idx in search_idx]
+        search_dataset = Subset(search_dataset, search_idx)
+        search_dataset.labels = targets
+        search_dataset.targets = targets
+        testset = torchvision.datasets.SVHN(root=dataroot, split='test', download=True, transform=None)
+    elif dataset == 'ptbxl':
+        dataset = PTBXL(dataroot,multilabel=multilabel)
+        total = len(dataset)
+        random.seed(0) #!!!
+        rd_idxs = [i for i in range(total)]
+        random.shuffle(rd_idxs)
+        test = Subset(dataset,rd_idxs[:int(total*test_size)])
+        if valid_size > 0:
+            valid = Subset(dataset,rd_idxs[int(total*test_size):int(total*(test_size+valid_size))])
+            train_idx = rd_idxs[int(total*(test_size+valid_size)):]
+            train_idx = train_idx[:int(len(train_idx)*subtrain_ratio)]
+            train = Subset(dataset,train_idx)
+        classes = [i for i in range(dataset.num_class)]
+    elif dataset == 'wisdm':
+        dataset = WISDM(dataroot)
+        total = len(dataset)
+        random.seed(0) #!!!
+        rd_idxs = [i for i in range(total)]
+        random.shuffle(rd_idxs)
+        test = Subset(dataset,rd_idxs[:int(total*test_size)])
+        if valid_size > 0:
+            valid = Subset(dataset,rd_idxs[int(total*test_size):int(total*(test_size+valid_size))])
+            train_idx = rd_idxs[int(total*(test_size+valid_size)):]
+            train_idx = train_idx[:int(len(train_idx)*subtrain_ratio)]
+            train = Subset(dataset,train_idx)
+        classes = [i for i in range(dataset.num_class)]
+        
+    else:
+        raise ValueError('invalid dataset name=%s' % dataset)
+
+    train_sampler = None
+    if split < 1.0:
+        sss = StratifiedShuffleSplit(n_splits=5, test_size=1-split, random_state=0)
+        sss = sss.split(list(range(len(total_trainset))), total_trainset.targets)
+        for _ in range(split_idx + 1):
+            train_idx, valid_idx = next(sss)
+
+        print(len(valid_idx))
+
+        if target_lb >= 0:
+            train_idx = [i for i in train_idx if total_trainset.targets[i] == target_lb]
+            valid_idx = [i for i in valid_idx if total_trainset.targets[i] == target_lb]
+
+        train_sampler = SubsetRandomSampler(train_idx)
+        valid_sampler = SubsetSampler(valid_idx)
+    else:
+        valid_sampler = SubsetSampler([])
+
+    test_sampler =  None
+
+    train_data = AugmentDataset(total_trainset, transform_train_pre, transform_train_after, transform_test, search=search, train=True)
+    if search and search_dataset is not None:
+        search_data = AugmentDataset(search_dataset, transform_train_pre, transform_train_after, transform_test, search=True, train=False)
+    valid_data = AugmentDataset(total_trainset, transform_train_pre, transform_train_after, transform_test, search=False, train=False)
+    test_data = AugmentDataset(testset, transform_train_pre, transform_train_after, transform_test, search=False, train=False)
+
+    if train_sampler is None:
+        trainloader = torch.utils.data.DataLoader(
+            train_data, batch_size=batch, shuffle=True,
+            drop_last=True, pin_memory=True,
+            num_workers=num_workers)
+    else:
+        trainloader = torch.utils.data.DataLoader(
+            train_data, batch_size=batch, shuffle=False,
+            sampler=train_sampler, drop_last=False,
+            pin_memory=True, num_workers=num_workers)
+
+    validloader = torch.utils.data.DataLoader(
+        valid_data, batch_size=batch,
+        sampler=valid_sampler, drop_last=False,
+        pin_memory=True, num_workers=num_workers)
+
+    if search and search_dataset is not None:
+        searchloader = torch.utils.data.DataLoader(
+            search_data, batch_size=search_divider,
+            shuffle=True, drop_last=True, pin_memory=True,
+            num_workers=num_workers)
+    else:
+        searchloader = None
+
+    testloader = torch.utils.data.DataLoader(
+        test_data, batch_size=batch,
+        sampler=test_sampler, drop_last=False,
+        pin_memory=True, num_workers=num_workers)
+
+    print(f'Dataset: {dataset}')
+    print(f'  |total: {len(train_data)}')
+    print(f'  |train: {len(trainloader)*batch}')
+    print(f'  |valid: {len(validloader)*batch}')
+    print(f'  |test: {len(testloader)*batch}')
+    if search and search_dataset is not None:
+        print(f'  |search: {len(searchloader)*search_divider}')
+    return trainloader, validloader, searchloader, testloader
 
 def unpickle(file):
     import pickle

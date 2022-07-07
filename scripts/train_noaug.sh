@@ -1,4 +1,4 @@
-GPU=0
+GPU=1
 
 function run_reduced_svhn {
     DATASET=reduced_svhn
@@ -15,7 +15,7 @@ function run_reduced_svhn {
     GFN=wresnet40_2
     DELTA=0.4
     TEMP=2
-    KOPS=2
+    KOPS=0
 }
 
 function run_reduced_cifar10 {
@@ -33,7 +33,7 @@ function run_reduced_cifar10 {
     GFN=wresnet40_2
     DELTA=0.3
     TEMP=3
-    KOPS=2
+    KOPS=0
 }
 
 if [ $1 = "reduced_cifar10" ]; then

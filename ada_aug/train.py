@@ -231,6 +231,7 @@ def infer(valid_queue, model, criterion):
     top1 = utils.AvgrageMeter()
     top5 = utils.AvgrageMeter()
     model.eval()
+    confusion_matrix = torch.zeros(10,10)
     with torch.no_grad():
         for input, target in valid_queue:
             input = input.cuda()
@@ -238,12 +239,21 @@ def infer(valid_queue, model, criterion):
 
             logits = model(input)
             loss = criterion(logits, target)
-
+            _, predicted = torch.max(logits.data, 1)
             prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
             n = input.size(0)
             objs.update(loss.detach().item(), n)
             top1.update(prec1.detach().item(), n)
             top5.update(prec5.detach().item(), n)
+            for t, p in zip(target.data.view(-1), predicted.view(-1)):
+                confusion_matrix[t.long(), p.long()] += 1
+    #
+    #print(confusion_matrix)
+    #class-wise
+    cw_acc = confusion_matrix.diag()/(confusion_matrix.sum(1)+1e-9)
+    logging.info('class-wise Acc: ' + str(cw_acc))
+    nol_acc = confusion_matrix.diag().sum() / (confusion_matrix.sum()+1e-9)
+    logging.info('Overall Acc: %f',nol_acc)
 
     return top1.avg, objs.avg, top5.avg, objs.avg
 

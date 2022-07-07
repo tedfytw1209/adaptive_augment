@@ -1,4 +1,4 @@
-GPU=0
+GPU=1
 
 function run_reduced_svhn {
     DATASET=reduced_svhn

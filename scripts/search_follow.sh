@@ -29,8 +29,25 @@ function run_reduced_cifar10 {
     SF=10
 }
 
+# cifar10
+function run_cifar10 {
+    DATASET=cifar10
+    MODEL=wresnet28_10
+    EPOCH=200
+    BATCH=128
+    LR=0.1
+    WD=0.0005
+    KOPS=2
+    TEMP=3
+    SLR=0.001
+    CUTOUT=16
+    SF=10
+}
+
 if [ $1 = "reduced_cifar10" ]; then
     run_reduced_cifar10
+elif [ $1 = "cifar10" ]; then
+    run_cifar10
 elif [ $1 = "reduced_svhn" ]; then
     run_reduced_svhn
 fi

@@ -119,9 +119,9 @@ def main():
     #  AdaAug settings
     after_transforms = train_queue.dataset.after_transforms
     adaaug_config = {'sampling': 'prob',
-                    'k_ops': 1,
-                    'delta': 0.0,
-                    'temp': 1.0,
+                    'k_ops': 1, #as paper
+                    'delta': 0.0, 
+                    'temp': 1.0, 
                     'search_d': get_dataset_dimension(args.dataset),
                     'target_d': get_dataset_dimension(args.dataset)}
 

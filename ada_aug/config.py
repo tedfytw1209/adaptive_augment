@@ -16,6 +16,34 @@ OPS_NAMES = ['ShearX',
             'Flip',
             'Identity']
 
+TS_OPS_NAMES = [
+    'no-aug', #identity
+    'flip', #time reverse
+    'ft-surrogate',
+    'channel-dropout',
+    'channel-shuffle',
+    # 'channel-sym', this is only for eeg
+    'time-mask',
+    'noise',
+    'bandstop',
+    'sign',
+    'freq-shift',
+    # 'rotz', this is only for eeg
+    # 'roty', this is only for eeg
+    # 'rotx', this is only for eeg
+]
+
+''' may add other transfroms
+0 Identity
+1 Jitter  [0.01, 0.5]
+2 Time Warp knots,  {3, 4, 5}, [0.01, 0.5]
+3 Window slice ratio [0.95, 0.6]
+4 Window Warp Window ratio, window scales 0.1, [0.1, 2]
+5 Scaling  [0.1,2.0]
+6 Magnitude Warp knots,  {3, 4, 5}, [0.1, 2]
+7 Permutation Max segments {3, 4, 5, 6}
+8 Dropout p [0.05, 0.5]
+'''
 
 def get_warmup_config(dset):
     # multiplier, epoch

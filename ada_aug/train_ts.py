@@ -1,17 +1,20 @@
 import os
+from pickle import FALSE
 import sys
 import time
 import torch
 import utils
 import logging
 import argparse
+import numpy as np
+from sklearn.metrics import average_precision_score,roc_auc_score
 import torch.nn as nn
 import torch.utils
 
 from adaptive_augmentor import AdaAug
 from networks import get_model
 from networks.projection import Projection
-from dataset import get_num_class, get_dataloaders, get_label_name, get_dataset_dimension
+from dataset import get_num_class, get_dataloaders, get_label_name, get_dataset_dimension, get_ts_dataloaders
 from config import get_warmup_config
 from warmup_scheduler import GradualWarmupScheduler
 
@@ -19,6 +22,7 @@ parser = argparse.ArgumentParser("ada_aug")
 parser.add_argument('--dataroot', type=str, default='./', help='location of the data corpus')
 parser.add_argument('--dataset', type=str, default='cifar10', help='name of dataset')
 parser.add_argument('--train_portion', type=float, default=0.5, help='portion of training data')
+parser.add_argument('--test_size', type=float, default=0.2, help='test size ratio (if needed)')
 parser.add_argument('--batch_size', type=int, default=96, help='batch size')
 parser.add_argument('--num_workers', type=int, default=0, help="num_workers")
 parser.add_argument('--learning_rate', type=float, default=0.025, help='init learning rate')
@@ -80,11 +84,12 @@ def main():
     #  dataset settings
     n_class = get_num_class(args.dataset)
     class2label = get_label_name(args.dataset, args.dataroot)
-    train_queue, valid_queue, _, test_queue = get_dataloaders(
+    multilabel = args.multilabel
+    train_queue, valid_queue, _, test_queue = get_ts_dataloaders(
         args.dataset, args.batch_size, args.num_workers,
         args.dataroot, args.cutout, args.cutout_length,
         split=args.train_portion, split_idx=0, target_lb=-1,
-        search=True)
+        search=True, test_size=args.test_size,multilabel=args.multilabel)
 
     logging.info(f'Dataset: {args.dataset}')
     logging.info(f'  |total: {len(train_queue.dataset)}')
@@ -98,7 +103,7 @@ def main():
     logging.info("param size = %fMB", utils.count_parameters_in_MB(task_model))
 
     #  task optimization settings
-    optimizer = torch.optim.SGD(
+    optimizer = torch.optim.SGD( #paper not mention
         task_model.parameters(),
         args.learning_rate,
         momentum=args.momentum,
@@ -110,13 +115,16 @@ def main():
         optimizer, float(args.epochs), eta_min=args.learning_rate_min)
 
     m, e = get_warmup_config(args.dataset)
-    scheduler = GradualWarmupScheduler(
+    scheduler = GradualWarmupScheduler( #paper not mention
             optimizer,
             multiplier=m,
             total_epoch=e,
             after_scheduler=scheduler)
     logging.info(f'Optimizer: SGD, scheduler: CosineAnnealing, warmup: {m}/{e}')
-    criterion = nn.CrossEntropyLoss()
+    if not multilabel:
+        criterion = nn.CrossEntropyLoss()
+    else:
+        criterion = nn.BCEWithLogitsLoss(reduce='mean')
     criterion = criterion.cuda()
 
     #  restore setting
@@ -169,16 +177,16 @@ def main():
         logging.info('epoch %d lr %e', epoch, lr)
 
         train_acc, train_obj = train(
-            train_queue, task_model, criterion, optimizer, epoch, args.grad_clip, adaaug)
+            train_queue, task_model, criterion, optimizer, epoch, args.grad_clip, adaaug, multilabel=multilabel)
         logging.info('train_acc %f', train_acc)
 
-        valid_acc, valid_obj, _, _ = infer(valid_queue, task_model, criterion)
+        valid_acc, valid_obj, _, _ = infer(valid_queue, task_model, criterion, multilabel=multilabel)
         logging.info('valid_acc %f', valid_acc)
 
         scheduler.step()
 
         if epoch % args.report_freq == 0:
-            test_acc, test_obj, test_acc5, _ = infer(test_queue, task_model, criterion)
+            test_acc, test_obj, test_acc5, _ = infer(test_queue, task_model, criterion, multilabel=multilabel)
             logging.info('test_acc %f %f', test_acc, test_acc5)
 
         utils.save_ckpt(task_model, optimizer, scheduler, epoch,
@@ -186,20 +194,21 @@ def main():
 
     adaaug.save_history(class2label)
     figure = adaaug.plot_history()
-    test_acc, test_obj, test_acc5, _ = infer(test_queue, task_model, criterion)
+    test_acc, test_obj, test_acc5, _ = infer(test_queue, task_model, criterion, multilabel=multilabel)
 
     logging.info('test_acc %f %f', test_acc, test_acc5)
     logging.info(f'save to {args.save}')
 
 
-def train(train_queue, model, criterion, optimizer, epoch, grad_clip, adaaug):
+def train(train_queue, model, criterion, optimizer, epoch, grad_clip, adaaug, multilabel=False):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
     top5 = utils.AvgrageMeter()
-
+    preds = []
+    targets = []
+    total = 0
     for step, (input, target) in enumerate(train_queue):
         target = target.cuda(non_blocking=True)
-
         #  get augmented training data from adaaug
         aug_images = adaaug(input, mode='exploit')
         model.train()
@@ -209,30 +218,57 @@ def train(train_queue, model, criterion, optimizer, epoch, grad_clip, adaaug):
         loss.backward()
         nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
         optimizer.step()
-
-        prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
         n = input.size(0)
         objs.update(loss.detach().item(), n)
-        top1.update(prec1.detach().item(), n)
-        top5.update(prec5.detach().item(), n)
+        if not multilabel:
+            prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))    
+            top1.update(prec1.detach().item(), n)
+            top5.update(prec5.detach().item(), n)
 
         global_step = step + epoch * len(train_queue)
-        if global_step % args.report_freq == 0:
-            logging.info('train %03d %e %f %f', global_step, objs.avg, top1.avg, top5.avg)
+        if global_step % args.report_freq == 0 and not multilabel:
+            logging.info('train: step=%03d loss=%e top1acc=%f top5acc=%f', global_step, objs.avg, top1.avg, top5.avg)
 
         # log the policy
         if step == 0:
             adaaug.add_history(input, target)
+        
+        # Accuracy / AUROC
+        if not multilabel:
+            _, predicted = torch.max(logits.data, 1)
+            total += target.size(0)
+        else:
+            predicted = torch.sigmoid(logits.data)
+        preds.append(predicted.cpu().detach())
+        targets.append(target.cpu().detach())
+    #Total
+    if not multilabel:
+        perfrom = top1.avg
+        logging.info('Epoch train: loss=%e top1acc=%f top5acc=%f', objs.avg, top1.avg, top5.avg)
+    else:
+        targets_np = torch.cat(targets).numpy()
+        preds_np = torch.cat(preds).numpy()
+        try:
+            perfrom = 100 * roc_auc_score(targets_np, preds_np,average='macro')
+        except Exception as e:
+            nan_count = np.sum(np.isnan(preds_np))
+            inf_count = np.sum(np.isinf(preds_np))
+            print('predict nan, inf count: ',nan_count,inf_count)
+            raise e
+        logging.info('Epoch train: loss=%e macroAUROC=%f', objs.avg, perfrom)
+    
+    return perfrom, objs.avg
 
-    return top1.avg, objs.avg
 
-
-def infer(valid_queue, model, criterion):
+def infer(valid_queue, model, criterion, multilabel=False):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
     top5 = utils.AvgrageMeter()
     model.eval()
     confusion_matrix = torch.zeros(10,10)
+    preds = []
+    targets = []
+    total = 0
     with torch.no_grad():
         for input, target in valid_queue:
             input = input.cuda()
@@ -241,23 +277,36 @@ def infer(valid_queue, model, criterion):
             logits = model(input)
             loss = criterion(logits, target)
             _, predicted = torch.max(logits.data, 1)
-            prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
             n = input.size(0)
             objs.update(loss.detach().item(), n)
-            top1.update(prec1.detach().item(), n)
-            top5.update(prec5.detach().item(), n)
-            for t, p in zip(target.data.view(-1), predicted.view(-1)):
-                confusion_matrix[t.long(), p.long()] += 1
-    #
-    #print(confusion_matrix)
+            if not multilabel:
+                prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
+                top1.update(prec1.detach().item(), n)
+                top5.update(prec5.detach().item(), n)
+                for t, p in zip(target.data.view(-1), predicted.view(-1)):
+                    confusion_matrix[t.long(), p.long()] += 1
+                _, predicted = torch.max(logits.data, 1)
+                total += target.size(0)
+            else:
+                predicted = torch.sigmoid(logits.data)
+            preds.append(predicted.cpu().detach())
+            targets.append(target.cpu().detach())
+
     #class-wise
-    cw_acc = confusion_matrix.diag()/(confusion_matrix.sum(1)+1e-9)
-    logging.info('class-wise Acc: ' + str(cw_acc))
-    nol_acc = confusion_matrix.diag().sum() / (confusion_matrix.sum()+1e-9)
-    logging.info('Overall Acc: %f',nol_acc)
-
-    return top1.avg, objs.avg, top5.avg, objs.avg
-
+    if not multilabel:
+        cw_acc = confusion_matrix.diag()/(confusion_matrix.sum(1)+1e-9)
+        logging.info('class-wise Acc: ' + str(cw_acc))
+        nol_acc = confusion_matrix.diag().sum() / (confusion_matrix.sum()+1e-9)
+        logging.info('Overall Acc: %f',nol_acc)
+        return top1.avg, objs.avg, top5.avg, objs.avg
+    else:
+        targets_np = torch.cat(targets).numpy()
+        preds_np = torch.cat(preds).numpy()
+        perfrom_cw = utils.AUROC_cw(targets_np,preds_np)
+        perfrom = perfrom_cw.mean()
+        logging.info('class-wise AUROC: ' + '['+', '.join(['%.1f'%e for e in perfrom_cw])+']')
+        logging.info('Overall AUROC: %f',perfrom)
+        return perfrom, objs.avg, perfrom, objs.avg
 
 if __name__ == '__main__':
     main()

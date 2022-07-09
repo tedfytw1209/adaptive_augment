@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 import torchvision
-from sklearn.model_selection import StratifiedShuffleSplit
+from sklearn.model_selection import StratifiedShuffleSplit,ShuffleSplit
 from torch.utils.data import Sampler, Subset, SubsetRandomSampler
 from torchvision import transforms
 from datasets import EDFX,PTBXL,Chapman,WISDM
@@ -83,6 +83,34 @@ class AugmentDataset(torch.utils.data.Dataset):
     def __len__(self):
         return self.dataset.__len__()
 
+class AugmentDataset_TS(torch.utils.data.Dataset):
+    def __init__(self, dataset, pre_transforms, after_transforms, valid_transforms, search, train):
+        super(AugmentDataset_TS, self).__init__()
+        self.dataset = dataset
+        self.pre_transforms = pre_transforms
+        self.after_transforms = after_transforms
+        self.valid_transforms = valid_transforms
+        self.search = search
+        self.train = train
+
+    def __getitem__(self, index):
+        if self.search:
+            raw_image,seq_len, target = self.dataset.__getitem__(index)
+            raw_image = self.pre_transforms(raw_image)
+            image = transforms.ToTensor()(raw_image)
+            return image, seq_len, target
+        else:
+            img,seq_len, target = self.dataset.__getitem__(index)
+            if self.train:
+                img = self.pre_transforms(img)
+                img = self.after_transforms(img)
+            else:
+                if self.valid_transforms is not None:
+                    img = self.valid_transforms(img)
+            return img, seq_len, target
+
+    def __len__(self):
+        return self.dataset.__len__()
 
 def get_num_class(dataset):
     return {
@@ -114,7 +142,7 @@ def get_num_channel(dataset):
 
 def get_dataloaders(dataset, batch, num_workers, dataroot, cutout,
                     cutout_length, split=0.5, split_idx=0, target_lb=-1,
-                    search=True, search_divider=1):
+                    search=True, search_divider=1, search_size=0):
     '''
     If search is True, dataloader will give batches of image without after_transforms,
     the transform will be done by augment agent
@@ -155,7 +183,7 @@ def get_dataloaders(dataset, batch, num_workers, dataroot, cutout,
         total_trainset = torchvision.datasets.CIFAR10(root=dataroot, train=True, download=True, transform=None)
         search_dataset = None
         testset = torchvision.datasets.CIFAR10(root=dataroot, train=False, download=True, transform=None)
-    elif dataset == 'reduced_cifar10':
+    elif dataset == 'reduced_cifar10': #!!!paper can use reduced search dataset for search (update policy network gradient)!!!
         search_dataset = torchvision.datasets.CIFAR10(root=dataroot, train=True, download=True, transform=None)
         sss = StratifiedShuffleSplit(n_splits=1, test_size=45744, random_state=0)
         sss = sss.split(list(range(len(search_dataset))), search_dataset.targets)
@@ -254,11 +282,12 @@ def get_dataloaders(dataset, batch, num_workers, dataroot, cutout,
 
 def get_ts_dataloaders(dataset, batch, num_workers, dataroot, cutout,
                     cutout_length, split=0.5, split_idx=0, target_lb=-1,
-                    search=True, search_divider=1, multilabel=False):
+                    search=True, search_divider=1, search_size=0, test_size=0.2, multilabel=False):
     '''
     If search is True, dataloader will give batches of image without after_transforms,
     the transform will be done by augment agent
     If search is False, used in benchmark training
+    search_size = % of data only for search
     '''
     if 'cifar10' in dataset:
         transform_train_pre = transforms.Compose([
@@ -287,7 +316,8 @@ def get_ts_dataloaders(dataset, batch, num_workers, dataroot, cutout,
 
     #if cutout and cutout_length != 0:
     #    transform_train_after.transforms.append(CutoutDefault(cutout_length))
-
+    valid_size = split
+    subtrain_ratio = 1 - search_size
     if dataset == 'cifar10':
         total_trainset = torchvision.datasets.CIFAR10(root=dataroot, train=True, download=True, transform=None)
         search_dataset = None
@@ -328,12 +358,15 @@ def get_ts_dataloaders(dataset, batch, num_workers, dataroot, cutout,
         random.seed(0) #!!!
         rd_idxs = [i for i in range(total)]
         random.shuffle(rd_idxs)
-        test = Subset(dataset,rd_idxs[:int(total*test_size)])
-        if valid_size > 0:
-            valid = Subset(dataset,rd_idxs[int(total*test_size):int(total*(test_size+valid_size))])
-            train_idx = rd_idxs[int(total*(test_size+valid_size)):]
-            train_idx = train_idx[:int(len(train_idx)*subtrain_ratio)]
-            train = Subset(dataset,train_idx)
+        testset = Subset(dataset,rd_idxs[:int(total*test_size)])
+        if search_size > 0:
+            search_dataset = Subset(dataset,rd_idxs[int(total*test_size):int(total*(test_size+search_size))])
+            tot_train_idx = rd_idxs[int(total*(test_size+valid_size)):]
+            train_idx = tot_train_idx[:int(len(train_idx)*subtrain_ratio)]
+            total_trainset = Subset(dataset,train_idx)
+        else:
+            search_dataset = None
+            total_trainset = Subset(dataset,rd_idxs[int(total*test_size):])
         classes = [i for i in range(dataset.num_class)]
     elif dataset == 'wisdm':
         dataset = WISDM(dataroot)
@@ -341,35 +374,73 @@ def get_ts_dataloaders(dataset, batch, num_workers, dataroot, cutout,
         random.seed(0) #!!!
         rd_idxs = [i for i in range(total)]
         random.shuffle(rd_idxs)
-        test = Subset(dataset,rd_idxs[:int(total*test_size)])
-        if valid_size > 0:
-            valid = Subset(dataset,rd_idxs[int(total*test_size):int(total*(test_size+valid_size))])
-            train_idx = rd_idxs[int(total*(test_size+valid_size)):]
-            train_idx = train_idx[:int(len(train_idx)*subtrain_ratio)]
-            train = Subset(dataset,train_idx)
+        testset = Subset(dataset,rd_idxs[:int(total*test_size)])
+        if search_size > 0:
+            search_dataset = Subset(dataset,rd_idxs[int(total*test_size):int(total*(test_size+search_size))])
+            tot_train_idx = rd_idxs[int(total*(test_size+valid_size)):]
+            train_idx = tot_train_idx[:int(len(train_idx)*subtrain_ratio)]
+            total_trainset = Subset(dataset,train_idx)
+        else:
+            search_dataset = None
+            total_trainset = Subset(dataset,rd_idxs[int(total*test_size):])
         classes = [i for i in range(dataset.num_class)]
-        
+    elif dataset == 'edfx':
+        dataset = EDFX(dataroot) #diff with CADDA paper data split
+        total = len(dataset)
+        random.seed(0) #!!!
+        rd_idxs = [i for i in range(total)]
+        random.shuffle(rd_idxs)
+        testset = Subset(dataset,rd_idxs[:int(total*test_size)])
+        if search_size > 0:
+            search_dataset = Subset(dataset,rd_idxs[int(total*test_size):int(total*(test_size+search_size))])
+            tot_train_idx = rd_idxs[int(total*(test_size+valid_size)):]
+            train_idx = tot_train_idx[:int(len(train_idx)*subtrain_ratio)]
+            total_trainset = Subset(dataset,train_idx)
+        else:
+            search_dataset = None
+            total_trainset = Subset(dataset,rd_idxs[int(total*test_size):])
+        classes = [i for i in range(dataset.num_class)]
+        input_channel = dataset.channel
+    elif dataset == 'chapman':
+        assert multilabel #assert multilabel is True
+        dataset = Chapman(dataroot) #chapman need normalize
+        total = len(dataset)
+        random.seed(0) #!!!
+        rd_idxs = [i for i in range(total)]
+        random.shuffle(rd_idxs)
+        testset = Subset(dataset,rd_idxs[:int(total*test_size)])
+        if search_size > 0:
+            search_dataset = Subset(dataset,rd_idxs[int(total*test_size):int(total*(test_size+search_size))])
+            tot_train_idx = rd_idxs[int(total*(test_size+valid_size)):]
+            train_idx = tot_train_idx[:int(len(train_idx)*subtrain_ratio)]
+            total_trainset = Subset(dataset,train_idx)
+        else:
+            search_dataset = None
+            total_trainset = Subset(dataset,rd_idxs[int(total*test_size):])
+        classes = [i for i in range(dataset.num_class)]
+        input_channel = dataset.channel
     else:
         raise ValueError('invalid dataset name=%s' % dataset)
 
     train_sampler = None
-    if split < 1.0:
-        sss = StratifiedShuffleSplit(n_splits=5, test_size=1-split, random_state=0)
-        sss = sss.split(list(range(len(total_trainset))), total_trainset.targets)
+    if split < 1.0: 
+        if not multilabel: #multilabel can't
+            sss = StratifiedShuffleSplit(n_splits=5, test_size=1-split, random_state=0)
+            sss = sss.split(list(range(len(total_trainset))), total_trainset.label)
+        else:
+            sss = ShuffleSplit(n_splits=5, test_size=1-split, random_state=0)
+            sss = sss.split(list(range(len(total_trainset))))
         for _ in range(split_idx + 1):
             train_idx, valid_idx = next(sss)
-
         print(len(valid_idx))
-
         if target_lb >= 0:
-            train_idx = [i for i in train_idx if total_trainset.targets[i] == target_lb]
-            valid_idx = [i for i in valid_idx if total_trainset.targets[i] == target_lb]
-
+            train_idx = [i for i in train_idx if total_trainset.label[i] == target_lb]
+            valid_idx = [i for i in valid_idx if total_trainset.label[i] == target_lb]
         train_sampler = SubsetRandomSampler(train_idx)
         valid_sampler = SubsetSampler(valid_idx)
     else:
         valid_sampler = SubsetSampler([])
-
+        
     test_sampler =  None
 
     train_data = AugmentDataset(total_trainset, transform_train_pre, transform_train_after, transform_test, search=search, train=True)
@@ -408,6 +479,7 @@ def get_ts_dataloaders(dataset, batch, num_workers, dataroot, cutout,
         pin_memory=True, num_workers=num_workers)
 
     print(f'Dataset: {dataset}')
+    print(f'  |multilabel: {multilabel}')
     print(f'  |total: {len(train_data)}')
     print(f'  |train: {len(trainloader)*batch}')
     print(f'  |valid: {len(validloader)*batch}')

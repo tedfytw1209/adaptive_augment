@@ -8,12 +8,14 @@ import torch
 import utils
 import logging
 import argparse
+import numpy as np
+from sklearn.metrics import average_precision_score,roc_auc_score
 import torch.nn as nn
 import torch.utils
 
-from adaptive_augmentor import AdaAug
-from networks import get_model
-from networks.projection import Projection
+from adaptive_augmentor import AdaAug_TS
+from networks import get_model_tseries
+from networks.projection import Projection_TSeries
 from config import get_search_divider
 from dataset import get_ts_dataloaders, get_num_class, get_label_name, get_dataset_dimension
 
@@ -77,7 +79,7 @@ def main():
     n_class = get_num_class(args.dataset)
     sdiv = get_search_divider(args.model_name)
     class2label = get_label_name(args.dataset, args.dataroot)
-
+    multilabel = args.multilabel
     train_queue, valid_queue, search_queue, test_queue = get_ts_dataloaders(
         args.dataset, args.batch_size, args.num_workers,
         args.dataroot, args.cutout, args.cutout_length,
@@ -91,11 +93,11 @@ def main():
     logging.info(f'  |search: {len(search_queue)*sdiv}')
 
     #  model settings
-    gf_model = get_model(model_name=args.model_name, num_class=n_class,
-        use_cuda=True, data_parallel=False)
+    gf_model = get_model_tseries(model_name=args.model_name, num_class=n_class,
+        use_cuda=True, data_parallel=False,dataset=args.dataset)
     logging.info("param size = %fMB", utils.count_parameters_in_MB(gf_model))
 
-    h_model = Projection(in_features=gf_model.fc.in_features,
+    h_model = Projection_TSeries(in_features=gf_model.fc.in_features,
         n_layers=args.n_proj_layer, n_hidden=128).cuda()
 
     #  training settings
@@ -114,7 +116,10 @@ def main():
         betas=(0.9, 0.999),
         weight_decay=args.proj_weight_decay)
 
-    criterion = nn.CrossEntropyLoss()
+    if not multilabel:
+        criterion = nn.CrossEntropyLoss()
+    else:
+        criterion = nn.BCEWithLogitsLoss(reduce='mean')
     criterion = criterion.cuda()
 
     #  AdaAug settings
@@ -126,7 +131,7 @@ def main():
                     'search_d': get_dataset_dimension(args.dataset),
                     'target_d': get_dataset_dimension(args.dataset)}
 
-    adaaug = AdaAug(after_transforms=after_transforms,
+    adaaug = AdaAug_TS(after_transforms=after_transforms,
         n_class=n_class,
         gf_model=gf_model,
         h_model=h_model,
@@ -141,10 +146,10 @@ def main():
 
         # searching
         train_acc, train_obj = train(train_queue, search_queue, gf_model, adaaug,
-            criterion, gf_optimizer, args.grad_clip, h_optimizer, epoch, args.search_freq)
+            criterion, gf_optimizer, args.grad_clip, h_optimizer, epoch, args.search_freq, multilabel=multilabel)
 
         # validation
-        valid_acc, valid_obj = infer(valid_queue, gf_model, criterion)
+        valid_acc, valid_obj = infer(valid_queue, gf_model, criterion, multilabel=multilabel)
 
         logging.info(f'train_acc {train_acc} valid_acc {valid_acc}')
         scheduler.step()
@@ -155,7 +160,7 @@ def main():
     end_time = time.time()
     elapsed = end_time - start_time
 
-    test_acc, test_obj = infer(test_queue, gf_model, criterion)
+    test_acc, test_obj = infer(test_queue, gf_model, criterion, multilabel=multilabel)
     utils.save_model(gf_model, os.path.join(args.save, 'gf_weights.pt'))
     utils.save_model(h_model, os.path.join(args.save, 'h_weights.pt'))
     adaaug.save_history(class2label)
@@ -166,31 +171,34 @@ def main():
     logging.info(f'saved to: {args.save}')
 
 def train(train_queue, search_queue, gf_model, adaaug, criterion, gf_optimizer,
-            grad_clip, h_optimizer, epoch, search_freq):
+            grad_clip, h_optimizer, epoch, search_freq, multilabel=False):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
     top5 = utils.AvgrageMeter()
-
-    for step, (input, target) in enumerate(train_queue):
+    preds = []
+    targets = []
+    total = 0
+    for step, (input, seq_len, target) in enumerate(train_queue):
         target = target.cuda(non_blocking=True)
 
         # exploitation
         timer = time.time()
-        aug_images = adaaug(input, mode='exploit')
+        aug_images = adaaug(input, seq_len, mode='exploit')
         gf_model.train()
         gf_optimizer.zero_grad()
-        logits = gf_model(aug_images)
+        logits = gf_model(aug_images, seq_len)
         loss = criterion(logits, target)
         loss.backward()
         nn.utils.clip_grad_norm_(gf_model.parameters(), grad_clip)
         gf_optimizer.step()
 
         #  stats
-        prec1, prec5 = utils.accuracy(logits.detach(), target.detach(), topk=(1, 5))
         n = target.size(0)
         objs.update(loss.detach().item(), n)
-        top1.update(prec1.detach().item(), n)
-        top5.update(prec5.detach().item(), n)
+        if not multilabel:
+            prec1, prec5 = utils.accuracy(logits.detach(), target.detach(), topk=(1, 5))
+            top1.update(prec1.detach().item(), n)
+            top5.update(prec5.detach().item(), n)
         exploitation_time = time.time() - timer
 
         # exploration
@@ -214,31 +222,82 @@ def train(train_queue, search_queue, gf_model, adaaug, criterion, gf_optimizer,
         if global_step % args.report_freq == 0:
             logging.info('  |train %03d %e %f %f | %.3f + %.3f s', global_step,
                 objs.avg, top1.avg, top5.avg, exploitation_time, exploration_time)
+        #ACC-AUROC
+        if not multilabel:
+            _, predicted = torch.max(logits.data, 1)
+            total += target.size(0)
+        else:
+            predicted = torch.sigmoid(logits.data)
+        preds.append(predicted.cpu().detach())
+        targets.append(target.cpu().detach())
+    #Total
+    if not multilabel:
+        perfrom = 100 * top1.avg
+        logging.info('Epoch train: loss=%e top1acc=%f top5acc=%f', objs.avg, top1.avg, top5.avg)
+    else:
+        targets_np = torch.cat(targets).numpy()
+        preds_np = torch.cat(preds).numpy()
+        try:
+            perfrom = 100 * roc_auc_score(targets_np, preds_np,average='macro')
+        except Exception as e:
+            nan_count = np.sum(np.isnan(preds_np))
+            inf_count = np.sum(np.isinf(preds_np))
+            print('predict nan, inf count: ',nan_count,inf_count)
+            raise e
+        logging.info('Epoch train: loss=%e macroAUROC=%f', objs.avg, perfrom)
 
-    return top1.avg, objs.avg
+    return perfrom, objs.avg
 
 
-def infer(valid_queue, gf_model, criterion):
+def infer(valid_queue, gf_model, criterion, multilabel=False):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
     top5 = utils.AvgrageMeter()
     gf_model.eval()
-
+    confusion_matrix = torch.zeros(10,10)
+    preds = []
+    targets = []
+    total = 0
     with torch.no_grad():
-        for input, target in valid_queue:
+        for input, seq_len, target in valid_queue:
             input = input.cuda()
             target = target.cuda(non_blocking=True)
 
-            logits = gf_model(input)
+            logits = gf_model(input,seq_len)
             loss = criterion(logits, target)
 
             prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
             n = input.size(0)
             objs.update(loss.detach().item(), n)
-            top1.update(prec1.detach().item(), n)
-            top5.update(prec5.detach().item(), n)
-
-    return top1.avg, objs.avg
+            if not multilabel:
+                _, predicted = torch.max(logits.data, 1)
+                prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
+                top1.update(prec1.detach().item(), n)
+                top5.update(prec5.detach().item(), n)
+                for t, p in zip(target.data.view(-1), predicted.view(-1)):
+                    confusion_matrix[t.long(), p.long()] += 1
+                _, predicted = torch.max(logits.data, 1)
+                total += target.size(0)
+            else:
+                predicted = torch.sigmoid(logits.data)
+            preds.append(predicted.cpu().detach())
+            targets.append(target.cpu().detach())
+    #class-wise
+    if not multilabel:
+        cw_acc = 100 * confusion_matrix.diag()/(confusion_matrix.sum(1)+1e-9)
+        logging.info('class-wise Acc: ' + str(cw_acc))
+        nol_acc = 100 * confusion_matrix.diag().sum() / (confusion_matrix.sum()+1e-9)
+        logging.info('Overall Acc: %f',nol_acc)
+        perfrom = 100 * top1.avg
+    else:
+        targets_np = torch.cat(targets).numpy()
+        preds_np = torch.cat(preds).numpy()
+        perfrom_cw = utils.AUROC_cw(targets_np,preds_np)
+        perfrom = perfrom_cw.mean()
+        logging.info('class-wise AUROC: ' + '['+', '.join(['%.1f'%e for e in perfrom_cw])+']')
+        logging.info('Overall AUROC: %f',perfrom)
+    return perfrom, objs.avg
+    #return top1.avg, objs.avg
 
 
 if __name__ == '__main__':

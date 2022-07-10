@@ -13,7 +13,7 @@ import torch.utils
 
 from adaptive_augmentor import AdaAug,AdaAug_TS
 from networks import get_model,get_model_tseries
-from networks.projection import Projection
+from networks.projection import Projection_TSeries
 from dataset import get_num_class, get_dataloaders, get_label_name, get_dataset_dimension, get_ts_dataloaders
 from config import get_warmup_config
 from warmup_scheduler import GradualWarmupScheduler
@@ -142,7 +142,7 @@ def main():
                             num_class=search_n_class,
                             use_cuda=True, data_parallel=False,dataset=args.dataset)
 
-    h_model = Projection(in_features=gf_model.fc.in_features,
+    h_model = Projection_TSeries(in_features=gf_model.fc.in_features,
                             n_layers=args.n_proj_layer,
                             n_hidden=args.n_proj_hidden).cuda()
 
@@ -243,7 +243,7 @@ def train(train_queue, model, criterion, optimizer, epoch, grad_clip, adaaug, mu
         targets.append(target.cpu().detach())
     #Total
     if not multilabel:
-        perfrom = top1.avg
+        perfrom = 100 * top1.avg
         logging.info('Epoch train: loss=%e top1acc=%f top5acc=%f', objs.avg, top1.avg, top5.avg)
     else:
         targets_np = torch.cat(targets).numpy()
@@ -276,10 +276,11 @@ def infer(valid_queue, model, criterion, multilabel=False):
 
             logits = model(input,seq_len)
             loss = criterion(logits, target)
-            _, predicted = torch.max(logits.data, 1)
+            
             n = input.size(0)
             objs.update(loss.detach().item(), n)
             if not multilabel:
+                _, predicted = torch.max(logits.data, 1)
                 prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
                 top1.update(prec1.detach().item(), n)
                 top5.update(prec5.detach().item(), n)
@@ -294,19 +295,21 @@ def infer(valid_queue, model, criterion, multilabel=False):
 
     #class-wise
     if not multilabel:
-        cw_acc = confusion_matrix.diag()/(confusion_matrix.sum(1)+1e-9)
+        cw_acc = 100 * confusion_matrix.diag()/(confusion_matrix.sum(1)+1e-9)
         logging.info('class-wise Acc: ' + str(cw_acc))
-        nol_acc = confusion_matrix.diag().sum() / (confusion_matrix.sum()+1e-9)
+        nol_acc = 100 * confusion_matrix.diag().sum() / (confusion_matrix.sum()+1e-9)
         logging.info('Overall Acc: %f',nol_acc)
-        return top1.avg, objs.avg, top5.avg, objs.avg
+        perfrom = top1.avg * 100
+        perfrom2 = top5.avg * 100
     else:
         targets_np = torch.cat(targets).numpy()
         preds_np = torch.cat(preds).numpy()
         perfrom_cw = utils.AUROC_cw(targets_np,preds_np)
         perfrom = perfrom_cw.mean()
+        perfrom2 = perfrom
         logging.info('class-wise AUROC: ' + '['+', '.join(['%.1f'%e for e in perfrom_cw])+']')
         logging.info('Overall AUROC: %f',perfrom)
-        return perfrom, objs.avg, perfrom, objs.avg
+    return perfrom, objs.avg, perfrom2, objs.avg
 
 if __name__ == '__main__':
     main()

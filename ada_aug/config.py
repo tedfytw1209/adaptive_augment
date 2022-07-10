@@ -17,17 +17,17 @@ OPS_NAMES = ['ShearX',
             'Identity']
 
 TS_OPS_NAMES = [
-    'no-aug', #identity
-    'flip', #time reverse
-    'ft-surrogate',
-    'channel-dropout',
-    'channel-shuffle',
+    'identity', #identity
+    'time_reverse', #time reverse
+    'fft_surrogate',
+    'channel_dropout',
+    'channel_shuffle',
     # 'channel-sym', this is only for eeg
-    'time-mask',
-    'noise',
-    'bandstop',
-    'sign',
-    'freq-shift',
+    'random_time_mask',
+    'add_gaussian_noise',
+    'random_bandstop',
+    'sign_flip',
+    'freq_shift',
     # 'rotz', this is only for eeg
     # 'roty', this is only for eeg
     # 'rotx', this is only for eeg

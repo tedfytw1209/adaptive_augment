@@ -7,10 +7,10 @@ import torch.nn.functional as F
 from torchvision import transforms
 
 
-from operation import apply_augment
+from operation_tseries import apply_augment
 from networks import get_model
 from utils import PolicyHistory
-from config import OPS_NAMES
+from config import OPS_NAMES,TS_OPS_NAMES
 
 default_config = {'sampling': 'prob',
                     'k_ops': 1,
@@ -162,5 +162,116 @@ class AdaAug(nn.Module):
         elif mode == 'exploit':
             #  return a set of augmented images
             return self.exploit(images)
+        elif mode == 'inference':
+            return images
+
+class AdaAug_TS(AdaAug):
+    def __init__(self, after_transforms, n_class, gf_model, h_model, save_dir=None, 
+                    config=default_config):
+        super(AdaAug_TS, self).__init__(after_transforms, n_class, gf_model, h_model, save_dir, config)
+        #other already define in AdaAug
+        self.ops_names = TS_OPS_NAMES
+        self.n_ops = len(self.ops_names)
+        self.history = PolicyHistory(self.ops_names, self.save_dir, self.n_class)
+
+    def predict_aug_params(self, X, seq_len, mode):
+        self.gf_model.eval()
+        if mode == 'exploit':
+            self.h_model.eval()
+            T = self.temp
+        elif mode == 'explore':
+            self.h_model.train()
+            T = 1.0
+        a_params = self.h_model(self.gf_model.extract_features(X.cuda(),seq_len))
+        magnitudes, weights = torch.split(a_params, self.n_ops, dim=1)
+        magnitudes = torch.sigmoid(magnitudes)
+        weights = torch.nn.functional.softmax(weights/T, dim=-1)
+        return magnitudes, weights
+
+    def add_history(self, images, seq_len, targets):
+        magnitudes, weights = self.predict_aug_params(images, seq_len, 'exploit')
+        for k in range(self.n_class):
+            idxs = (targets == k).nonzero().squeeze()
+            mean_lambda = magnitudes[idxs].mean(0).detach().cpu().tolist()
+            mean_p = weights[idxs].mean(0).detach().cpu().tolist()
+            std_lambda = magnitudes[idxs].std(0).detach().cpu().tolist()
+            std_p = weights[idxs].std(0).detach().cpu().tolist()
+            self.history.add(k, mean_lambda, mean_p, std_lambda, std_p)
+
+    def get_aug_valid_imgs(self, images, magnitudes):
+        """Return the mixed latent feature
+
+        Args:
+            images ([Tensor]): [description]
+            magnitudes ([Tensor]): [description]
+        Returns:
+            [Tensor]: a set of augmented validation images
+        """
+        trans_image_list = []
+        for i, image in enumerate(images):
+            pil_img = image
+            # Prepare transformed image for mixing
+            for k, ops_name in enumerate(self.ops_names):
+                trans_image = apply_augment(pil_img, ops_name, magnitudes[i][k])
+                trans_image = self.after_transforms(trans_image)
+                trans_image = stop_gradient(trans_image.cuda(), magnitudes[i][k])
+                trans_image_list.append(trans_image)
+        return torch.stack(trans_image_list, dim=0)
+
+    def explore(self, images, seq_len):
+        """Return the mixed latent feature
+
+        Args:
+            images ([Tensor]): [description]
+        Returns:
+            [Tensor]: return a batch of mixed features
+        """
+        magnitudes, weights = self.predict_aug_params(images, seq_len,'explore')
+        a_imgs = self.get_aug_valid_imgs(images, magnitudes)
+        a_features = self.gf_model.extract_features(a_imgs, seq_len)
+        ba_features = a_features.reshape(len(images), self.n_ops, -1) # batch, n_ops, n_hidden
+        
+        mixed_features = [w.matmul(feat) for w, feat in zip(weights, ba_features)]
+        mixed_features = torch.stack(mixed_features, dim=0)
+        return mixed_features
+
+    def get_training_aug_images(self, images, magnitudes, weights):
+        # visualization
+        if self.k_ops > 0:
+            trans_images = []
+            if self.sampling == 'prob':
+                idx_matrix = torch.multinomial(weights, self.k_ops)
+            elif self.sampling == 'max':
+                idx_matrix = torch.topk(weights, self.k_ops, dim=1)[1]
+
+            for i, image in enumerate(images):
+                pil_image = image
+                for idx in idx_matrix[i]:
+                    m_pi = perturb_param(magnitudes[i][idx], self.delta)
+                    pil_image = apply_augment(pil_image, self.ops_names[idx], m_pi)
+                trans_images.append(self.after_transforms(pil_image))
+        else:
+            trans_images = []
+            for i, image in enumerate(images):
+                pil_image = image
+                trans_image = self.after_transforms(pil_image)
+                trans_images.append(trans_image)
+        
+        aug_imgs = torch.stack(trans_images, dim=0).cuda()
+        return aug_imgs
+
+    def exploit(self, images, seq_len):
+        resize_imgs = F.interpolate(images, size=self.search_d) if self.resize else images
+        magnitudes, weights = self.predict_aug_params(resize_imgs, seq_len, 'exploit')
+        aug_imgs = self.get_training_aug_images(images, magnitudes, weights)
+        return aug_imgs
+
+    def forward(self, images, seq_len, mode):
+        if mode == 'explore':
+            #  return a set of mixed augmented features
+            return self.explore(images,seq_len)
+        elif mode == 'exploit':
+            #  return a set of augmented images
+            return self.exploit(images,seq_len)
         elif mode == 'inference':
             return images

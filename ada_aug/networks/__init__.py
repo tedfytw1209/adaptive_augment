@@ -7,7 +7,9 @@ from torch.nn import DataParallel
 
 from .resnet import ResNet
 from .wideresnet import WideResNet
-
+from .LSTM import LSTM_ecg,LSTM_modal
+from .LSTM_attention import LSTM_attention
+from .Sleep_stager import SleepStagerChambon2018
 
 def get_model(model_name='wresnet40_2', num_class=10, n_channel=3, use_cuda=True, data_parallel=False):
     name = model_name
@@ -31,3 +33,50 @@ def get_model(model_name='wresnet40_2', num_class=10, n_channel=3, use_cuda=True
             model = model.cuda()
     return model
 
+def get_model_tseries(model_name='lstm', num_class=10, n_channel=3, use_cuda=True, data_parallel=False):
+    name = model_name
+    config = {'n_output':num_class,'n_embed':n_channel,'rnn_drop': 0.2,'fc_drop': 0.5}
+    if model_name == 'lstm':
+        n_hidden = 128
+        model_config = {'n_hidden': n_hidden,
+                  'n_layers': 1,
+                  'b_dir': False,
+                  }
+        net = LSTM_modal
+    elif model_name == 'lstm_ecg':
+        n_hidden = 512
+        model_config = {
+                  'n_hidden': n_hidden,
+                  'n_layers': 2,
+                  'b_dir': False,
+                  }
+        net = LSTM_ecg
+    elif model_name == 'lstm_atten':
+        n_hidden = 512
+        model_config = {
+                  'n_hidden': n_hidden,
+                  'n_layers': 1,
+                  'b_dir': True,
+                    }
+        net = LSTM_attention
+    elif model_name == 'cnn_sleep': #with problems!!!
+        model_config = {
+                  'sfreq': 100,
+                  'batch_norm': True,
+                  'dropout': 0.25,
+                  }
+        net = SleepStagerChambon2018
+    else:
+        raise NameError('no model named, %s' % name)
+    config.update(model_config)
+    model = net(config=config)
+    if data_parallel:
+        model = model.cuda()
+        model = DataParallel(model)
+    else:
+        if use_cuda:
+            model = model.cuda()
+    print('\n### Model ###')
+    print(f'=> {model_name}')
+    print(f'embedding=> {n_hidden}')
+    return model

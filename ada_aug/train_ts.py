@@ -11,8 +11,8 @@ from sklearn.metrics import average_precision_score,roc_auc_score
 import torch.nn as nn
 import torch.utils
 
-from adaptive_augmentor import AdaAug
-from networks import get_model
+from adaptive_augmentor import AdaAug,AdaAug_TS
+from networks import get_model,get_model_tseries
 from networks.projection import Projection
 from dataset import get_num_class, get_dataloaders, get_label_name, get_dataset_dimension, get_ts_dataloaders
 from config import get_warmup_config
@@ -97,7 +97,7 @@ def main():
     logging.info(f'  |valid: {len(valid_queue)*args.batch_size}')
 
     #  task model settings
-    task_model = get_model(model_name=args.model_name,
+    task_model = get_model_tseries(model_name=args.model_name,
                             num_class=n_class,
                             use_cuda=True, data_parallel=False)
     logging.info("param size = %fMB", utils.count_parameters_in_MB(task_model))
@@ -138,7 +138,7 @@ def main():
 
     #  load trained adaaug sub models
     search_n_class = get_num_class(args.search_dataset)
-    gf_model = get_model(model_name=args.gf_model_name,
+    gf_model = get_model_tseries(model_name=args.gf_model_name,
                             num_class=search_n_class,
                             use_cuda=True, data_parallel=False)
 
@@ -163,7 +163,7 @@ def main():
                     'search_d': get_dataset_dimension(args.search_dataset),
                     'target_d': get_dataset_dimension(args.dataset)}
 
-    adaaug = AdaAug(after_transforms=after_transforms,
+    adaaug = AdaAug_TS(after_transforms=after_transforms,
                     n_class=search_n_class,
                     gf_model=gf_model,
                     h_model=h_model,
@@ -207,13 +207,13 @@ def train(train_queue, model, criterion, optimizer, epoch, grad_clip, adaaug, mu
     preds = []
     targets = []
     total = 0
-    for step, (input, target) in enumerate(train_queue):
+    for step, (input, seq_len, target) in enumerate(train_queue):
         target = target.cuda(non_blocking=True)
         #  get augmented training data from adaaug
-        aug_images = adaaug(input, mode='exploit')
+        aug_images = adaaug(input, seq_len, mode='exploit')
         model.train()
         optimizer.zero_grad()
-        logits = model(aug_images)
+        logits = model(aug_images, seq_len)
         loss = criterion(logits, target)
         loss.backward()
         nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
@@ -270,11 +270,11 @@ def infer(valid_queue, model, criterion, multilabel=False):
     targets = []
     total = 0
     with torch.no_grad():
-        for input, target in valid_queue:
+        for input,seq_len, target in valid_queue:
             input = input.cuda()
             target = target.cuda(non_blocking=True)
 
-            logits = model(input)
+            logits = model(input,seq_len)
             loss = criterion(logits, target)
             _, predicted = torch.max(logits.data, 1)
             n = input.size(0)

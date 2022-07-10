@@ -12,19 +12,18 @@ from torch.distributions import Normal
 from mne.filter import notch_filter
 from mne.channels.interpolation import _make_interpolation_matrix
 from mne.channels import make_standard_montage
+import matplotlib.pyplot as plt
 
-# batch, len, channel
+#for model: (len, channel)
+#for this file (channel, len) !!!
 def identity(x, *args, **kwargs):
     return x
-
 def time_reverse(X, *args, **kwargs):
-    return torch.flip(X, [1]) # batch, len, channel
-
+    return torch.flip(X, [-1])
 def sign_flip(X, *args, **kwargs):
     return -X
-
 def downsample_shift_from_arrays(X, factor, offset, *args, **kwargs):
-    return X[..., offset::factor,:]
+    return X[..., offset::factor]
 
 def _new_random_fft_phase_odd(n, device, random_state=None):
     rng = check_random_state(random_state)
@@ -36,8 +35,6 @@ def _new_random_fft_phase_odd(n, device, random_state=None):
         random_phase,
         -torch.flip(random_phase, [-1])
     ])
-
-
 def _new_random_fft_phase_even(n, device, random_state=None):
     rng = check_random_state(random_state)
     random_phase = torch.from_numpy(
@@ -49,14 +46,10 @@ def _new_random_fft_phase_even(n, device, random_state=None):
         torch.as_tensor([0.0], device=device),
         -torch.flip(random_phase, [-1])
     ])
-
-
 _new_random_fft_phase = {
     0: _new_random_fft_phase_even,
     1: _new_random_fft_phase_odd
 }
-
-
 def _fft_surrogate(x=None, f=None, eps=1, random_state=None):
     """ FT surrogate augmentation of a single EEG channel, as proposed in [1]_
 
@@ -125,10 +118,8 @@ def _fft_surrogate(x=None, f=None, eps=1, random_state=None):
     f_shifted = f * torch.exp(eps * random_phase)
     shifted = ifft(f_shifted, dim=-1)
     return shifted.real.float()
-
 def fft_surrogate(X, magnitude, random_state, *args, **kwargs):
-    #select a channel !!!
-    transformed_X = _fft_surrogate(
+    transformed_X = _fft_surrogate( #single channel???
         x=X,
         eps=magnitude,
         random_state=random_state
@@ -148,12 +139,9 @@ def _pick_channels_randomly(X, magnitude, random_state):
     # equivalent to a 0s and 1s mask, but allows to backprop through
     # could also be done using torch.distributions.RelaxedBernoulli
     return torch.sigmoid(1000 * (unif_samples - magnitude)).to(X.device)
-
-
-def channel_dropout(X, y, magnitude, random_state, *args, **kwargs):
+def channel_dropout(X, magnitude, random_state, *args, **kwargs):
     mask = _pick_channels_randomly(X, magnitude, random_state)
-    return X * mask.unsqueeze(-1), y
-
+    return X * mask.unsqueeze(-1)
 
 def _make_permutation_matrix(X, mask, random_state):
     rng = check_random_state(random_state)
@@ -174,15 +162,12 @@ def _make_permutation_matrix(X, mask, random_state):
         )
         batch_permutations[b, ...] = one_hot(channels_permutation)
     return batch_permutations
-
-
-def channel_shuffle(X, y, magnitude, random_state, *args, **kwargs):
+def channel_shuffle(X, magnitude, random_state, *args, **kwargs):
     mask = _pick_channels_randomly(X, 1 - magnitude, random_state)
     batch_permutations = _make_permutation_matrix(X, mask, random_state)
-    return torch.matmul(batch_permutations, X), y
+    return torch.matmul(batch_permutations, X)
 
-
-def add_gaussian_noise(X, y, std, random_state, *args, **kwargs):
+def add_gaussian_noise(X, std, random_state, *args, **kwargs):
     # XXX: Maybe have rng passed as argument here
     rng = check_random_state(random_state)
     noise = torch.from_numpy(
@@ -192,11 +177,10 @@ def add_gaussian_noise(X, y, std, random_state, *args, **kwargs):
         )
     ).float().to(X.device) * std
     transformed_X = X + noise
-    return transformed_X, y
+    return transformed_X
 
-
-def permute_channels(X, y, permutation, *args, **kwargs):
-    return X[..., permutation, :], y
+def permute_channels(X, permutation, *args, **kwargs):
+    return X[..., permutation, :]
 
 
 def _sample_mask_start(X, mask_len_samples, random_state):
@@ -206,15 +190,11 @@ def _sample_mask_start(X, mask_len_samples, random_state):
         low=0, high=1, size=X.shape[0],
     ), device=X.device) * (seq_length - mask_len_samples)
     return mask_start
-
-
 def _mask_time(X, mask_start_per_sample, mask_len_samples):
     mask = torch.ones_like(X)
     for i, start in enumerate(mask_start_per_sample):
         mask[i, :, start:start + mask_len_samples] = 0
     return X * mask
-
-
 def _relaxed_mask_time(X, mask_start_per_sample, mask_len_samples):
     batch_size, n_channels, seq_len = X.shape
     t = torch.arange(seq_len, device=X.device).float()
@@ -226,14 +206,12 @@ def _relaxed_mask_time(X, mask_start_per_sample, mask_len_samples):
         torch.sigmoid(s * -(t - mask_start_per_sample - mask_len_samples))
     ).float().to(X.device)
     return X * mask
-
-
-def random_time_mask(X, y, mask_len_samples, random_state, *args, **kwargs):
+def random_time_mask(X, mask_len_samples, random_state, *args, **kwargs):
     mask_start = _sample_mask_start(X, mask_len_samples, random_state)
-    return _relaxed_mask_time(X, mask_start, mask_len_samples), y
+    return _relaxed_mask_time(X, mask_start, mask_len_samples)
 
 
-def random_bandstop(X, y, bandwidth, max_freq, sfreq, random_state, *args,
+def random_bandstop(X, bandwidth, max_freq=50, sfreq=100, random_state=42, *args,
                     **kwargs):
     rng = check_random_state(random_state)
     transformed_X = X.clone()
@@ -243,7 +221,6 @@ def random_bandstop(X, y, bandwidth, max_freq, sfreq, random_state, *args,
         high=max_freq - 1 - 2 * bandwidth,
         size=X.shape[0]
     )
-
     # I just worry that this might be to complex for gradient descent and
     # it would be a shame to make a straight-through here... A new version
     # using torch convolution might be necessary...
@@ -258,8 +235,7 @@ def random_bandstop(X, y, bandwidth, max_freq, sfreq, random_state, *args,
             notch_widths=bandwidth,
             verbose=False
         ))
-    return transformed_X, y
-
+    return transformed_X
 
 def hilbert_transform(x):
     if torch.is_complex(x):
@@ -276,13 +252,9 @@ def hilbert_transform(x):
         h[..., 1:(N + 1) // 2] = 2
 
     return ifft(f * h, dim=-1)
-
-
 def nextpow2(n):
     """Return the first integer N such that 2**N >= abs(n)"""
     return int(np.ceil(np.log2(np.abs(n))))
-
-
 def _freq_shift(x, fs, f_shift):
     """
     Shift the specified signal by the specified frequency.
@@ -302,9 +274,7 @@ def _freq_shift(x, fs, f_shift):
         N_padded, n_channels, 1).T
     shifted = analytical * torch.exp(2j * np.pi * reshaped_f_shift * t)
     return shifted[..., :N_orig].real.float()
-
-
-def freq_shift(X, y, max_shift, sfreq, random_state, *args, **kwargs):
+def freq_shift(X, max_shift, sfreq=100, random_state=42, *args, **kwargs):
     rng = check_random_state(random_state)
     delta_freq = torch.as_tensor(
         rng.uniform(size=X.shape[0]), device=X.device) * max_shift
@@ -313,7 +283,7 @@ def freq_shift(X, y, max_shift, sfreq, random_state, *args, **kwargs):
         fs=sfreq,
         f_shift=delta_freq,
     )
-    return transformed_X, y
+    return transformed_X
 
 
 def _torch_normalize_vectors(rr):
@@ -329,7 +299,6 @@ def _torch_normalize_vectors(rr):
         # will lead to a RuntimeError: number of dims don't match in permute
         new_rr = rr / size.unsqueeze(-1)
     return new_rr
-
 
 def _torch_legval(x, c, tensor=True):
     """
@@ -541,8 +510,7 @@ def make_rotation_matrix(axis, angle, degrees=True):
         rot = rot[[1, 2, 0], :]
         return rot[:, [1, 2, 0]]
 
-
-def random_rotation(X, y, axis, max_degrees, sensors_positions_matrix,
+def random_rotation(X, axis, max_degrees, sensors_positions_matrix,
                     spherical_splines, random_state, *args, **kwargs):
     rng = check_random_state(random_state)
     random_angles = torch.as_tensor(rng.uniform(
@@ -557,8 +525,7 @@ def random_rotation(X, y, axis, max_degrees, sensors_positions_matrix,
     rotated_X = _rotate_signals(
         X, rots, sensors_positions_matrix, spherical_splines
     )
-    return rotated_X, y
-
+    return rotated_X
 
 def get_standard_10_20_positions(raw_or_epoch=None, ordered_ch_names=None):
     """Returns standard 10-20 sensors position matrix (for instantiating
@@ -586,59 +553,66 @@ def get_standard_10_20_positions(raw_or_epoch=None, ordered_ch_names=None):
     }
     return np.stack(list(positions_subdict.values())).T
 
-'''AUGMENT_LIST = [
-        (ShearX, -0.3, 0.3),  # 0
-        (ShearY, -0.3, 0.3),  # 1
-        (TranslateX, -0.45, 0.45),  # 2
-        (TranslateY, -0.45, 0.45),  # 3
-        (Rotate, -30, 30),  # 4
-        (AutoContrast, 0, 1),  # 5
-        (Invert, 0, 1),  # 6
-        (Equalize, 0, 1),  # 7
-        (Solarize, 0, 256),  # 8
-        (Posterize, 4, 8),  # 9
-        (Contrast, 0.1, 1.9),  # 10
-        (Color, 0.1, 1.9),  # 11
-        (Brightness, 0.1, 1.9),  # 12
-        (Sharpness, 0.1, 1.9),  # 13
-        (Cutout, 0, 0.2),  # 14
-        (Flip, 0, 1),  # 15
-        (Identity, 0, 1)]  # 16'''
 TS_OPS_NAMES = [
-    'no-aug', #identity
-    'flip', #time reverse
-    'ft-surrogate',
-    'channel-dropout',
-    'channel-shuffle',
+    'identity', #identity
+    'time_reverse', #time reverse
+    'fft_surrogate',
+    'channel_dropout',
+    'channel_shuffle',
     # 'channel-sym', this is only for eeg
-    'time-mask',
-    'noise',
-    'bandstop',
-    'sign',
-    'freq-shift',
+    'random_time_mask',
+    'add_gaussian_noise',
+    'random_bandstop',
+    'sign_flip',
+    'freq_shift',
     # 'rotz', this is only for eeg
     # 'roty', this is only for eeg
     # 'rotx', this is only for eeg
 ]
 TS_AUGMENT_LIST = [
-        (IdentityTransform, 0, 1),  # 0
-        (TimeReverse, 0, 1),  # 1
-        (FTSurrogate, 0, 1),  # 2
-        (MissingChannels, 0, 1),  # 3
-        (ShuffleChannels, 0, 1),  # 4
-        (TimeMask, 0, 1),  # 5 impl
-        (GaussianNoise, 0, 1),  # 6
-        (BandstopFilter, 0, 1),  # 7
-        (SignFlip, 0, 256),  # 8
-        (FrequencyShift, 4, 8),  # 9
-        ]  # 16
+        (identity, 0, 1),  # 0
+        (time_reverse, 0, 1),  # 1
+        (fft_surrogate, 0, 1),  # 2
+        (channel_dropout, 0, 1),  # 3
+        (channel_shuffle, 0, 1),  # 4
+        (random_time_mask, 0, 100),  # 5 impl
+        (add_gaussian_noise, 0, 0.2),  # 6
+        (random_bandstop, 0, 2),  # 7
+        (sign_flip, 0, 1),  # 8
+        (freq_shift, 0, 5),  # 9
+        ]
 
 def get_augment(name):
     augment_dict = {fn.__name__: (fn, v1, v2) for fn, v1, v2 in TS_AUGMENT_LIST}
     return augment_dict[name]
 
 
-def apply_augment(img, name, level):
+def apply_augment(img, name, level, rd_seed=42):
     augment_fn, low, high = get_augment(name)
-    return augment_fn(img.copy(), level * (high - low) + low).detach()
+    #change tseries signal from (len,channel) to (batch,channel,len)
+    seq_len , channel = img.shape
+    img = img.permute(1,0).view(1,channel,seq_len)
+    aug_img = augment_fn(img, level * (high - low) + low,random_state=rd_seed)
+    return aug_img.permute(0,2,1).detach().view(seq_len,channel) #back to (len,channel)
+
+def plot_line(t,x):
+    plt.clf()
+    channel_num = x.shape[-1]
+    for i in  range(channel_num):
+        plt.plot(t, x[:,i])
+    plt.show()
+
+if __name__ == '__main__':
+    print('Test all operations')
+    t = np.linspace(0, 10, 1000)
+    x = np.vstack([np.cos(t),np.sin(t),np.random.normal(0, 0.3, 1000)]).T
+    print(t.shape)
+    print(x.shape)
+    x_tensor = torch.from_numpy(x).float()
+    plot_line(t,x)
+    for name in TS_OPS_NAMES:
+        print('='*10,name,'='*10)
+        x_aug = apply_augment(x_tensor,name,0.5).numpy()
+        print(x_aug.shape)
+        plot_line(t,x_aug)
 

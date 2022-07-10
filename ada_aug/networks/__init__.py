@@ -33,7 +33,7 @@ def get_model(model_name='wresnet40_2', num_class=10, n_channel=3, use_cuda=True
             model = model.cuda()
     return model
 
-def get_model_tseries(model_name='lstm', num_class=10, n_channel=3, use_cuda=True, data_parallel=False):
+def get_model_tseries(model_name='lstm', num_class=10, n_channel=3, use_cuda=True, data_parallel=False, dataset=''):
     name = model_name
     config = {'n_output':num_class,'n_embed':n_channel,'rnn_drop': 0.2,'fc_drop': 0.5}
     if model_name == 'lstm':
@@ -61,9 +61,9 @@ def get_model_tseries(model_name='lstm', num_class=10, n_channel=3, use_cuda=Tru
         net = LSTM_attention
     elif model_name == 'cnn_sleep': #with problems!!!
         model_config = {
-                  'sfreq': 100,
+                  'dataset': dataset,
                   'batch_norm': True,
-                  'dropout': 0.25,
+                  'fc_drop': 0.25,
                   }
         net = SleepStagerChambon2018
     else:

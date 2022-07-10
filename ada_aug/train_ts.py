@@ -99,7 +99,7 @@ def main():
     #  task model settings
     task_model = get_model_tseries(model_name=args.model_name,
                             num_class=n_class,
-                            use_cuda=True, data_parallel=False)
+                            use_cuda=True, data_parallel=False,dataset=args.dataset)
     logging.info("param size = %fMB", utils.count_parameters_in_MB(task_model))
 
     #  task optimization settings
@@ -140,7 +140,7 @@ def main():
     search_n_class = get_num_class(args.search_dataset)
     gf_model = get_model_tseries(model_name=args.gf_model_name,
                             num_class=search_n_class,
-                            use_cuda=True, data_parallel=False)
+                            use_cuda=True, data_parallel=False,dataset=args.dataset)
 
     h_model = Projection(in_features=gf_model.fc.in_features,
                             n_layers=args.n_proj_layer,

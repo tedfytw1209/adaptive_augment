@@ -4,6 +4,25 @@ import torch.nn as nn
 # Authors: Hubert Banville <hubert.jbanville@gmail.com>
 #
 # License: BSD (3-clause)
+Freq_dict = {
+    'edfx' : 100,
+    'ptbxl' : 100,
+    'wisdm' : 20,
+    'chapman' : 500,
+}
+TimeS_dict = {
+    'edfx' : 30,
+    'ptbxl' : 10,
+    'wisdm' : 10,
+    'chapman' : 10,
+}
+
+def soft_find(word,dic):
+    for n in sorted(dic):
+        if word in n:
+            return dic[n]
+    #raise error
+    raise
 
 class SleepStagerChambon2018(nn.Module):
     """Sleep staging architecture from [1]_.
@@ -42,13 +61,14 @@ class SleepStagerChambon2018(nn.Module):
     def __init__(self, config):
         super().__init__()
         n_channels = config.get('n_channels')
-        sfreq = config.get('sfreq')
-        n_conv_chs=8
+        data_set_name = config['dataset']
+        sfreq = soft_find(data_set_name,Freq_dict)
+        n_conv_chs = config.get('n_hidden',8)
         time_conv_size_s=0.5
         max_pool_size_s=0.125
         n_classes = config.get('n_output')
-        input_size_s=config.get('input_size_s',30)
-        dropout=config.get('dropout',0.25)
+        input_size_s=soft_find(data_set_name,Freq_dict)
+        dropout=config.get('fc_drop',0.25)
         apply_batch_norm=config.get('batch_norm',False)
         time_conv_size = int(time_conv_size_s * sfreq)
         max_pool_size = int(max_pool_size_s * sfreq)
@@ -61,9 +81,7 @@ class SleepStagerChambon2018(nn.Module):
 
         if n_channels > 1:
             self.spatial_conv = nn.Conv2d(1, n_channels, (n_channels, 1))
-
         batch_norm = nn.BatchNorm2d if apply_batch_norm else nn.Identity
-
         self.feature_extractor = nn.Sequential(
             nn.Conv2d(
                 1, n_conv_chs, (1, time_conv_size), padding=(0, pad_size)),

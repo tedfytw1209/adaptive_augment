@@ -173,6 +173,7 @@ class AdaAug_TS(AdaAug):
         self.ops_names = TS_OPS_NAMES
         self.n_ops = len(self.ops_names)
         self.history = PolicyHistory(self.ops_names, self.save_dir, self.n_class)
+        self.config = config
 
     def predict_aug_params(self, X, seq_len, mode):
         self.gf_model.eval()
@@ -261,7 +262,11 @@ class AdaAug_TS(AdaAug):
         return aug_imgs
 
     def exploit(self, images, seq_len):
-        resize_imgs = F.interpolate(images, size=self.search_d) if self.resize else images
+        if self.resize and 'lstm' not in self.config['gf_model_name']:
+            resize_imgs = F.interpolate(images, size=self.search_d)
+        else:
+            resize_imgs = images
+        #resize_imgs = F.interpolate(images, size=self.search_d) if self.resize else images
         magnitudes, weights = self.predict_aug_params(resize_imgs, seq_len, 'exploit')
         aug_imgs = self.get_training_aug_images(images, magnitudes, weights)
         return aug_imgs

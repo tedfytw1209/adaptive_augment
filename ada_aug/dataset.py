@@ -371,13 +371,12 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
     rd_idxs = [i for i in range(total)]
     random.shuffle(rd_idxs)
     if search_size > 0:
-        search_dataset = Subset(dataset,rd_idxs[int(total*test_size):int(total*(test_size+search_size))])
-        tot_train_idx = rd_idxs[int(total*(test_size+valid_size)):]
-        train_idx = tot_train_idx[:int(len(train_idx)*subtrain_ratio)]
-        total_trainset = Subset(dataset,train_idx)
+        search_dataset = Subset(search_trainset,rd_idxs[:int(total*(search_size))])
+        tot_train_idx = rd_idxs[int(total*(search_size)):]
+        total_trainset = Subset(search_trainset,tot_train_idx)
     else:
         search_dataset = None
-        total_trainset = Subset(dataset,rd_idxs[int(total*test_size):])
+        total_trainset = search_trainset
             
 
     train_sampler = None
@@ -451,13 +450,29 @@ def unpickle(file):
     with open(file, 'rb') as fo:
         dict = pickle.load(fo, encoding='bytes')
     return dict
-
+Freq_dict = {
+    'edfx' : 100,
+    'ptbxl' : 100,
+    'wisdm' : 20,
+    'chapman' : 500,
+}
+TimeS_dict = {
+    'edfx' : 30,
+    'ptbxl' : 10,
+    'wisdm' : 10,
+    'chapman' : 10,
+}
 
 def get_dataset_dimension(dset):
     return {'cifar10': 32,
             'reduced_cifar10': 32,
             'svhn': 32,
-            'reduced_svhn': 32}[dset]
+            'reduced_svhn': 32,
+            'edfx':3000,
+            'ptbxl':1000,
+            'wisdm':200,
+            'chapman':5000,
+            }[dset]
 
 
 def get_label_name(dset, dataroot):

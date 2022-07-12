@@ -144,7 +144,8 @@ def main():
                     'delta': 0.0, 
                     'temp': 1.0, 
                     'search_d': get_dataset_dimension(args.dataset),
-                    'target_d': get_dataset_dimension(args.dataset)}
+                    'target_d': get_dataset_dimension(args.dataset),
+                    'gf_model_name': args.model_name}
 
     adaaug = AdaAug_TS(after_transforms=after_transforms,
         n_class=n_class,
@@ -158,24 +159,33 @@ def main():
     for epoch in range(args.epochs):
         lr = scheduler.get_last_lr()[0]
         logging.info('epoch %d lr %e', epoch, lr)
-
+        
         # searching
-        train_acc, train_obj = train(train_queue, search_queue, gf_model, adaaug,
-            criterion, gf_optimizer, args.grad_clip, h_optimizer, epoch, args.search_freq, multilabel=multilabel)
+        train_acc, train_obj, train_dic = train(train_queue, search_queue, gf_model, adaaug,
+            criterion, gf_optimizer, args.grad_clip, h_optimizer, epoch, args.search_freq, multilabel=multilabel,n_class=n_class)
 
         # validation
-        valid_acc, valid_obj = infer(valid_queue, gf_model, criterion, multilabel=multilabel)
+        valid_acc, valid_obj,valid_dic = infer(valid_queue, gf_model, criterion, multilabel=multilabel,n_class=n_class,mode='valid')
 
         logging.info(f'train_acc {train_acc} valid_acc {valid_acc}')
         scheduler.step()
 
         utils.save_model(gf_model, os.path.join(args.save, 'gf_weights.pt'))
         utils.save_model(h_model, os.path.join(args.save, 'h_weights.pt'))
+        #wandb
+        step_dic = {'epoch':epoch}
+        step_dic.update(train_dic)
+        step_dic.update(valid_dic)
+        wandb.log(step_dic)
 
     end_time = time.time()
     elapsed = end_time - start_time
 
-    test_acc, test_obj = infer(test_queue, gf_model, criterion, multilabel=multilabel)
+    test_acc, test_obj, test_dic = infer(test_queue, gf_model, criterion, multilabel=multilabel,n_class=n_class,mode='test')
+    #wandb
+    step_dic.update(test_dic)
+    wandb.log(step_dic)
+    #save&log
     utils.save_model(gf_model, os.path.join(args.save, 'gf_weights.pt'))
     utils.save_model(h_model, os.path.join(args.save, 'h_weights.pt'))
     adaaug.save_history(class2label)
@@ -186,10 +196,11 @@ def main():
     logging.info(f'saved to: {args.save}')
 
 def train(train_queue, search_queue, gf_model, adaaug, criterion, gf_optimizer,
-            grad_clip, h_optimizer, epoch, search_freq, multilabel=False):
+            grad_clip, h_optimizer, epoch, search_freq, multilabel=False,n_class=10):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
     top5 = utils.AvgrageMeter()
+    confusion_matrix = torch.zeros(n_class,n_class)
     preds = []
     targets = []
     total = 0
@@ -241,6 +252,8 @@ def train(train_queue, search_queue, gf_model, adaaug, criterion, gf_optimizer,
         if not multilabel:
             _, predicted = torch.max(logits.data, 1)
             total += target.size(0)
+            for t, p in zip(target.data.view(-1), predicted.view(-1)):
+                confusion_matrix[t.long(), p.long()] += 1
         else:
             predicted = torch.sigmoid(logits.data)
         preds.append(predicted.cpu().detach())
@@ -260,16 +273,41 @@ def train(train_queue, search_queue, gf_model, adaaug, criterion, gf_optimizer,
             print('predict nan, inf count: ',nan_count,inf_count)
             raise e
         logging.info('Epoch train: loss=%e macroAUROC=%f', objs.avg, perfrom)
+    #class-wise
+    if not multilabel:
+        cw_acc = 100 * confusion_matrix.diag()/(confusion_matrix.sum(1)+1e-9)
+        logging.info('class-wise Acc: ' + str(cw_acc))
+        nol_acc = 100 * confusion_matrix.diag().sum() / (confusion_matrix.sum()+1e-9)
+        logging.info('Overall Acc: %f',nol_acc)
+        perfrom = 100 * top1.avg
+        perfrom_cw = cw_acc
+    else:
+        targets_np = torch.cat(targets).numpy()
+        preds_np = torch.cat(preds).numpy()
+        perfrom_cw = utils.AUROC_cw(targets_np,preds_np)
+        perfrom = perfrom_cw.mean()
+        logging.info('class-wise AUROC: ' + '['+', '.join(['%.1f'%e for e in perfrom_cw])+']')
+        logging.info('Overall AUROC: %f',perfrom)
+    #wandb dic
+    out_dic = {}
+    out_dic[f'train_loss'] = objs.avg
+    if multilabel:
+        ptype = 'auroc'
+    else:
+        ptype = 'acc'
+    out_dic[f'train_{ptype}'] = perfrom
+    for i,e_c in enumerate(perfrom_cw):
+        out_dic[f'train_{ptype}_c{i}'] = e_c
 
-    return perfrom, objs.avg
+    return perfrom, objs.avg, out_dic
 
 
-def infer(valid_queue, gf_model, criterion, multilabel=False):
+def infer(valid_queue, gf_model, criterion, multilabel=False, n_class=10,mode='test'):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
     top5 = utils.AvgrageMeter()
     gf_model.eval()
-    confusion_matrix = torch.zeros(10,10)
+    confusion_matrix = torch.zeros(n_class,n_class)
     preds = []
     targets = []
     total = 0
@@ -281,7 +319,6 @@ def infer(valid_queue, gf_model, criterion, multilabel=False):
             logits = gf_model(input,seq_len)
             loss = criterion(logits, target)
 
-            prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
             n = input.size(0)
             objs.update(loss.detach().item(), n)
             if not multilabel:
@@ -304,6 +341,7 @@ def infer(valid_queue, gf_model, criterion, multilabel=False):
         nol_acc = 100 * confusion_matrix.diag().sum() / (confusion_matrix.sum()+1e-9)
         logging.info('Overall Acc: %f',nol_acc)
         perfrom = 100 * top1.avg
+        perfrom_cw = cw_acc
     else:
         targets_np = torch.cat(targets).numpy()
         preds_np = torch.cat(preds).numpy()
@@ -311,7 +349,18 @@ def infer(valid_queue, gf_model, criterion, multilabel=False):
         perfrom = perfrom_cw.mean()
         logging.info('class-wise AUROC: ' + '['+', '.join(['%.1f'%e for e in perfrom_cw])+']')
         logging.info('Overall AUROC: %f',perfrom)
-    return perfrom, objs.avg
+    #wandb dic
+    out_dic = {}
+    out_dic[f'{mode}_loss'] = objs.avg
+    if multilabel:
+        ptype = 'auroc'
+    else:
+        ptype = 'acc'
+    out_dic[f'{mode}_{ptype}'] = perfrom
+    for i,e_c in enumerate(perfrom_cw):
+        out_dic[f'{mode}_{ptype}_c{i}'] = e_c
+    
+    return perfrom, objs.avg, out_dic
     #return top1.avg, objs.avg
 
 

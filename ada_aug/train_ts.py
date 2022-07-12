@@ -163,7 +163,8 @@ def main():
                     'delta': args.delta,
                     'temp': args.temperature,
                     'search_d': get_dataset_dimension(args.search_dataset),
-                    'target_d': get_dataset_dimension(args.dataset)}
+                    'target_d': get_dataset_dimension(args.dataset),
+                    'gf_model_name': args.gf_model_name}
 
     adaaug = AdaAug_TS(after_transforms=after_transforms,
                     n_class=search_n_class,
@@ -178,34 +179,43 @@ def main():
         lr = scheduler.get_last_lr()[0]
         logging.info('epoch %d lr %e', epoch, lr)
 
-        train_acc, train_obj = train(
-            train_queue, task_model, criterion, optimizer, epoch, args.grad_clip, adaaug, multilabel=multilabel)
+        train_acc, train_obj, train_dic = train(
+            train_queue, task_model, criterion, optimizer, epoch, args.grad_clip, adaaug, multilabel=multilabel,n_class=n_class)
         logging.info('train_acc %f', train_acc)
 
-        valid_acc, valid_obj, _, _ = infer(valid_queue, task_model, criterion, multilabel=multilabel)
+        valid_acc, valid_obj, _, _, valid_dic = infer(valid_queue, task_model, criterion, multilabel=multilabel,n_class=n_class,mode='valid')
         logging.info('valid_acc %f', valid_acc)
 
         scheduler.step()
-
+        #wandb
+        step_dic = {'epoch':epoch}
+        step_dic.update(train_dic)
+        step_dic.update(valid_dic)
         if epoch % args.report_freq == 0:
-            test_acc, test_obj, test_acc5, _ = infer(test_queue, task_model, criterion, multilabel=multilabel)
+            test_acc, test_obj, test_acc5, _,test_dic  = infer(test_queue, task_model, criterion, multilabel=multilabel,n_class=n_class,mode='test')
             logging.info('test_acc %f %f', test_acc, test_acc5)
+            step_dic.update(test_dic)
 
         utils.save_ckpt(task_model, optimizer, scheduler, epoch,
             os.path.join(args.save, 'weights.pt'))
+        #wandb log
+        wandb.log(step_dic)
 
     adaaug.save_history(class2label)
     figure = adaaug.plot_history()
-    test_acc, test_obj, test_acc5, _ = infer(test_queue, task_model, criterion, multilabel=multilabel)
-
+    test_acc, test_obj, test_acc5, _, test_dic = infer(test_queue, task_model, criterion, multilabel=multilabel,n_class=n_class,mode='test')
+    #wandb
+    step_dic.update(test_dic)
+    wandb.log(step_dic)
     logging.info('test_acc %f %f', test_acc, test_acc5)
     logging.info(f'save to {args.save}')
 
 
-def train(train_queue, model, criterion, optimizer, epoch, grad_clip, adaaug, multilabel=False):
+def train(train_queue, model, criterion, optimizer, epoch, grad_clip, adaaug, multilabel=False,n_class=10):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
     top5 = utils.AvgrageMeter()
+    confusion_matrix = torch.zeros(n_class,n_class)
     preds = []
     targets = []
     total = 0
@@ -239,6 +249,8 @@ def train(train_queue, model, criterion, optimizer, epoch, grad_clip, adaaug, mu
         if not multilabel:
             _, predicted = torch.max(logits.data, 1)
             total += target.size(0)
+            for t, p in zip(target.data.view(-1), predicted.view(-1)):
+                confusion_matrix[t.long(), p.long()] += 1
         else:
             predicted = torch.sigmoid(logits.data)
         preds.append(predicted.cpu().detach())
@@ -258,16 +270,41 @@ def train(train_queue, model, criterion, optimizer, epoch, grad_clip, adaaug, mu
             print('predict nan, inf count: ',nan_count,inf_count)
             raise e
         logging.info('Epoch train: loss=%e macroAUROC=%f', objs.avg, perfrom)
+    #class-wise
+    if not multilabel:
+        cw_acc = 100 * confusion_matrix.diag()/(confusion_matrix.sum(1)+1e-9)
+        logging.info('class-wise Acc: ' + str(cw_acc))
+        nol_acc = 100 * confusion_matrix.diag().sum() / (confusion_matrix.sum()+1e-9)
+        logging.info('Overall Acc: %f',nol_acc)
+        perfrom = 100 * top1.avg
+        perfrom_cw = cw_acc
+    else:
+        targets_np = torch.cat(targets).numpy()
+        preds_np = torch.cat(preds).numpy()
+        perfrom_cw = utils.AUROC_cw(targets_np,preds_np)
+        perfrom = perfrom_cw.mean()
+        logging.info('class-wise AUROC: ' + '['+', '.join(['%.1f'%e for e in perfrom_cw])+']')
+        logging.info('Overall AUROC: %f',perfrom)
+    #wandb dic
+    out_dic = {}
+    out_dic[f'train_loss'] = objs.avg
+    if multilabel:
+        ptype = 'auroc'
+    else:
+        ptype = 'acc'
+    out_dic[f'train_{ptype}'] = perfrom
+    for i,e_c in enumerate(perfrom_cw):
+        out_dic[f'train_{ptype}_c{i}'] = e_c
     
-    return perfrom, objs.avg
+    return perfrom, objs.avg, out_dic
 
 
-def infer(valid_queue, model, criterion, multilabel=False):
+def infer(valid_queue, model, criterion, multilabel=False, n_class=10,mode='test'):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
     top5 = utils.AvgrageMeter()
     model.eval()
-    confusion_matrix = torch.zeros(10,10)
+    confusion_matrix = torch.zeros(n_class,n_class)
     preds = []
     targets = []
     total = 0
@@ -311,7 +348,18 @@ def infer(valid_queue, model, criterion, multilabel=False):
         perfrom2 = perfrom
         logging.info('class-wise AUROC: ' + '['+', '.join(['%.1f'%e for e in perfrom_cw])+']')
         logging.info('Overall AUROC: %f',perfrom)
-    return perfrom, objs.avg, perfrom2, objs.avg
+    #wandb dic
+    out_dic = {}
+    out_dic[f'{mode}_loss'] = objs.avg
+    if multilabel:
+        ptype = 'auroc'
+    else:
+        ptype = 'acc'
+    out_dic[f'{mode}_{ptype}'] = perfrom
+    for i,e_c in enumerate(perfrom_cw):
+        out_dic[f'{mode}_{ptype}_c{i}'] = e_c
+    
+    return perfrom, objs.avg, perfrom2, objs.avg, out_dic
 
 if __name__ == '__main__':
     main()

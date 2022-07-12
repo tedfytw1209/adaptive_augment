@@ -33,7 +33,7 @@ subject_id = [
 
 
 class WISDM(BaseDataset):
-    def __init__(self,data_dir, sensor="accel", device="phone",**_kwargs):
+    def __init__(self,data_dir,mode='all', sensor="accel", device="phone",**_kwargs):
         super(WISDM,self).__init__(**_kwargs)
         assert sensor in ["accel", "gyro"]
         assert device in ["phone", "watch"]
@@ -41,12 +41,22 @@ class WISDM(BaseDataset):
         self.loc = os.path.join(data_dir,"raw/", device, sensor)
         if not self.checkProcessed():
             self.process(sensor, device)
-        input_datas , labels = [], []
-        data_modes = ['train','valid','test']
-        for i in range(3):
-            input_data,label = self._get_data(data_modes[i])
-            input_datas.extend(input_data)
-            labels.extend(label)
+        if mode=='all':
+            input_datas , labels = [], []
+            data_modes = ['train','valid','test']
+            for i in range(3):
+                input_data,label = self._get_data(data_modes[i])
+                input_datas.extend(input_data)
+                labels.extend(label)
+        elif mode=='tottrain':
+            input_datas , labels = [], []
+            data_modes = ['train','valid']
+            for i in range(2):
+                input_data,label = self._get_data(data_modes[i])
+                input_datas.extend(input_data)
+                labels.extend(label)
+        else:
+            input_datas,labels = self._get_data(mode=mode)
         print(len(input_datas))
         print(len(labels))
         self.input_data = input_datas

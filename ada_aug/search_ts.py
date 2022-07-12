@@ -18,6 +18,7 @@ from networks import get_model_tseries
 from networks.projection import Projection_TSeries
 from config import get_search_divider
 from dataset import get_ts_dataloaders, get_num_class, get_label_name, get_dataset_dimension
+import wandb
 
 parser = argparse.ArgumentParser("ada_aug")
 parser.add_argument('--dataroot', type=str, default='./', help='location of the data corpus')
@@ -36,6 +37,7 @@ parser.add_argument('--seed', type=int, default=2, help='seed')
 parser.add_argument('--grad_clip', type=float, default=5, help='gradient clipping')
 parser.add_argument('--multilabel', action='store_true', default=False, help='using multilabel default False')
 parser.add_argument('--train_portion', type=float, default=1, help='portion of training data')
+parser.add_argument('--default_split', action='store_true', help='use dataset deault split')
 parser.add_argument('--proj_learning_rate', type=float, default=1e-2, help='learning rate for h')
 parser.add_argument('--proj_weight_decay', type=float, default=1e-3, help='weight decay for h]')
 parser.add_argument('--cutout', action='store_true', default=False, help='use cutout')
@@ -74,6 +76,19 @@ def main():
     utils.reproducibility(args.seed)
     logging.info('gpu device = %d' % args.gpu)
     logging.info("args = %s", args)
+    #wandb
+    if args.k_ops>0:
+        Aug_type = 'AdaAug'
+    else:
+        Aug_type = 'NOAUG'
+    experiment_name = f'{Aug_type}_train_{args.dataset}_{args.model_name}_e{args.epochs}_lr{args.learning_rate}'
+    run_log = wandb.init(config=args, 
+                  project='AdaAug',
+                  group=experiment_name,
+                  name=experiment_name,
+                  dir='./',
+                  job_type="DataAugment",
+                  reinit=True)
 
     #  dataset settings
     n_class = get_num_class(args.dataset)

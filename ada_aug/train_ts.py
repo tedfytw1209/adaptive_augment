@@ -17,11 +17,13 @@ from networks.projection import Projection_TSeries
 from dataset import get_num_class, get_dataloaders, get_label_name, get_dataset_dimension, get_ts_dataloaders
 from config import get_warmup_config
 from warmup_scheduler import GradualWarmupScheduler
+import wandb
 
 parser = argparse.ArgumentParser("ada_aug")
 parser.add_argument('--dataroot', type=str, default='./', help='location of the data corpus')
 parser.add_argument('--dataset', type=str, default='cifar10', help='name of dataset')
 parser.add_argument('--train_portion', type=float, default=0.5, help='portion of training data')
+parser.add_argument('--default_split', action='store_true', help='use dataset deault split')
 parser.add_argument('--test_size', type=float, default=0.2, help='test size ratio (if needed)')
 parser.add_argument('--batch_size', type=int, default=96, help='batch size')
 parser.add_argument('--num_workers', type=int, default=0, help="num_workers")

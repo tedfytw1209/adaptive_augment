@@ -280,16 +280,17 @@ def get_dataloaders(dataset, batch, num_workers, dataroot, cutout,
         print(f'  |search: {len(searchloader)*search_divider}')
     return trainloader, validloader, searchloader, testloader
 
-def get_ts_dataloaders(dataset, batch, num_workers, dataroot, cutout,
+def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
                     cutout_length, split=0.5, split_idx=0, target_lb=-1,
-                    search=True, search_divider=1, search_size=0, test_size=0.2, multilabel=False):
+                    search=True, search_divider=1, search_size=0, test_size=0.2, multilabel=False,
+                    default_split=False):
     '''
     If search is True, dataloader will give batches of image without after_transforms,
     the transform will be done by augment agent
     If search is False, used in benchmark training
     search_size = % of data only for search
     '''
-    if 'cifar10' in dataset:
+    if 'cifar10' in dataset_name:
         transform_train_pre = transforms.Compose([
             transforms.RandomCrop(32, padding=4),
             transforms.RandomHorizontalFlip(),
@@ -302,7 +303,7 @@ def get_ts_dataloaders(dataset, batch, num_workers, dataroot, cutout,
             transforms.ToTensor(),
             transforms.Normalize(_CIFAR_MEAN, _CIFAR_STD),
         ])
-    else:   #default for time series dataset
+    else:   #default for time series dataset_name
         transform_train_pre = transforms.Compose([
         ])
         transform_train_after = transforms.Compose([
@@ -318,11 +319,11 @@ def get_ts_dataloaders(dataset, batch, num_workers, dataroot, cutout,
     #    transform_train_after.transforms.append(CutoutDefault(cutout_length))
     valid_size = split
     subtrain_ratio = 1 - search_size
-    if dataset == 'cifar10':
+    '''if dataset_name == 'cifar10':
         total_trainset = torchvision.datasets.CIFAR10(root=dataroot, train=True, download=True, transform=None)
         search_dataset = None
         testset = torchvision.datasets.CIFAR10(root=dataroot, train=False, download=True, transform=None)
-    elif dataset == 'reduced_cifar10':
+    elif dataset_name == 'reduced_cifar10':
         search_dataset = torchvision.datasets.CIFAR10(root=dataroot, train=True, download=True, transform=None)
         sss = StratifiedShuffleSplit(n_splits=1, test_size=45744, random_state=0)
         sss = sss.split(list(range(len(search_dataset))), search_dataset.targets)
@@ -333,94 +334,51 @@ def get_ts_dataloaders(dataset, batch, num_workers, dataroot, cutout,
         targets = [search_dataset.targets[idx] for idx in valid_idx]
         search_dataset = Subset(search_dataset, valid_idx)
         search_dataset.targets = targets
-        testset = torchvision.datasets.CIFAR10(root=dataroot, train=False, download=True, transform=None)
-    elif dataset == 'svhn':
-        total_trainset = torchvision.datasets.SVHN(root=dataroot, split='train', download=True, transform=None)
-        testset = torchvision.datasets.SVHN(root=dataroot, split='test', download=True, transform=None)
-        search_dataset = None
-    elif dataset == 'reduced_svhn':
-        search_dataset = torchvision.datasets.SVHN(root=dataroot, split='train', download=True, transform=None)
-        sss = StratifiedShuffleSplit(n_splits=1, test_size=73257-1000, random_state=0)  # 1000 + 1000 trainset
-        sss = sss.split(list(range(len(search_dataset))), search_dataset.labels)
-        train_idx, search_idx = next(sss)
-        targets = [search_dataset.labels[idx] for idx in train_idx]
-        total_trainset = Subset(search_dataset, train_idx)
-        total_trainset.labels = targets
-        total_trainset.targets = targets
-        targets = [search_dataset.labels[idx] for idx in search_idx]
-        search_dataset = Subset(search_dataset, search_idx)
-        search_dataset.labels = targets
-        search_dataset.targets = targets
-        testset = torchvision.datasets.SVHN(root=dataroot, split='test', download=True, transform=None)
-    elif dataset == 'ptbxl':
-        dataset = PTBXL(dataroot,multilabel=multilabel)
-        total = len(dataset)
-        random.seed(0) #!!!
-        rd_idxs = [i for i in range(total)]
-        random.shuffle(rd_idxs)
-        testset = Subset(dataset,rd_idxs[:int(total*test_size)])
-        if search_size > 0:
-            search_dataset = Subset(dataset,rd_idxs[int(total*test_size):int(total*(test_size+search_size))])
-            tot_train_idx = rd_idxs[int(total*(test_size+valid_size)):]
-            train_idx = tot_train_idx[:int(len(train_idx)*subtrain_ratio)]
-            total_trainset = Subset(dataset,train_idx)
-        else:
-            search_dataset = None
-            total_trainset = Subset(dataset,rd_idxs[int(total*test_size):])
-        classes = [i for i in range(dataset.num_class)]
-    elif dataset == 'wisdm':
-        dataset = WISDM(dataroot)
-        total = len(dataset)
-        random.seed(0) #!!!
-        rd_idxs = [i for i in range(total)]
-        random.shuffle(rd_idxs)
-        testset = Subset(dataset,rd_idxs[:int(total*test_size)])
-        if search_size > 0:
-            search_dataset = Subset(dataset,rd_idxs[int(total*test_size):int(total*(test_size+search_size))])
-            tot_train_idx = rd_idxs[int(total*(test_size+valid_size)):]
-            train_idx = tot_train_idx[:int(len(train_idx)*subtrain_ratio)]
-            total_trainset = Subset(dataset,train_idx)
-        else:
-            search_dataset = None
-            total_trainset = Subset(dataset,rd_idxs[int(total*test_size):])
-        classes = [i for i in range(dataset.num_class)]
-    elif dataset == 'edfx':
-        dataset = EDFX(dataroot) #diff with CADDA paper data split
-        total = len(dataset)
-        random.seed(0) #!!!
-        rd_idxs = [i for i in range(total)]
-        random.shuffle(rd_idxs)
-        testset = Subset(dataset,rd_idxs[:int(total*test_size)])
-        if search_size > 0:
-            search_dataset = Subset(dataset,rd_idxs[int(total*test_size):int(total*(test_size+search_size))])
-            tot_train_idx = rd_idxs[int(total*(test_size+valid_size)):]
-            train_idx = tot_train_idx[:int(len(train_idx)*subtrain_ratio)]
-            total_trainset = Subset(dataset,train_idx)
-        else:
-            search_dataset = None
-            total_trainset = Subset(dataset,rd_idxs[int(total*test_size):])
-        classes = [i for i in range(dataset.num_class)]
-        input_channel = dataset.channel
-    elif dataset == 'chapman':
-        assert multilabel #assert multilabel is True
-        dataset = Chapman(dataroot) #chapman need normalize
-        total = len(dataset)
-        random.seed(0) #!!!
-        rd_idxs = [i for i in range(total)]
-        random.shuffle(rd_idxs)
-        testset = Subset(dataset,rd_idxs[:int(total*test_size)])
-        if search_size > 0:
-            search_dataset = Subset(dataset,rd_idxs[int(total*test_size):int(total*(test_size+search_size))])
-            tot_train_idx = rd_idxs[int(total*(test_size+valid_size)):]
-            train_idx = tot_train_idx[:int(len(train_idx)*subtrain_ratio)]
-            total_trainset = Subset(dataset,train_idx)
-        else:
-            search_dataset = None
-            total_trainset = Subset(dataset,rd_idxs[int(total*test_size):])
-        classes = [i for i in range(dataset.num_class)]
-        input_channel = dataset.channel
+        testset = torchvision.datasets.CIFAR10(root=dataroot, train=False, download=True, transform=None)'''
+    if dataset_name == 'ptbxl':
+        dataset_func = PTBXL
+    elif dataset_name == 'wisdm':
+        dataset_func = WISDM
+    elif dataset_name == 'edfx':
+        dataset_func = EDFX
+    elif dataset_name == 'chapman':
+        dataset_func = Chapman
     else:
-        raise ValueError('invalid dataset name=%s' % dataset)
+        ValueError(f'Invalid dataset name={dataset}')
+    
+    if not default_split or dataset_name=='chapman': #chapman didn't have default split now!!!
+        dataset = dataset_func(dataroot,multilabel=multilabel)
+        total = len(dataset)
+        random.seed(0) #!!!
+        rd_idxs = [i for i in range(total)]
+        random.shuffle(rd_idxs)
+        testset = Subset(dataset,rd_idxs[:int(total*test_size)])
+        search_trainset = Subset(dataset,rd_idxs[int(total*test_size):])
+    else:
+        if dataset_name == 'edfx': #edfx have special split method
+            dataset = dataset_func(dataroot,multilabel=multilabel)
+            splits_proportions = dataset.CV_split_indices() #(k, ratio, sub_tr_idx, valid_idx, test_idx) * 5
+            split_info = splits_proportions[0]
+            sub_tr_idx, valid_idx, test_idx = split_info[2],split_info[3],split_info[4]
+            testset = Subset(dataset,test_idx)
+            search_trainset = Subset(dataset,sub_tr_idx+valid_idx)
+        else:
+            search_trainset = dataset_func(dataroot,mode='tottrain',multilabel=multilabel)
+            testset = dataset_func(dataroot,mode='test',multilabel=multilabel)
+    #make search validation set
+    total = len(search_trainset)
+    random.seed(0) #!!!
+    rd_idxs = [i for i in range(total)]
+    random.shuffle(rd_idxs)
+    if search_size > 0:
+        search_dataset = Subset(dataset,rd_idxs[int(total*test_size):int(total*(test_size+search_size))])
+        tot_train_idx = rd_idxs[int(total*(test_size+valid_size)):]
+        train_idx = tot_train_idx[:int(len(train_idx)*subtrain_ratio)]
+        total_trainset = Subset(dataset,train_idx)
+    else:
+        search_dataset = None
+        total_trainset = Subset(dataset,rd_idxs[int(total*test_size):])
+            
 
     train_sampler = None
     if split < 1.0: 
@@ -478,7 +436,7 @@ def get_ts_dataloaders(dataset, batch, num_workers, dataroot, cutout,
         sampler=test_sampler, drop_last=False,
         pin_memory=True, num_workers=num_workers)
 
-    print(f'Dataset: {dataset}')
+    print(f'Dataset: {dataset_name}')
     print(f'  |multilabel: {multilabel}')
     print(f'  |total: {len(train_data)}')
     print(f'  |train: {len(trainloader)*batch}')

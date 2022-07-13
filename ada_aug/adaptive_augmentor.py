@@ -210,10 +210,10 @@ class AdaAug_TS(AdaAug):
         """
         trans_image_list = []
         for i, image in enumerate(images):
-            pil_img = image
+            pil_img = image.detach().cpu()
             # Prepare transformed image for mixing
             for k, ops_name in enumerate(self.ops_names):
-                trans_image = apply_augment(pil_img, ops_name, magnitudes[i][k])
+                trans_image = apply_augment(pil_img, ops_name, magnitudes[i][k].detach().cpu().numpy())
                 trans_image = self.after_transforms(trans_image)
                 trans_image = stop_gradient(trans_image.cuda(), magnitudes[i][k])
                 trans_image_list.append(trans_image)
@@ -246,15 +246,15 @@ class AdaAug_TS(AdaAug):
                 idx_matrix = torch.topk(weights, self.k_ops, dim=1)[1]
 
             for i, image in enumerate(images):
-                pil_image = image
+                pil_image = image.detach().cpu()
                 for idx in idx_matrix[i]:
-                    m_pi = perturb_param(magnitudes[i][idx], self.delta)
+                    m_pi = perturb_param(magnitudes[i][idx], self.delta).detach().cpu().numpy()
                     pil_image = apply_augment(pil_image, self.ops_names[idx], m_pi)
                 trans_images.append(self.after_transforms(pil_image))
         else:
             trans_images = []
             for i, image in enumerate(images):
-                pil_image = image
+                pil_image = image.detach().cpu()
                 trans_image = self.after_transforms(pil_image)
                 trans_images.append(trans_image)
         

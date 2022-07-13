@@ -97,7 +97,7 @@ class AugmentDataset_TS(torch.utils.data.Dataset):
         if self.search:
             raw_image,seq_len, target = self.dataset.__getitem__(index)
             raw_image = self.pre_transforms(raw_image)
-            image = transforms.ToTensor()(raw_image)
+            image = (raw_image)
             return image, seq_len, target
         else:
             img,seq_len, target = self.dataset.__getitem__(index)
@@ -119,8 +119,7 @@ def get_num_class(dataset):
         'svhn': 10,
         'reduced_svhn': 10,
         'edfx': 5,
-        'ptbxl_diagnostic': 44,
-        'ptbxl_subdiagnostic': 23,
+        'ptbxl': 44,
         'wisdm': 18,
         'chapman': 12,
     }[dataset]
@@ -133,8 +132,7 @@ def get_num_channel(dataset):
         'svhn': 3,
         'reduced_svhn': 3,
         'edfx': 2,
-        'ptbxl_diagnostic': 12,
-        'ptbxl_subdiagnostic': 12,
+        'ptbxl': 12,
         'wisdm': 3,
         'chapman': 12,
     }[dataset]
@@ -307,11 +305,11 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
         transform_train_pre = transforms.Compose([
         ])
         transform_train_after = transforms.Compose([
-            transforms.ToTensor(),
+            #transforms.ToTensor(),
             #transforms.Normalize(_SVHN_MEAN, _SVHN_STD), assume already normalize
         ])
         transform_test = transforms.Compose([
-            transforms.ToTensor(),
+            #transforms.ToTensor(),
             #transforms.Normalize(_SVHN_MEAN, _SVHN_STD), assume already normalize
         ])
 
@@ -400,11 +398,11 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
         
     test_sampler =  None
 
-    train_data = AugmentDataset(total_trainset, transform_train_pre, transform_train_after, transform_test, search=search, train=True)
+    train_data = AugmentDataset_TS(total_trainset, transform_train_pre, transform_train_after, transform_test, search=search, train=True)
     if search and search_dataset is not None:
-        search_data = AugmentDataset(search_dataset, transform_train_pre, transform_train_after, transform_test, search=True, train=False)
-    valid_data = AugmentDataset(total_trainset, transform_train_pre, transform_train_after, transform_test, search=False, train=False)
-    test_data = AugmentDataset(testset, transform_train_pre, transform_train_after, transform_test, search=False, train=False)
+        search_data = AugmentDataset_TS(search_dataset, transform_train_pre, transform_train_after, transform_test, search=True, train=False)
+    valid_data = AugmentDataset_TS(total_trainset, transform_train_pre, transform_train_after, transform_test, search=False, train=False)
+    test_data = AugmentDataset_TS(testset, transform_train_pre, transform_train_after, transform_test, search=False, train=False)
 
     if train_sampler is None:
         trainloader = torch.utils.data.DataLoader(

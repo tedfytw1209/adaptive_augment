@@ -28,16 +28,18 @@ class LSTM_ecg(nn.Module): #LSTM for time series
         self.fc = nn.Linear(config['n_hidden'], config['n_output'])
 
     def extract_features(self, texts, seq_lens):
+        batch_size = texts.shape[0]
         packed_embedded = nn.utils.rnn.pack_padded_sequence(
-            texts, seq_lens.cpu())  # seq_len:128 [0]: lenght of each sentence
+            texts, seq_lens.cpu(), batch_first=True)  # seq_len:128 [0]: lenght of each sentence
         rnn_out, (hidden, cell) = self.lstm(
             packed_embedded)  # bs X len X n_hidden
+        out_pad, _out_len = rnn_utils.pad_packed_sequence(rnn_out, batch_first=True)
         if self.concat_pool:
-            features = torch.cat([torch.max(rnn_out,dim=1)[0],torch.mean(rnn_out,dim=1),
-                        rnn_out[:,-1,:].view(len(seq_lens),self.config['n_hidden'])])
+            features = torch.cat([torch.max(out_pad,dim=1)[0],torch.mean(out_pad,dim=1),
+                        out_pad[:,-1,:].view(batch_size,self.config['n_hidden'])],dim=-1)
             features = self.concat_fc(features)
         else:
-            features = rnn_out[:,-1,:].view(len(seq_lens),self.config['n_hidden'])
+            features = out_pad[:,-1,:].view(batch_size,self.config['n_hidden'])
 
         return features
 

@@ -17,12 +17,14 @@ from adaptive_augmentor import AdaAug_TS
 from networks import get_model_tseries
 from networks.projection import Projection_TSeries
 from config import get_search_divider
-from dataset import get_ts_dataloaders, get_num_class, get_label_name, get_dataset_dimension
+from dataset import get_ts_dataloaders, get_num_class, get_label_name, get_dataset_dimension,get_num_channel
 import wandb
 
 parser = argparse.ArgumentParser("ada_aug")
 parser.add_argument('--dataroot', type=str, default='./', help='location of the data corpus')
 parser.add_argument('--dataset', type=str, default='cifar10', help='name of dataset')
+parser.add_argument('--test_size', type=float, default=0.2, help='test size')
+parser.add_argument('--search_size', type=float, default=0.5, help='test size')
 parser.add_argument('--batch_size', type=int, default=512, help='batch size')
 parser.add_argument('--learning_rate', type=float, default=0.400, help='init learning rate')
 parser.add_argument('--learning_rate_min', type=float, default=0.001, help='min learning rate')
@@ -91,6 +93,7 @@ def main():
                   reinit=True)
 
     #  dataset settings
+    n_channel = get_num_channel(args.dataset)
     n_class = get_num_class(args.dataset)
     sdiv = get_search_divider(args.model_name)
     class2label = get_label_name(args.dataset, args.dataroot)
@@ -99,7 +102,8 @@ def main():
         args.dataset, args.batch_size, args.num_workers,
         args.dataroot, args.cutout, args.cutout_length,
         split=args.train_portion, split_idx=0, target_lb=-1,
-        search=True, search_divider=sdiv,test_size=args.test_size,multilabel=args.multilabel)
+        search=True, search_divider=sdiv,search_size=args.search_size,
+        test_size=args.test_size,multilabel=args.multilabel)
     
     logging.info(f'Dataset: {args.dataset}')
     logging.info(f'  |total: {len(train_queue.dataset)}')
@@ -108,7 +112,7 @@ def main():
     logging.info(f'  |search: {len(search_queue)*sdiv}')
 
     #  model settings
-    gf_model = get_model_tseries(model_name=args.model_name, num_class=n_class,
+    gf_model = get_model_tseries(model_name=args.model_name, num_class=n_class,n_channel=n_channel,
         use_cuda=True, data_parallel=False,dataset=args.dataset)
     logging.info("param size = %fMB", utils.count_parameters_in_MB(gf_model))
 
@@ -205,11 +209,15 @@ def train(train_queue, search_queue, gf_model, adaaug, criterion, gf_optimizer,
     targets = []
     total = 0
     for step, (input, seq_len, target) in enumerate(train_queue):
-        target = target.cuda(non_blocking=True)
+        input = input.float().cuda()
+        target = target.cuda()
 
         # exploitation
         timer = time.time()
+        print(input.shape)
+        print(seq_len.shape)
         aug_images = adaaug(input, seq_len, mode='exploit')
+        aug_images = aug_images.cuda()
         gf_model.train()
         gf_optimizer.zero_grad()
         logits = gf_model(aug_images, seq_len)
@@ -313,8 +321,8 @@ def infer(valid_queue, gf_model, criterion, multilabel=False, n_class=10,mode='t
     total = 0
     with torch.no_grad():
         for input, seq_len, target in valid_queue:
-            input = input.cuda()
-            target = target.cuda(non_blocking=True)
+            input = input.float().cuda()
+            target = target.cuda()
 
             logits = gf_model(input,seq_len)
             loss = criterion(logits, target)

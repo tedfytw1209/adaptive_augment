@@ -590,9 +590,12 @@ def get_augment(name):
 def apply_augment(img, name, level, rd_seed=42):
     augment_fn, low, high = get_augment(name)
     #change tseries signal from (len,channel) to (batch,channel,len)
+    #print('Device: ',img.device)
     seq_len , channel = img.shape
     img = img.permute(1,0).view(1,channel,seq_len)
-    aug_img = augment_fn(img, level * (high - low) + low,random_state=rd_seed)
+    aug_value = level * (high - low) + low
+    #print('Device: ',aug_value.device)
+    aug_img = augment_fn(img, aug_value,random_state=rd_seed)
     return aug_img.permute(0,2,1).detach().view(seq_len,channel) #back to (len,channel)
 
 def plot_line(t,x):

@@ -1,5 +1,6 @@
 from __future__ import print_function
 from __future__ import absolute_import
+from multiprocessing import reduction
 
 import os
 import sys
@@ -138,7 +139,7 @@ def main():
     if not multilabel:
         criterion = nn.CrossEntropyLoss()
     else:
-        criterion = nn.BCEWithLogitsLoss(reduce='mean')
+        criterion = nn.BCEWithLogitsLoss(reduction='mean')
     criterion = criterion.cuda()
 
     #  AdaAug settings
@@ -156,7 +157,8 @@ def main():
         gf_model=gf_model,
         h_model=h_model,
         save_dir=args.save,
-        config=adaaug_config)
+        config=adaaug_config,
+        multilabel=multilabel)
 
     #  Start training
     start_time = time.time()
@@ -214,14 +216,15 @@ def train(train_queue, search_queue, gf_model, adaaug, criterion, gf_optimizer,
 
         # exploitation
         timer = time.time()
-        print(input.shape)
-        print(seq_len.shape)
         aug_images = adaaug(input, seq_len, mode='exploit')
         aug_images = aug_images.cuda()
         gf_model.train()
         gf_optimizer.zero_grad()
         logits = gf_model(aug_images, seq_len)
-        loss = criterion(logits, target)
+        if multilabel:
+            loss = criterion(logits, target.float())
+        else:
+            loss = criterion(logits, target.long())
         loss.backward()
         nn.utils.clip_grad_norm_(gf_model.parameters(), grad_clip)
         gf_optimizer.step()
@@ -238,19 +241,26 @@ def train(train_queue, search_queue, gf_model, adaaug, criterion, gf_optimizer,
         # exploration
         timer = time.time()
         if step % search_freq == 0:
-            input_search, target_search = next(iter(search_queue))
-            target_search = target_search.cuda(non_blocking=True)
-
+            input_search, seq_len, target_search = next(iter(search_queue))
+            input_search = input_search.float().cuda()
+            target_search = target_search.cuda()
+            gf_optimizer.zero_grad()
             h_optimizer.zero_grad()
-            mixed_features = adaaug(input_search, mode='explore')
-            logits = gf_model.g(mixed_features)
-            loss = criterion(logits, target_search)
+            mixed_features = adaaug(input_search, seq_len, mode='explore')
+            logits_search = gf_model.classify(mixed_features)
+            if multilabel:
+                loss = criterion(logits_search, target_search.float())
+            else:
+                loss = criterion(logits_search, target_search.long())
+            
             loss.backward()
             h_optimizer.step()
             exploration_time = time.time() - timer
+            gf_optimizer.zero_grad()
+            h_optimizer.zero_grad()
 
             #  log policy
-            adaaug.add_history(input_search, target_search)
+            adaaug.add_history(input_search, seq_len, target_search)
 
         global_step = epoch * len(train_queue) + step
         if global_step % args.report_freq == 0:
@@ -263,7 +273,7 @@ def train(train_queue, search_queue, gf_model, adaaug, criterion, gf_optimizer,
             for t, p in zip(target.data.view(-1), predicted.view(-1)):
                 confusion_matrix[t.long(), p.long()] += 1
         else:
-            predicted = torch.sigmoid(logits.data)
+            predicted = torch.sigmoid(logits)
         preds.append(predicted.cpu().detach())
         targets.append(target.cpu().detach())
     #Total
@@ -325,7 +335,10 @@ def infer(valid_queue, gf_model, criterion, multilabel=False, n_class=10,mode='t
             target = target.cuda()
 
             logits = gf_model(input,seq_len)
-            loss = criterion(logits, target)
+            if multilabel:
+                loss = criterion(logits, target.float())
+            else:
+                loss = criterion(logits, target.long())
 
             n = input.size(0)
             objs.update(loss.detach().item(), n)

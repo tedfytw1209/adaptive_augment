@@ -97,7 +97,7 @@ class AugmentDataset_TS(torch.utils.data.Dataset):
         if self.search:
             raw_image,seq_len, target = self.dataset.__getitem__(index)
             raw_image = self.pre_transforms(raw_image)
-            image = (raw_image)
+            image = raw_image #!!!
             return image, seq_len, target
         else:
             img,seq_len, target = self.dataset.__getitem__(index)

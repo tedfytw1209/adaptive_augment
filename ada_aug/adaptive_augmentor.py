@@ -167,13 +167,14 @@ class AdaAug(nn.Module):
 
 class AdaAug_TS(AdaAug):
     def __init__(self, after_transforms, n_class, gf_model, h_model, save_dir=None, 
-                    config=default_config):
+                    config=default_config, multilabel=False):
         super(AdaAug_TS, self).__init__(after_transforms, n_class, gf_model, h_model, save_dir, config)
         #other already define in AdaAug
         self.ops_names = TS_OPS_NAMES
         self.n_ops = len(self.ops_names)
         self.history = PolicyHistory(self.ops_names, self.save_dir, self.n_class)
         self.config = config
+        self.multilabel = multilabel
 
     def predict_aug_params(self, X, seq_len, mode):
         self.gf_model.eval()
@@ -181,6 +182,7 @@ class AdaAug_TS(AdaAug):
             self.h_model.eval()
             T = self.temp
         elif mode == 'explore':
+            self.gf_model.lstm.train() #!!!tmp fix
             self.h_model.train()
             T = 1.0
         a_params = self.h_model(self.gf_model.extract_features(X.cuda(),seq_len))
@@ -192,14 +194,17 @@ class AdaAug_TS(AdaAug):
     def add_history(self, images, seq_len, targets):
         magnitudes, weights = self.predict_aug_params(images, seq_len, 'exploit')
         for k in range(self.n_class):
-            idxs = (targets == k).nonzero().squeeze()
+            if self.multilabel:
+                idxs = (targets[:,k] == 1).nonzero().squeeze()
+            else:
+                idxs = (targets == k).nonzero().squeeze()
             mean_lambda = magnitudes[idxs].mean(0).detach().cpu().tolist()
             mean_p = weights[idxs].mean(0).detach().cpu().tolist()
             std_lambda = magnitudes[idxs].std(0).detach().cpu().tolist()
             std_p = weights[idxs].std(0).detach().cpu().tolist()
             self.history.add(k, mean_lambda, mean_p, std_lambda, std_p)
 
-    def get_aug_valid_imgs(self, images, magnitudes):
+    def get_aug_valid_imgs(self, images, seq_len, magnitudes):
         """Return the mixed latent feature
 
         Args:
@@ -208,16 +213,19 @@ class AdaAug_TS(AdaAug):
         Returns:
             [Tensor]: a set of augmented validation images
         """
+        trans_seqlen_list = []
         trans_image_list = []
         for i, image in enumerate(images):
             pil_img = image.detach().cpu()
+            e_len = seq_len[i]
             # Prepare transformed image for mixing
             for k, ops_name in enumerate(self.ops_names):
                 trans_image = apply_augment(pil_img, ops_name, magnitudes[i][k].detach().cpu().numpy())
                 trans_image = self.after_transforms(trans_image)
                 trans_image = stop_gradient(trans_image.cuda(), magnitudes[i][k])
                 trans_image_list.append(trans_image)
-        return torch.stack(trans_image_list, dim=0)
+                trans_seqlen_list.append(e_len)
+        return torch.stack(trans_image_list, dim=0), torch.stack(trans_seqlen_list, dim=0)
 
     def explore(self, images, seq_len):
         """Return the mixed latent feature
@@ -228,8 +236,8 @@ class AdaAug_TS(AdaAug):
             [Tensor]: return a batch of mixed features
         """
         magnitudes, weights = self.predict_aug_params(images, seq_len,'explore')
-        a_imgs = self.get_aug_valid_imgs(images, magnitudes)
-        a_features = self.gf_model.extract_features(a_imgs, seq_len)
+        a_imgs, a_seq_len = self.get_aug_valid_imgs(images, seq_len, magnitudes)
+        a_features = self.gf_model.extract_features(a_imgs, a_seq_len)
         ba_features = a_features.reshape(len(images), self.n_ops, -1) # batch, n_ops, n_hidden
         
         mixed_features = [w.matmul(feat) for w, feat in zip(weights, ba_features)]

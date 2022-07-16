@@ -24,6 +24,7 @@ import wandb
 parser = argparse.ArgumentParser("ada_aug")
 parser.add_argument('--dataroot', type=str, default='./', help='location of the data corpus')
 parser.add_argument('--dataset', type=str, default='cifar10', help='name of dataset')
+parser.add_argument('--labelgroup', default='')
 parser.add_argument('--test_size', type=float, default=0.2, help='test size')
 parser.add_argument('--search_size', type=float, default=0.5, help='test size')
 parser.add_argument('--batch_size', type=int, default=512, help='batch size')
@@ -84,7 +85,7 @@ def main():
         Aug_type = 'AdaAug'
     else:
         Aug_type = 'NOAUG'
-    experiment_name = f'{Aug_type}_train_{args.dataset}_{args.model_name}_e{args.epochs}_lr{args.learning_rate}'
+    experiment_name = f'{Aug_type}_train_{args.dataset}{args.labelgroup}_{args.model_name}_e{args.epochs}_lr{args.learning_rate}'
     run_log = wandb.init(config=args, 
                   project='AdaAug',
                   group=experiment_name,
@@ -95,7 +96,7 @@ def main():
 
     #  dataset settings
     n_channel = get_num_channel(args.dataset)
-    n_class = get_num_class(args.dataset)
+    n_class = get_num_class(args.dataset,args.labelgroup)
     sdiv = get_search_divider(args.model_name)
     class2label = get_label_name(args.dataset, args.dataroot)
     multilabel = args.multilabel
@@ -104,7 +105,8 @@ def main():
         args.dataroot, args.cutout, args.cutout_length,
         split=args.train_portion, split_idx=0, target_lb=-1,
         search=True, search_divider=sdiv,search_size=args.search_size,
-        test_size=args.test_size,multilabel=args.multilabel,default_split=args.default_split)
+        test_size=args.test_size,multilabel=args.multilabel,default_split=args.default_split,
+        labelgroup=args.labelgroup)
     
     logging.info(f'Dataset: {args.dataset}')
     logging.info(f'  |total: {len(train_queue.dataset)}')
@@ -359,9 +361,9 @@ def infer(valid_queue, gf_model, criterion, multilabel=False, n_class=10,mode='t
     #class-wise
     if not multilabel:
         cw_acc = 100 * confusion_matrix.diag()/(confusion_matrix.sum(1)+1e-9)
-        logging.info('class-wise Acc: ' + str(cw_acc))
+        logging.info(f'{mode} class-wise Acc: ' + str(cw_acc))
         nol_acc = 100 * confusion_matrix.diag().sum() / (confusion_matrix.sum()+1e-9)
-        logging.info('Overall Acc: %f',nol_acc)
+        logging.info('%s Overall Acc: %f',mode,nol_acc)
         perfrom = top1.avg
         perfrom_cw = cw_acc
     else:
@@ -369,8 +371,8 @@ def infer(valid_queue, gf_model, criterion, multilabel=False, n_class=10,mode='t
         preds_np = torch.cat(preds).numpy()
         perfrom_cw = utils.AUROC_cw(targets_np,preds_np)
         perfrom = perfrom_cw.mean()
-        logging.info('class-wise AUROC: ' + '['+', '.join(['%.1f'%e for e in perfrom_cw])+']')
-        logging.info('Overall AUROC: %f',perfrom)
+        logging.info(f'{mode} class-wise AUROC: ' + '['+', '.join(['%.1f'%e for e in perfrom_cw])+']')
+        logging.info('%s Overall AUROC: %f',mode,perfrom)
     #wandb dic
     out_dic = {}
     out_dic[f'{mode}_loss'] = objs.avg

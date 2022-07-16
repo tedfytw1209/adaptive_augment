@@ -182,7 +182,10 @@ class AdaAug_TS(AdaAug):
             self.h_model.eval()
             T = self.temp
         elif mode == 'explore':
-            self.gf_model.lstm.train() #!!!tmp fix
+            try:
+                self.gf_model.lstm.train() #!!!tmp fix
+            except Exception as e:
+                print(e)
             self.h_model.train()
             T = 1.0
         a_params = self.h_model(self.gf_model.extract_features(X.cuda(),seq_len))

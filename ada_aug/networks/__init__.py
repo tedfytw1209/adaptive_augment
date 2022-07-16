@@ -91,7 +91,7 @@ def get_model_tseries(model_name='lstm', num_class=10, n_channel=3, use_cuda=Tru
     else:
         raise NameError('no model named, %s' % name)
     config.update(model_config)
-    model = net(config=config)
+    model = net(config)
     if data_parallel:
         model = model.cuda()
         model = DataParallel(model)

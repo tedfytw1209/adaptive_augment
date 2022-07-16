@@ -112,17 +112,24 @@ class AugmentDataset_TS(torch.utils.data.Dataset):
     def __len__(self):
         return self.dataset.__len__()
 
-def get_num_class(dataset):
-    return {
+def get_num_class(dataset,labelgroup=''):
+    dataset_dic = {
         'cifar10': 10,
         'reduced_cifar10': 10,
         'svhn': 10,
         'reduced_svhn': 10,
         'edfx': 5,
         'ptbxl': 44,
+        'ptbxlall':71,
+        'ptbxldiagnostic':44,
+        'ptbxlsubdiagnostic': 23,
+        'ptbxlsuperdiagnostic':5,
+        'ptbxlform':19,
+        'rhythm':12,
         'wisdm': 18,
         'chapman': 12,
-    }[dataset]
+    }
+    return dataset_dic[dataset+labelgroup]
 
 
 def get_num_channel(dataset):
@@ -281,7 +288,7 @@ def get_dataloaders(dataset, batch, num_workers, dataroot, cutout,
 def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
                     cutout_length, split=0.5, split_idx=0, target_lb=-1,
                     search=True, search_divider=1, search_size=0, test_size=0.2, multilabel=False,
-                    default_split=False):
+                    default_split=False, labelgroup=''):
     '''
     If search is True, dataloader will give batches of image without after_transforms,
     the transform will be done by augment agent
@@ -333,8 +340,11 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
         search_dataset = Subset(search_dataset, valid_idx)
         search_dataset.targets = targets
         testset = torchvision.datasets.CIFAR10(root=dataroot, train=False, download=True, transform=None)'''
+    kwargs = {}
     if dataset_name == 'ptbxl':
         dataset_func = PTBXL
+        if labelgroup:
+            kwargs['labelgroup']=labelgroup
     elif dataset_name == 'wisdm':
         dataset_func = WISDM
     elif dataset_name == 'edfx':
@@ -345,7 +355,7 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
         ValueError(f'Invalid dataset name={dataset}')
     
     if not default_split or dataset_name=='chapman': #chapman didn't have default split now!!!
-        dataset = dataset_func(dataroot,multilabel=multilabel)
+        dataset = dataset_func(dataroot,multilabel=multilabel,**kwargs)
         total = len(dataset)
         random.seed(0) #!!!
         rd_idxs = [i for i in range(total)]
@@ -355,7 +365,7 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
         validset = None
     else:
         if dataset_name == 'edfx': #edfx have special split method
-            dataset = dataset_func(dataroot,multilabel=multilabel)
+            dataset = dataset_func(dataroot,multilabel=multilabel,**kwargs)
             splits_proportions = dataset.CV_split_indices() #(k, ratio, sub_tr_idx, valid_idx, test_idx) * 5
             split_info = splits_proportions[0]
             sub_tr_idx, valid_idx, test_idx = split_info[2],split_info[3],split_info[4]
@@ -363,9 +373,16 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
             search_trainset = Subset(dataset,sub_tr_idx)
             validset = Subset(dataset,valid_idx)
         else:
-            search_trainset = dataset_func(dataroot,mode='train',multilabel=multilabel)
-            validset = dataset_func(dataroot,mode='valid',multilabel=multilabel)
-            testset = dataset_func(dataroot,mode='test',multilabel=multilabel)
+            search_trainset = dataset_func(dataroot,mode='train',multilabel=multilabel,**kwargs)
+            validset = dataset_func(dataroot,mode='valid',multilabel=multilabel,**kwargs)
+            testset = dataset_func(dataroot,mode='test',multilabel=multilabel,**kwargs)
+    #
+    print('Print sample 0')
+    samples = search_trainset[0] # data,len,label
+    print(samples[0])
+    print(samples[0].shape)
+    print(samples[1])
+    print(samples[2])
     #make search validation set
     total = len(search_trainset)
     random.seed(0) #!!!

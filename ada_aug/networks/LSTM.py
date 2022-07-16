@@ -4,6 +4,38 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.nn.utils.rnn as rnn_utils
 
+class AdaptiveConcatPoolRNN(nn.Module):
+    def __init__(self, bidirectional):
+        super().__init__()
+        self.bidirectional = bidirectional
+    def forward(self,x):
+        #input shape bs, ch, ts
+        t1 = nn.AdaptiveAvgPool1d(1)(x)
+        t2 = nn.AdaptiveMaxPool1d(1)(x)
+        
+        if(self.bidirectional is False):
+            t3 = x[:,:,-1]
+        else:
+            channels = x.size()[1]
+            t3 = torch.cat([x[:,:channels,-1],x[:,channels:,0]],1)
+        out=torch.cat([t1.squeeze(-1),t2.squeeze(-1),t3],1) #output shape bs, 3*ch
+        return out
+
+class LastPoolRNN(nn.Module):
+    def __init__(self, bidirectional):
+        super().__init__()
+        self.bidirectional = bidirectional
+    def forward(self,x):
+        #input shape bs, ch, ts
+        
+        if(self.bidirectional is False):
+            t3 = x[:,:,-1]
+        else:
+            channels = x.size()[1]
+            t3 = torch.cat([x[:,:channels,-1],x[:,channels:,0]],1)
+        out=t3 #output shape bs, ch * b_dir
+        return out
+
 class LSTM_ecg(nn.Module): #LSTM for time series 
     '''
     LSTM Module
@@ -21,7 +53,7 @@ class LSTM_ecg(nn.Module): #LSTM for time series
         self.dropout = nn.Dropout(config['fc_drop'])
         self.concat_pool = config.get('concat_pool',False)
         if self.concat_pool:
-            self.concat_fc = nn.Sequential([nn.Dropout(config['fc_drop']),
+            self.concat_fc = nn.Sequential(*[nn.Dropout(config['fc_drop']),
                 nn.Linear(3 * config['n_hidden'], config['n_hidden']),
                 nn.BatchNorm1d(config['n_hidden']),
                 nn.ReLU(),])
@@ -41,6 +73,58 @@ class LSTM_ecg(nn.Module): #LSTM for time series
         else:
             features = out_pad[:,-1,:].view(batch_size,self.config['n_hidden'])
 
+        return features
+
+    def classify(self, features):
+        fc_out = self.fc(features)  # bs x d_out
+        return fc_out
+
+    def forward(self, x, seq_lens):
+        x = self.extract_features(x, seq_lens)
+        return self.classify(x)
+
+class LSTM_ptb(nn.Module): #LSTM for PTBXL
+    '''
+    LSTM Module
+    for self-supervised ECG: 2 layers and 256 hidden units
+    concat-pooling layer, which concatenates the max/mean of all LSTM outputs
+    single hidden layer with 128 units including batch normalization and dropout
+    '''
+    def __init__(self, config):
+        super().__init__()
+        # params: "n_" means dimension
+        self.n_layers = config['n_layers']   # number of layers
+        self.bidir_factor = 1 + int(config['b_dir'])
+        self.config = config
+        self.lstm = nn.LSTM(config['n_embed'], config['n_hidden'], num_layers=config['n_layers']
+                , bidirectional=config['b_dir'], batch_first=True)
+        self.concat_pool = config.get('concat_pool',False)
+        if self.concat_pool:
+            mult_factor = 3
+            self.pool = AdaptiveConcatPoolRNN(config['b_dir'])
+        else:
+            mult_factor = 1
+            self.pool = LastPoolRNN(config['b_dir'])
+        self.concat_fc = nn.Sequential(*[
+                nn.BatchNorm1d(self.bidir_factor * mult_factor * config['n_hidden']),
+                nn.Dropout(config['rnn_drop']),
+                nn.Linear(self.bidir_factor * mult_factor * config['n_hidden'], config['n_hidden']),
+                nn.ReLU(),])
+        self.fc = nn.Sequential(*[
+                nn.BatchNorm1d(config['n_hidden']),
+                nn.Dropout(config['fc_drop']),
+                nn.Linear(config['n_hidden'], config['n_output'])])
+        self.fc.in_features = config['n_hidden']
+
+    def extract_features(self, texts, seq_lens):
+        packed_embedded = nn.utils.rnn.pack_padded_sequence(
+            texts, seq_lens.cpu(), batch_first=True)  # seq_len:128 [0]: lenght of each sentence
+        rnn_out, (hidden, cell) = self.lstm(
+            packed_embedded)  # bs X len X n_hidden
+        out_pad, _out_len = rnn_utils.pad_packed_sequence(rnn_out, batch_first=True)
+        out_pad = out_pad.transpose(1, 2) # bs, n_hidden, len
+        features = self.pool(out_pad) #bs, ch * (1+b_dir) * concat pool
+        features = self.concat_fc(features) #bs, ch
         return features
 
     def classify(self, features):

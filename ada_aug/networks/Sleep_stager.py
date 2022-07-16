@@ -78,6 +78,7 @@ class SleepStagerChambon2018(nn.Module):
         len_last_layer = self._len_last_layer(
             n_channels, input_size, max_pool_size, n_conv_chs)
         self.len_last_layer = len_last_layer
+        print('CNN last layer len:', self.len_last_layer)
 
         if n_channels > 1:
             self.spatial_conv = nn.Conv2d(1, n_channels, (n_channels, 1))
@@ -104,7 +105,8 @@ class SleepStagerChambon2018(nn.Module):
     def _len_last_layer(n_channels, input_size, max_pool_size, n_conv_chs):
         return n_channels * (input_size // (max_pool_size ** 2)) * n_conv_chs
 
-    def extract_features(self, x):
+    def extract_features(self, x, seq_len=None):
+        x = x.transpose(1, 2) #(bs,len,ch) -> (bs, ch, len)
         x = x.unsqueeze(1) # (batch_size, 1, n_channels, n_times)
         if self.n_channels > 1:
             x = self.spatial_conv(x) # (batch_size, n_channels, 1, n_times)
@@ -116,7 +118,7 @@ class SleepStagerChambon2018(nn.Module):
     def classify(self, features):
         return self.fc(features)
 
-    def forward(self, x):
+    def forward(self, x, seq_len=None):
         """Forward pass.
         Parameters
         ---------

@@ -63,7 +63,7 @@ class LSTM_attention(nn.Module):
         lstm_out, (h, c) = self.lstm(sequence_pack)
         out_pad, _out_len = rnn_utils.pad_packed_sequence(lstm_out, batch_first=True)
         atten_out, alpha = self.attention_net_with_w(out_pad)
-        return atten_out
+        return atten_out # h_new: batch_size, hidden_dim
 
     def classify(self, features):
         fc_out = self.fc(features)  # bs x d_out

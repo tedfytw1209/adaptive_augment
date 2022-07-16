@@ -7,9 +7,10 @@ from torch.nn import DataParallel
 
 from .resnet import ResNet
 from .wideresnet import WideResNet
-from .LSTM import LSTM_ecg,LSTM_modal
+from .LSTM import LSTM_ecg,LSTM_modal,LSTM_ptb
 from .LSTM_attention import LSTM_attention
 from .Sleep_stager import SleepStagerChambon2018
+from .resnet1d import resnet1d_wang
 
 def get_model(model_name='wresnet40_2', num_class=10, n_channel=3, use_cuda=True, data_parallel=False):
     name = model_name
@@ -51,14 +52,35 @@ def get_model_tseries(model_name='lstm', num_class=10, n_channel=3, use_cuda=Tru
                   'b_dir': False,
                   }
         net = LSTM_ecg
+    elif model_name == 'lstm_ptb':
+        n_hidden = 256
+        model_config = {
+                  'n_hidden': n_hidden,
+                  'n_layers': 2,
+                  'b_dir': False,
+                  'concat_pool': True,
+                  'rnn_drop': 0.25,
+                  'fc_drop': 0.5}
+        net = LSTM_ptb
     elif model_name == 'lstm_atten':
         n_hidden = 512
         model_config = {
                   'n_hidden': n_hidden,
                   'n_layers': 1,
                   'b_dir': True,
-                    }
+                  'rnn_drop': 0.2,
+                  'fc_drop': 0.5}
         net = LSTM_attention
+    elif model_name == 'resnet_wang':
+        n_hidden = 128
+        config = {
+                  'input_channels': n_channel,
+                  'inplanes': n_hidden,
+                  'num_classes': num_class,
+                  'kernel_size': 5,
+                  'ps_head': 0.5}
+        model_config = {}
+        net = resnet1d_wang
     elif model_name == 'cnn_sleep': #with problems!!!
         model_config = {
                   'dataset': dataset,

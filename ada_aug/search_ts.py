@@ -104,7 +104,7 @@ def main():
         args.dataroot, args.cutout, args.cutout_length,
         split=args.train_portion, split_idx=0, target_lb=-1,
         search=True, search_divider=sdiv,search_size=args.search_size,
-        test_size=args.test_size,multilabel=args.multilabel)
+        test_size=args.test_size,multilabel=args.multilabel,default_split=args.default_split)
     
     logging.info(f'Dataset: {args.dataset}')
     logging.info(f'  |total: {len(train_queue.dataset)}')
@@ -121,14 +121,15 @@ def main():
         n_layers=args.n_proj_layer, n_hidden=128).cuda()
 
     #  training settings
-    gf_optimizer = torch.optim.SGD(
+    '''gf_optimizer = torch.optim.SGD(
         gf_model.parameters(),
         args.learning_rate,
         momentum=args.momentum,
-        weight_decay=args.weight_decay)
-
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(gf_optimizer,
-        float(args.epochs), eta_min=args.learning_rate_min)
+        weight_decay=args.weight_decay)'''
+    gf_optimizer = torch.optim.AdamW(gf_model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay) #follow ptbxl batchmark!!!
+    '''scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(gf_optimizer,
+        float(args.epochs), eta_min=args.learning_rate_min)'''
+    scheduler = torch.optim.lr_scheduler.OneCycleLR(gf_optimizer, max_lr=args.learning_rate, epochs = args.epochs, steps_per_epoch = len(train_queue)) #follow ptbxl batchmark!!!
 
     h_optimizer = torch.optim.Adam(
         h_model.parameters(),

@@ -352,6 +352,7 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
         random.shuffle(rd_idxs)
         testset = Subset(dataset,rd_idxs[:int(total*test_size)])
         search_trainset = Subset(dataset,rd_idxs[int(total*test_size):])
+        validset = None
     else:
         if dataset_name == 'edfx': #edfx have special split method
             dataset = dataset_func(dataroot,multilabel=multilabel)
@@ -359,9 +360,11 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
             split_info = splits_proportions[0]
             sub_tr_idx, valid_idx, test_idx = split_info[2],split_info[3],split_info[4]
             testset = Subset(dataset,test_idx)
-            search_trainset = Subset(dataset,sub_tr_idx+valid_idx)
+            search_trainset = Subset(dataset,sub_tr_idx)
+            validset = Subset(dataset,valid_idx)
         else:
-            search_trainset = dataset_func(dataroot,mode='tottrain',multilabel=multilabel)
+            search_trainset = dataset_func(dataroot,mode='train',multilabel=multilabel)
+            validset = dataset_func(dataroot,mode='valid',multilabel=multilabel)
             testset = dataset_func(dataroot,mode='test',multilabel=multilabel)
     #make search validation set
     total = len(search_trainset)
@@ -376,9 +379,9 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
         search_dataset = None
         total_trainset = search_trainset
             
-
+    #make train/valid split
     train_sampler = None
-    if split < 1.0: 
+    if split < 1.0 and validset==None: 
         if not multilabel: #multilabel can't
             sss = StratifiedShuffleSplit(n_splits=5, test_size=1-split, random_state=0)
             sss = sss.split(list(range(len(total_trainset))), total_trainset.label)
@@ -393,15 +396,18 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
             valid_idx = [i for i in valid_idx if total_trainset.label[i] == target_lb]
         train_sampler = SubsetRandomSampler(train_idx)
         valid_sampler = SubsetSampler(valid_idx)
+        valid_dataset = total_trainset
     else:
-        valid_sampler = SubsetSampler([])
+        #valid_sampler = SubsetSampler([])
+        valid_sampler = None #meaning change
+        valid_dataset = validset
         
     test_sampler =  None
 
     train_data = AugmentDataset_TS(total_trainset, transform_train_pre, transform_train_after, transform_test, search=search, train=True)
     if search and search_dataset is not None:
         search_data = AugmentDataset_TS(search_dataset, transform_train_pre, transform_train_after, transform_test, search=True, train=False)
-    valid_data = AugmentDataset_TS(total_trainset, transform_train_pre, transform_train_after, transform_test, search=False, train=False)
+    valid_data = AugmentDataset_TS(valid_dataset, transform_train_pre, transform_train_after, transform_test, search=False, train=False)
     test_data = AugmentDataset_TS(testset, transform_train_pre, transform_train_after, transform_test, search=False, train=False)
 
     if train_sampler is None:

@@ -279,7 +279,7 @@ def train(train_queue, search_queue, gf_model, adaaug, criterion, gf_optimizer,
         targets.append(target.cpu().detach())
     #Total
     if not multilabel:
-        perfrom = 100 * top1.avg
+        perfrom = top1.avg
         logging.info('Epoch train: loss=%e top1acc=%f top5acc=%f', objs.avg, top1.avg, top5.avg)
     else:
         targets_np = torch.cat(targets).numpy()
@@ -298,7 +298,7 @@ def train(train_queue, search_queue, gf_model, adaaug, criterion, gf_optimizer,
         logging.info('class-wise Acc: ' + str(cw_acc))
         nol_acc = 100 * confusion_matrix.diag().sum() / (confusion_matrix.sum()+1e-9)
         logging.info('Overall Acc: %f',nol_acc)
-        perfrom = 100 * top1.avg
+        perfrom = top1.avg
         perfrom_cw = cw_acc
     else:
         targets_np = torch.cat(targets).numpy()
@@ -362,7 +362,7 @@ def infer(valid_queue, gf_model, criterion, multilabel=False, n_class=10,mode='t
         logging.info('class-wise Acc: ' + str(cw_acc))
         nol_acc = 100 * confusion_matrix.diag().sum() / (confusion_matrix.sum()+1e-9)
         logging.info('Overall Acc: %f',nol_acc)
-        perfrom = 100 * top1.avg
+        perfrom = top1.avg
         perfrom_cw = cw_acc
     else:
         targets_np = torch.cat(targets).numpy()

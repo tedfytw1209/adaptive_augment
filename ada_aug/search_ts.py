@@ -54,6 +54,7 @@ parser.add_argument('--k_ops', type=int, default=1, help="number of augmentation
 parser.add_argument('--temperature', type=float, default=1.0, help="temperature")
 parser.add_argument('--search_freq', type=float, default=1, help='exploration frequency')
 parser.add_argument('--n_proj_layer', type=int, default=0, help="number of hidden layer in augmentation policy projection")
+parser.add_argument('--valselect', action='store_true', default=False, help='use valid select')
 
 args = parser.parse_args()
 debug = True if args.save == "debug" else False
@@ -85,7 +86,7 @@ def main():
         Aug_type = 'AdaAug'
     else:
         Aug_type = 'NOAUG'
-    experiment_name = f'{Aug_type}_search_{args.dataset}{args.labelgroup}_{args.model_name}_e{args.epochs}_lr{args.learning_rate}'
+    experiment_name = f'{Aug_type}_search_vselect_{args.dataset}{args.labelgroup}_{args.model_name}_e{args.epochs}_lr{args.learning_rate}'
     run_log = wandb.init(config=args, 
                   project='AdaAug',
                   group=experiment_name,
@@ -162,30 +163,40 @@ def main():
         save_dir=args.save,
         config=adaaug_config,
         multilabel=multilabel)
-
+    #for valid data select
+    best_val_acc,best_gf,best_h = 0,None,None
     #  Start training
     start_time = time.time()
     for epoch in range(args.epochs):
         lr = scheduler.get_last_lr()[0]
         logging.info('epoch %d lr %e', epoch, lr)
-        
+        step_dic={'epoch':epoch}
         # searching
         train_acc, train_obj, train_dic = train(train_queue, search_queue, gf_model, adaaug,
             criterion, gf_optimizer, args.grad_clip, h_optimizer, epoch, args.search_freq, multilabel=multilabel,n_class=n_class)
 
         # validation
         valid_acc, valid_obj,valid_dic = infer(valid_queue, gf_model, criterion, multilabel=multilabel,n_class=n_class,mode='valid')
-
         logging.info(f'train_acc {train_acc} valid_acc {valid_acc}')
         scheduler.step()
+        #test
+        test_acc, test_obj, test_dic  = infer(test_queue, gf_model, criterion, multilabel=multilabel,n_class=n_class,mode='test')
+        logging.info('test_acc %f', test_acc)
+        #val select
+        if args.valselect and valid_acc>best_val_acc:
+            best_val_acc = valid_acc
+            valid_dic['best_valid_acc_avg'] = valid_acc
+            test_dic['best_test_acc_avg'] = test_acc
+            best_gf = gf_model
+            best_h = h_model
+        elif not args.valselect:
+            best_gf = gf_model
+            best_h = h_model
 
-        utils.save_model(gf_model, os.path.join(args.save, 'gf_weights.pt'))
-        utils.save_model(h_model, os.path.join(args.save, 'h_weights.pt'))
-        test_acc, test_obj, test_acc5, _,test_dic  = infer(test_queue, gf_model, criterion, multilabel=multilabel,n_class=n_class,mode='test')
-        logging.info('test_acc %f %f', test_acc, test_acc5)
+        utils.save_model(best_gf, os.path.join(args.save, 'gf_weights.pt'))
+        utils.save_model(best_h, os.path.join(args.save, 'h_weights.pt'))
+        
         step_dic.update(test_dic)
-        #wandb
-        step_dic = {'epoch':epoch}
         step_dic.update(train_dic)
         step_dic.update(valid_dic)
         wandb.log(step_dic)

@@ -25,9 +25,9 @@ def perturb_param(param, delta):
         
     amt = random.uniform(0, delta)
     if random.random() < 0.5:
-        return max(0, param-amt)
+        return torch.tensor(max(0, param-amt))
     else:
-        return min(1, param+amt)
+        return torch.tensor(min(1, param+amt))
 
 def stop_gradient(trans_image, magnitude):
     images = trans_image

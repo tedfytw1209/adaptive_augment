@@ -85,7 +85,7 @@ def main():
         Aug_type = 'AdaAug'
     else:
         Aug_type = 'NOAUG'
-    experiment_name = f'{Aug_type}_train_{args.dataset}{args.labelgroup}_{args.model_name}_e{args.epochs}_lr{args.learning_rate}'
+    experiment_name = f'{Aug_type}_search_{args.dataset}{args.labelgroup}_{args.model_name}_e{args.epochs}_lr{args.learning_rate}'
     run_log = wandb.init(config=args, 
                   project='AdaAug',
                   group=experiment_name,
@@ -181,6 +181,9 @@ def main():
 
         utils.save_model(gf_model, os.path.join(args.save, 'gf_weights.pt'))
         utils.save_model(h_model, os.path.join(args.save, 'h_weights.pt'))
+        test_acc, test_obj, test_acc5, _,test_dic  = infer(test_queue, gf_model, criterion, multilabel=multilabel,n_class=n_class,mode='test')
+        logging.info('test_acc %f %f', test_acc, test_acc5)
+        step_dic.update(test_dic)
         #wandb
         step_dic = {'epoch':epoch}
         step_dic.update(train_dic)

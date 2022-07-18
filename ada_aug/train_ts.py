@@ -57,6 +57,7 @@ parser.add_argument('--n_proj_layer', type=int, default=0, help="number of addit
 parser.add_argument('--n_proj_hidden', type=int, default=128, help="number of hidden units in augmentation policy projection layers")
 parser.add_argument('--restore_path', type=str, default='./', help='restore model path')
 parser.add_argument('--restore', action='store_true', default=False, help='restore model default False')
+parser.add_argument('--valselect', action='store_true', default=False, help='use valid select')
 
 args = parser.parse_args()
 debug = True if args.save == "debug" else False
@@ -88,7 +89,7 @@ def main():
         Aug_type = 'AdaAug'
     else:
         Aug_type = 'NOAUG'
-    experiment_name = f'{Aug_type}_tottrain_{args.dataset}{args.labelgroup}_{args.model_name}_e{args.epochs}_lr{args.learning_rate}'
+    experiment_name = f'{Aug_type}_tottrain_vselect_{args.dataset}{args.labelgroup}_{args.model_name}_e{args.epochs}_lr{args.learning_rate}'
     run_log = wandb.init(config=args, 
                   project='AdaAug',
                   group=experiment_name,
@@ -190,12 +191,14 @@ def main():
                     save_dir=args.save,
                     config=adaaug_config,
                     multilabel=multilabel)
-
+    #for valid data select
+    best_val_acc,best_task = 0,None
     #  start training
     for i_epoch in range(n_epoch):
         epoch = trained_epoch + i_epoch
         lr = scheduler.get_last_lr()[0]
         logging.info('epoch %d lr %e', epoch, lr)
+        step_dic = {'epoch':epoch}
 
         train_acc, train_obj, train_dic = train(
             train_queue, task_model, criterion, optimizer, epoch, args.grad_clip, adaaug, multilabel=multilabel,n_class=n_class)
@@ -203,17 +206,23 @@ def main():
 
         valid_acc, valid_obj, _, _, valid_dic = infer(valid_queue, task_model, criterion, multilabel=multilabel,n_class=n_class,mode='valid')
         logging.info('valid_acc %f', valid_acc)
-
-        scheduler.step()
-        #wandb
-        step_dic = {'epoch':epoch}
-        step_dic.update(train_dic)
-        step_dic.update(valid_dic)
         test_acc, test_obj, test_acc5, _,test_dic  = infer(test_queue, task_model, criterion, multilabel=multilabel,n_class=n_class,mode='test')
         logging.info('test_acc %f %f', test_acc, test_acc5)
+        scheduler.step()
+        #val select
+        if args.valselect and valid_acc>best_val_acc:
+            best_val_acc = valid_acc
+            valid_dic['best_valid_acc_avg'] = valid_acc
+            test_dic['best_test_acc_avg'] = test_acc
+            best_task = task_model
+        elif not args.valselect:
+            best_task = task_model
+        #wandb
+        step_dic.update(train_dic)
+        step_dic.update(valid_dic)
         step_dic.update(test_dic)
 
-        utils.save_ckpt(task_model, optimizer, scheduler, epoch,
+        utils.save_ckpt(best_task, optimizer, scheduler, epoch,
             os.path.join(args.save, 'weights.pt'))
         #wandb log
         wandb.log(step_dic)

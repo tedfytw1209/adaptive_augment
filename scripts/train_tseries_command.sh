@@ -36,6 +36,6 @@ function run_reduced_cifar10 {
     KOPS=2
 }
 
-python ada_aug/train.py --temperature 3 --delta 0.3 --search_dataset ptbxl --gf_model_path  --h_model_path  --gf_model_name resnet_wang --k_ops 3 \
+python ada_aug/train_ts.py --temperature 3 --delta 0.3 --search_dataset ptbxl --gf_model_path  --h_model_path  --gf_model_name resnet_wang --k_ops 3 \
  --report_freq 10 --num_workers 4 --epochs 50 --batch_size 128 --learning_rate 0.01 --dataset ptbxl --model_name resnet_wang --labelgroup subdiagnostic \
- --save ptbxl_resnet_train --gpu 3 --weight_decay 0.01 --train_portion 1 --dataroot /mnt/data2/teddy/ptbxl-dataset --default_split
+ --save ptbxl_resnet_train --gpu 3 --weight_decay 0.01 --train_portion 1 --dataroot /mnt/data2/teddy/ptbxl-dataset --default_split --valselect

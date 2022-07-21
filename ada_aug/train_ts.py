@@ -135,7 +135,7 @@ def main():
         optimizer, float(args.epochs), eta_min=args.learning_rate_min)'''
     scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=args.learning_rate, epochs = args.epochs, steps_per_epoch = len(train_queue)) #follow ptbxl batchmark!!!
     m, e = get_warmup_config(args.dataset)
-    scheduler = GradualWarmupScheduler( #paper not mention
+    scheduler = GradualWarmupScheduler( #paper not mention!!!
             optimizer,
             multiplier=m,
             total_epoch=e,

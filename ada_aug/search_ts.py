@@ -185,6 +185,8 @@ def main():
         #val select
         if args.valselect and valid_acc>best_val_acc:
             best_val_acc = valid_acc
+            result_valid_dic = {f'result_{k}': valid_dic[k] for k in valid_dic.keys()}
+            result_test_dic = {f'result_{k}': test_dic[k] for k in test_dic.keys()}
             valid_dic['best_valid_acc_avg'] = valid_acc
             test_dic['best_test_acc_avg'] = test_acc
             best_gf = gf_model
@@ -207,6 +209,8 @@ def main():
     test_acc, test_obj, test_dic = infer(test_queue, gf_model, criterion, multilabel=multilabel,n_class=n_class,mode='test')
     #wandb
     step_dic.update(test_dic)
+    step_dic.update(result_valid_dic)
+    step_dic.update(result_test_dic)
     wandb.log(step_dic)
     #save&log
     utils.save_model(gf_model, os.path.join(args.save, 'gf_weights.pt'))

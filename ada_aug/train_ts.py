@@ -61,7 +61,8 @@ parser.add_argument('--valselect', action='store_true', default=False, help='use
 
 args = parser.parse_args()
 debug = True if args.save == "debug" else False
-args.save = '{}-{}'.format(time.strftime("%Y%m%d-%H%M%S"), args.save)
+now_str = time.strftime("%Y%m%d-%H%M%S")
+args.save = '{}-{}'.format(now_str, args.save)
 if debug:
     args.save = os.path.join('debug', args.save)
 else:
@@ -84,6 +85,7 @@ def main():
     utils.reproducibility(args.seed)
     logging.info('gpu device = %d' % args.gpu)
     logging.info("args = %s", args)
+    date_time_str = now_str
     #wandb
     if args.k_ops>0:
         Aug_type = 'AdaAug'
@@ -93,7 +95,7 @@ def main():
     run_log = wandb.init(config=args, 
                   project='AdaAug',
                   group=experiment_name,
-                  name=experiment_name,
+                  name=f'{date_time_str}_' + experiment_name,
                   dir='./',
                   job_type="DataAugment",
                   reinit=True)

@@ -13,6 +13,7 @@ from mne.filter import notch_filter
 from mne.channels.interpolation import _make_interpolation_matrix
 from mne.channels import make_standard_montage
 import matplotlib.pyplot as plt
+import biosppy
 
 #for model: (len, channel)
 #for this file (channel, len) !!!
@@ -162,7 +163,7 @@ def _make_permutation_matrix(X, mask, random_state):
         )
         batch_permutations[b, ...] = one_hot(channels_permutation)
     return batch_permutations
-def channel_shuffle(X, magnitude, random_state, *args, **kwargs):
+def channel_shuffle(X, magnitude, random_state=42, *args, **kwargs):
     mask = _pick_channels_randomly(X, 1 - magnitude, random_state)
     batch_permutations = _make_permutation_matrix(X, mask, random_state)
     return torch.matmul(batch_permutations, X)
@@ -552,6 +553,48 @@ def get_standard_10_20_positions(raw_or_epoch=None, ordered_ch_names=None):
         k: positions_dict[k] for k in ordered_ch_names if k in positions_dict
     }
     return np.stack(list(positions_subdict.values())).T
+
+### for ECG transfrom
+#change tseries signal from (len,channel) to (batch,channel,len)
+def RR_permutation(X, magnitude,sfreq=100, random_state=42, *args, **kwargs): #x:(batch,channel,len)
+    """
+    From 'Nita, Sihem, et al. 
+    "A new data augmentation convolutional neural network for human emotion recognition based on ECG signals."
+    Biomedical Signal Processing and Control 75 (2022): 103580.'
+    RR-interval permutation. RR peaks detect using biosppy
+    """
+    #biosppy.signals.ecg.ecg
+    x = X.detach().cpu().numpy()
+    num_sample, num_leads, num_len = x.shape
+    rng = check_random_state(random_state)
+    select_lead = rng.randint(0, num_leads-1)
+    rpeaks_array = biosppy.signals.ecg.hamilton_segmenter(x[0,select_lead,:],sfreq).tolist()
+    seg_ids = [i for i in range(len(rpeaks_array)-1)]
+    permut_seg_ids = rng.permutation(seg_ids)
+    seg_list = []
+    start_point = 0
+    for end_point in rpeaks_array + [num_len]:
+        seg_list.append(x[:,:,start_point:end_point])
+        start_point = end_point
+    #permutation
+    perm_seg_list = []
+    for i in len(seg_list):
+        if i==0 or i==len(seg_list)-1:
+            perm_seg_list.append(seg_list[i])
+        else:
+            permut_seg_ids.append(permut_seg_ids[i-1])
+    #concat & back tensor
+    new_x = np.concatenate(perm_seg_list,axis=2)
+    new_x = torch.from_numpy(new_x).float()
+    return new_x
+
+def QRS_resample(X, magnitude,sfreq=100, random_state=42, *args, **kwargs):
+    """
+    From 'A novel data augmentation method to enhance deep neural networks for detection of atrial fibrillation.
+    PingCao et.al. Biomedical Signal Processing and Control Volume 56, February 2020, 101675'
+    QRS detection using 'Pan, J., Tompkins, W.J.: A real-time QRS detection algorithm. IEEE Trans. Biomed. Eng. 32, 230-236 (1985)'
+    """
+
 
 TS_OPS_NAMES = [
     'identity', #identity

@@ -14,6 +14,8 @@ from mne.channels.interpolation import _make_interpolation_matrix
 from mne.channels import make_standard_montage
 import matplotlib.pyplot as plt
 import biosppy
+from ecgdetectors import Detectors
+
 
 #for model: (len, channel)
 #for this file (channel, len) !!!
@@ -140,7 +142,7 @@ def _pick_channels_randomly(X, magnitude, random_state):
     # equivalent to a 0s and 1s mask, but allows to backprop through
     # could also be done using torch.distributions.RelaxedBernoulli
     return torch.sigmoid(1000 * (unif_samples - magnitude)).to(X.device)
-def channel_dropout(X, magnitude, random_state, *args, **kwargs):
+def channel_dropout(X, magnitude, random_state=None, *args, **kwargs):
     mask = _pick_channels_randomly(X, magnitude, random_state)
     return X * mask.unsqueeze(-1)
 
@@ -163,12 +165,12 @@ def _make_permutation_matrix(X, mask, random_state):
         )
         batch_permutations[b, ...] = one_hot(channels_permutation)
     return batch_permutations
-def channel_shuffle(X, magnitude, random_state=42, *args, **kwargs):
+def channel_shuffle(X, magnitude, random_state=None, *args, **kwargs):
     mask = _pick_channels_randomly(X, 1 - magnitude, random_state)
     batch_permutations = _make_permutation_matrix(X, mask, random_state)
     return torch.matmul(batch_permutations, X)
 
-def add_gaussian_noise(X, std, random_state, *args, **kwargs):
+def add_gaussian_noise(X, std, random_state=None, *args, **kwargs):
     # XXX: Maybe have rng passed as argument here
     rng = check_random_state(random_state)
     noise = torch.from_numpy(
@@ -207,12 +209,12 @@ def _relaxed_mask_time(X, mask_start_per_sample, mask_len_samples):
         torch.sigmoid(s * -(t - mask_start_per_sample - mask_len_samples))
     ).float().to(X.device)
     return X * mask
-def random_time_mask(X, mask_len_samples, random_state, *args, **kwargs):
+def random_time_mask(X, mask_len_samples, random_state=None, *args, **kwargs):
     mask_start = _sample_mask_start(X, mask_len_samples, random_state)
     return _relaxed_mask_time(X, mask_start, mask_len_samples)
 
 
-def random_bandstop(X, bandwidth, max_freq=50, sfreq=100, random_state=42, *args,
+def random_bandstop(X, bandwidth, max_freq=50, sfreq=100, random_state=None, *args,
                     **kwargs):
     rng = check_random_state(random_state)
     transformed_X = X.clone()
@@ -275,7 +277,7 @@ def _freq_shift(x, fs, f_shift):
         N_padded, n_channels, 1).T
     shifted = analytical * torch.exp(2j * np.pi * reshaped_f_shift * t)
     return shifted[..., :N_orig].real.float()
-def freq_shift(X, max_shift, sfreq=100, random_state=42, *args, **kwargs):
+def freq_shift(X, max_shift, sfreq=100, random_state=None, *args, **kwargs):
     rng = check_random_state(random_state)
     delta_freq = torch.as_tensor(
         rng.uniform(size=X.shape[0]), device=X.device) * max_shift
@@ -512,7 +514,7 @@ def make_rotation_matrix(axis, angle, degrees=True):
         return rot[:, [1, 2, 0]]
 
 def random_rotation(X, axis, max_degrees, sensors_positions_matrix,
-                    spherical_splines, random_state, *args, **kwargs):
+                    spherical_splines, random_state=None, *args, **kwargs):
     rng = check_random_state(random_state)
     random_angles = torch.as_tensor(rng.uniform(
         low=0,
@@ -555,8 +557,8 @@ def get_standard_10_20_positions(raw_or_epoch=None, ordered_ch_names=None):
     return np.stack(list(positions_subdict.values())).T
 
 ### for ECG transfrom
-#change tseries signal from (len,channel) to (batch,channel,len)
-def RR_permutation(X, magnitude,sfreq=100, random_state=42, *args, **kwargs): #x:(batch,channel,len)
+#tseries signal (batch,channel,len)
+def RR_permutation(X, magnitude,sfreq=100, random_state=None, *args, **kwargs): #x:(batch,channel,len)
     """
     From 'Nita, Sihem, et al. 
     "A new data augmentation convolutional neural network for human emotion recognition based on ECG signals."
@@ -566,9 +568,10 @@ def RR_permutation(X, magnitude,sfreq=100, random_state=42, *args, **kwargs): #x
     #biosppy.signals.ecg.ecg
     x = X.detach().cpu().numpy()
     num_sample, num_leads, num_len = x.shape
+    detectors = Detectors(sfreq) #need input ecg: (seq_len)
     rng = check_random_state(random_state)
     select_lead = rng.randint(0, num_leads-1)
-    rpeaks_array = biosppy.signals.ecg.hamilton_segmenter(x[0,select_lead,:],sfreq).tolist()
+    rpeaks_array = detectors.two_average_detector(x[0,select_lead,:])
     seg_ids = [i for i in range(len(rpeaks_array)-1)]
     permut_seg_ids = rng.permutation(seg_ids)
     seg_list = []
@@ -576,25 +579,50 @@ def RR_permutation(X, magnitude,sfreq=100, random_state=42, *args, **kwargs): #x
     for end_point in rpeaks_array + [num_len]:
         seg_list.append(x[:,:,start_point:end_point])
         start_point = end_point
+    #check
+    check_x = np.concatenate(seg_list,axis=2)
+    print(check_x.shape)
+    print('seg num:', len(seg_list))
+    print('rpeak count:',len(rpeaks_array))
     #permutation
     perm_seg_list = []
-    for i in len(seg_list):
+    for i in range(len(seg_list)):
         if i==0 or i==len(seg_list)-1:
             perm_seg_list.append(seg_list[i])
         else:
-            permut_seg_ids.append(permut_seg_ids[i-1])
+            perm_seg_list.append(seg_list[permut_seg_ids[i-1]+1])
     #concat & back tensor
     new_x = np.concatenate(perm_seg_list,axis=2)
     new_x = torch.from_numpy(new_x).float()
     return new_x
-
-def QRS_resample(X, magnitude,sfreq=100, random_state=42, *args, **kwargs):
+#tseries signal (batch,channel,len)
+def QRS_resample(X, magnitude,sfreq=100, random_state=None, *args, **kwargs):
     """
     From 'A novel data augmentation method to enhance deep neural networks for detection of atrial fibrillation.
     PingCao et.al. Biomedical Signal Processing and Control Volume 56, February 2020, 101675'
     QRS detection using 'Pan, J., Tompkins, W.J.: A real-time QRS detection algorithm. IEEE Trans. Biomed. Eng. 32, 230-236 (1985)'
+    Using https://github.com/berndporr/py-ecg-detectors module for detection
     """
-
+    detectors = Detectors(sfreq) #need input ecg: (seq_len)
+    qrs_interval = int(0.1 * sfreq)
+    x = X.detach().cpu().numpy()
+    num_sample, num_leads, num_len = x.shape
+    window_size = num_len
+    rng = check_random_state(random_state)
+    select_lead = rng.randint(0, num_leads-1)
+    rpeaks_array = detectors.pan_tompkins_detector(x[0,select_lead,:])
+    #tmp
+    plt.clf()
+    plt.plot(x[0,select_lead,:])
+    plt.plot(rpeaks_array, x[0,select_lead,rpeaks_array], 'ro')
+    plt.title("Detected R peaks")
+    plt.show()
+    first_p,last_p = int(max(rpeaks_array[0] - qrs_interval/2,0)), int(rpeaks_array[-1] - qrs_interval/2)
+    dup_x = np.concatenate([x[:,:,first_p:last_p],x[:,:,first_p:last_p]],axis=2)
+    window_start = rng.randint(0, dup_x.shape[2] - window_size)
+    new_x = dup_x[:,:,window_start:window_start+window_size]
+    new_x = torch.from_numpy(new_x).float()
+    return new_x
 
 TS_OPS_NAMES = [
     'identity', #identity
@@ -624,13 +652,21 @@ TS_AUGMENT_LIST = [
         (sign_flip, 0, 1),  # 8
         (freq_shift, 0, 5),  # 9
         ]
+ECG_OPS_NAMES = [
+    'RR_permutation',
+    'QRS_resample',
+]
+ECG_AUGMENT_LIST = [
+    (RR_permutation, 0, 1),
+    (QRS_resample, 0, 1),
+]
 
 def get_augment(name):
-    augment_dict = {fn.__name__: (fn, v1, v2) for fn, v1, v2 in TS_AUGMENT_LIST}
+    augment_dict = {fn.__name__: (fn, v1, v2) for fn, v1, v2 in TS_AUGMENT_LIST+ECG_AUGMENT_LIST}
     return augment_dict[name]
 
 
-def apply_augment(img, name, level, rd_seed=42):
+def apply_augment(img, name, level, rd_seed=None):
     augment_fn, low, high = get_augment(name)
     #change tseries signal from (len,channel) to (batch,channel,len)
     #print('Device: ',img.device)
@@ -650,15 +686,53 @@ def plot_line(t,x):
 
 if __name__ == '__main__':
     print('Test all operations')
-    t = np.linspace(0, 10, 1000)
-    x = np.vstack([np.cos(t),np.sin(t),np.random.normal(0, 0.3, 1000)]).T
+    from datasets import EDFX,PTBXL,Chapman,WISDM
+    #t = np.linspace(0, 10, 1000)
+    #x = np.vstack([np.cos(t),np.sin(t),np.random.normal(0, 0.3, 1000)]).T
+    Freq_dict = {
+    'edfx' : 100,
+    'ptbxl' : 100,
+    'wisdm' : 20,
+    'chapman' : 500,
+    }
+    TimeS_dict = {
+    'edfx' : 30,
+    'ptbxl' : 10,
+    'wisdm' : 10,
+    'chapman' : 10,
+    }
+    dataset = PTBXL(dataset_path='../CWDA_research/CWDA/datasets/Datasets/ptbxl-dataset')
+    print(dataset[0])
+    print(dataset[0][0].shape)
+    sample = dataset[50]
+    x = sample[0]
+    t = np.linspace(0, TimeS_dict['ptbxl'], 1000)
+    label = sample[2]
     print(t.shape)
     print(x.shape)
     x_tensor = torch.from_numpy(x).float()
     plot_line(t,x)
-    for name in TS_OPS_NAMES:
+    '''for name in TS_OPS_NAMES:
         print('='*10,name,'='*10)
         x_aug = apply_augment(x_tensor,name,0.5).numpy()
         print(x_aug.shape)
+        plot_line(t,x_aug)'''
+    name = 'random_time_mask'
+    for i in range(3):
+        print('='*10,name,'='*10)
+        x_aug = apply_augment(x_tensor,name,0.5,rd_seed=None).numpy()
+        print(x_aug.shape)
         plot_line(t,x_aug)
-
+    #ECG part
+    '''print('ECG Augmentation')
+    for name in ECG_OPS_NAMES:
+        print('='*10,name,'='*10)
+        x_aug = apply_augment(x_tensor,name,0.5).numpy()
+        print(x_aug.shape)
+        plot_line(t,x_aug)'''
+    name = 'QRS_resample'
+    for i in range(3):
+        print('='*10,name,'='*10)
+        x_aug = apply_augment(x_tensor,name,0.5,rd_seed=None).numpy()
+        print(x_aug.shape)
+        plot_line(t,x_aug)

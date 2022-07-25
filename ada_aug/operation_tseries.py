@@ -562,9 +562,8 @@ def RR_permutation(X, magnitude,sfreq=100, random_state=None, *args, **kwargs): 
     From 'Nita, Sihem, et al. 
     "A new data augmentation convolutional neural network for human emotion recognition based on ECG signals."
     Biomedical Signal Processing and Control 75 (2022): 103580.'
-    RR-interval permutation. RR peaks detect using biosppy
+    Using https://github.com/berndporr/py-ecg-detectors module for detection
     """
-    #biosppy.signals.ecg.ecg
     x = X.detach().cpu().numpy()
     num_sample, num_leads, num_len = x.shape
     detectors = Detectors(sfreq) #need input ecg: (seq_len)
@@ -578,11 +577,6 @@ def RR_permutation(X, magnitude,sfreq=100, random_state=None, *args, **kwargs): 
     for end_point in rpeaks_array + [num_len]:
         seg_list.append(x[:,:,start_point:end_point])
         start_point = end_point
-    #check
-    check_x = np.concatenate(seg_list,axis=2)
-    print(check_x.shape)
-    print('seg num:', len(seg_list))
-    print('rpeak count:',len(rpeaks_array))
     #permutation
     perm_seg_list = []
     for i in range(len(seg_list)):
@@ -610,12 +604,6 @@ def QRS_resample(X, magnitude,sfreq=100, random_state=None, *args, **kwargs):
     rng = check_random_state(random_state)
     select_lead = rng.randint(0, num_leads-1)
     rpeaks_array = detectors.pan_tompkins_detector(x[0,select_lead,:])
-    #tmp
-    plt.clf()
-    plt.plot(x[0,select_lead,:])
-    plt.plot(rpeaks_array, x[0,select_lead,rpeaks_array], 'ro')
-    plt.title("Detected R peaks")
-    plt.show()
     first_p,last_p = int(max(rpeaks_array[0] - qrs_interval/2,0)), int(rpeaks_array[-1] - qrs_interval/2)
     dup_x = np.concatenate([x[:,:,first_p:last_p],x[:,:,first_p:last_p]],axis=2)
     window_start = rng.randint(0, dup_x.shape[2] - window_size)

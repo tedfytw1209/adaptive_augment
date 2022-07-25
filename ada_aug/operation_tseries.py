@@ -604,7 +604,7 @@ def QRS_resample(X, magnitude,sfreq=100, random_state=None, *args, **kwargs):
     Using https://github.com/berndporr/py-ecg-detectors module for detection
     """
     detectors = Detectors(sfreq) #need input ecg: (seq_len)
-    qrs_interval = int(0.1 * sfreq)
+    qrs_interval = 0 #int(0.1 * sfreq)
     x = X.detach().cpu().numpy()
     num_sample, num_leads, num_len = x.shape
     window_size = num_len

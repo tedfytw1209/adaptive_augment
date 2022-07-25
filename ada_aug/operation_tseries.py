@@ -13,7 +13,6 @@ from mne.filter import notch_filter
 from mne.channels.interpolation import _make_interpolation_matrix
 from mne.channels import make_standard_montage
 import matplotlib.pyplot as plt
-import biosppy
 from ecgdetectors import Detectors
 
 

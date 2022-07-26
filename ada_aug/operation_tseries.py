@@ -823,9 +823,31 @@ TS_ADD_LIST = [
     (Magnitude_Warp, 0, 1),  # 5
     (Window_Warp, 0, 1),  # 6
 ]
+MAG_TEST_NAMES = [
+    'fft_surrogate',
+    'channel_dropout',
+    'channel_shuffle',
+    'random_time_mask',
+    'add_gaussian_noise',
+    'random_bandstop',
+    'freq_shift',
+    'Window_Slicing',
+    'TS_Permutation',
+    'Time_Warp',
+    'Scaling',
+    'Magnitude_Warp',
+    'Window_Warp',
+]
+NOMAG_TEST_NAMES = [
+    'time_reverse', #time reverse
+    'sign_flip',
+    'RR_permutation',
+    'QRS_resample',
+    'Window_Slicing_Circle',
+]
 
 def get_augment(name):
-    augment_dict = {fn.__name__: (fn, v1, v2) for fn, v1, v2 in TS_AUGMENT_LIST+ECG_AUGMENT_LIST}
+    augment_dict = {fn.__name__: (fn, v1, v2) for fn, v1, v2 in TS_AUGMENT_LIST+ECG_AUGMENT_LIST+TS_ADD_LIST}
     return augment_dict[name]
 
 
@@ -913,7 +935,7 @@ if __name__ == '__main__':
     'wisdm' : 10,
     'chapman' : 10,
     }
-    dataset = PTBXL(dataset_path='../CWDA_research/CWDA/datasets/Datasets/ptbxl-dataset')
+    dataset = PTBXL(dataset_path='../../CWDA_research/CWDA/datasets/Datasets/ptbxl-dataset')
     print(dataset[0])
     print(dataset[0][0].shape)
     sample = dataset[50]
@@ -924,11 +946,11 @@ if __name__ == '__main__':
     print(x.shape)
     x_tensor = torch.from_numpy(x).float()
     plot_line(t,x)
-    '''for name in TS_OPS_NAMES:
+    for name in TS_ADD_NAMES:
         print('='*10,name,'='*10)
         x_aug = apply_augment(x_tensor,name,0.5).numpy()
         print(x_aug.shape)
-        plot_line(t,x_aug)'''
+        plot_line(t,x_aug)
     randaug = RandAugment(1,0.5)
     name = 'random_time_mask'
     for i in range(3):

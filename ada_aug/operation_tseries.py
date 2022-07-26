@@ -659,7 +659,8 @@ def TS_Permutation(X, magnitude, random_state=None, *args, **kwargs):
     return new_x
 #Concat_Resample same as Window Slicing
 #Time Warp
-
+def Time_Warp():
+    pass
 
 TS_OPS_NAMES = [
     'identity', #identity

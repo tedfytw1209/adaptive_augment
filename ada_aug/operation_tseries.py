@@ -615,6 +615,51 @@ def QRS_resample(X, magnitude,sfreq=100, random_state=None, *args, **kwargs):
     else:
         new_x = X.detach().cpu()
     return new_x
+'''
+4 METHODS FROM "Data Augmentation for Deep Learning-Based ECG Analysis"
+'''
+#Window Slicing: tseries signal (batch,channel,len)
+def Window_Slicing(X, magnitude,window_size=1000, random_state=None, *args, **kwargs):
+    rng = check_random_state(random_state)
+    x = X.detach().cpu().numpy()
+    window_start = rng.randint(0, x.shape[2] - window_size)
+    new_x = x[:,:,window_start:window_start+window_size]
+    new_x = torch.from_numpy(new_x).float()
+    return new_x
+def Window_Slicing_Circle(X, magnitude,window_size=1000, random_state=None, *args, **kwargs):
+    rng = check_random_state(random_state)
+    x = X.detach().cpu().numpy()
+    dup_x = np.concatenate([x,x],axis=2)
+    window_start = rng.randint(0, dup_x.shape[2] - window_size)
+    new_x = x[:,:,window_start:window_start+window_size]
+    new_x = torch.from_numpy(new_x).float()
+    return new_x
+#TS_Permutation: tseries signal (batch,channel,len)
+def TS_Permutation(X, magnitude, random_state=None, *args, **kwargs):
+    N_clip = magnitude
+    rng = check_random_state(random_state)
+    seg_ids = [i for i in range(N_clip)]
+    x = X.detach().cpu().numpy()
+    num_sample, num_leads, num_len = x.shape
+    seg_len = int(num_len/N_clip)
+    permut_seg_ids = rng.permutation(seg_ids)
+    seg_list = []
+    start_point = 0
+    for i in range(N_clip-1):
+        seg_list.append(x[:,:,start_point:start_point+seg_len])
+        start_point = start_point+seg_len
+    seg_list.append(x[:,:,start_point:]) #add last seg
+    #permutation
+    perm_seg_list = []
+    for i in range(len(seg_list)):
+        perm_seg_list.append(seg_list[permut_seg_ids[i]])
+    #concat & back tensor
+    new_x = np.concatenate(perm_seg_list,axis=2)
+    new_x = torch.from_numpy(new_x).float()
+    return new_x
+#Concat_Resample same as Window Slicing
+#Time Warp
+
 
 TS_OPS_NAMES = [
     'identity', #identity

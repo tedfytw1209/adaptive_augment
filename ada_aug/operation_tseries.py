@@ -568,7 +568,8 @@ def RR_permutation(X, magnitude,sfreq=100, random_state=None, *args, **kwargs): 
     num_sample, num_leads, num_len = x.shape
     detectors = Detectors(sfreq) #need input ecg: (seq_len)
     rng = check_random_state(random_state)
-    select_lead = rng.randint(0, num_leads-1)
+    #select_lead = rng.randint(0, num_leads-1)
+    select_lead = 0 #!!!tmp
     rpeaks_array = detectors.two_average_detector(x[0,select_lead,:])
     seg_ids = [i for i in range(len(rpeaks_array)-1)]
     permut_seg_ids = rng.permutation(seg_ids)
@@ -602,13 +603,17 @@ def QRS_resample(X, magnitude,sfreq=100, random_state=None, *args, **kwargs):
     num_sample, num_leads, num_len = x.shape
     window_size = num_len
     rng = check_random_state(random_state)
-    select_lead = rng.randint(0, num_leads-1)
+    #select_lead = rng.randint(0, num_leads-1)
+    select_lead = 0 #!!!tmp
     rpeaks_array = detectors.pan_tompkins_detector(x[0,select_lead,:])
     first_p,last_p = int(max(rpeaks_array[0] - qrs_interval/2,0)), int(rpeaks_array[-1] - qrs_interval/2)
     dup_x = np.concatenate([x[:,:,first_p:last_p],x[:,:,first_p:last_p]],axis=2)
-    window_start = rng.randint(0, dup_x.shape[2] - window_size)
-    new_x = dup_x[:,:,window_start:window_start+window_size]
-    new_x = torch.from_numpy(new_x).float()
+    if dup_x.shape[2] >= window_size: #if long enough
+        window_start = rng.randint(0, dup_x.shape[2] - window_size)
+        new_x = dup_x[:,:,window_start:window_start+window_size]
+        new_x = torch.from_numpy(new_x).float()
+    else:
+        new_x = X.detach().cpu()
     return new_x
 
 TS_OPS_NAMES = [
@@ -671,6 +676,55 @@ def plot_line(t,x):
         plt.plot(t, x[:,i])
     plt.show()
 
+class ToTensor:
+    def __init__(self) -> None:
+        pass
+    def __call__(self, img):
+        return torch.tensor(img).float()
+
+class RandAugment:
+    def __init__(self, n, m, rd_seed=None):
+        self.n = n
+        self.m = m      # [0, 1]
+        self.augment_list = TS_AUGMENT_LIST
+        self.rng = check_random_state(rd_seed)
+    def __call__(self, img):
+        #print(img.shape)
+        seq_len , channel = img.shape
+        img = img.permute(1,0).view(1,channel,seq_len)
+        ops = self.rng.choices(self.augment_list, k=self.n)
+        for op, minval, maxval in ops:
+            val = float(self.m) * float(maxval - minval) + minval
+            #print(val)
+            img = op(img, val,random_state=self.rng)
+
+        return img.permute(0,2,1).detach().view(seq_len,channel) #back to (len,channel)
+
+class TransfromAugment:
+    def __init__(self, names,m ,p=0.5,n=1, rd_seed=None):
+        print(f'Using Fix transfroms {names}, m={m}, n={n}, p={p}')
+        self.p = p
+        self.m = m      # [0, 1]
+        self.n = n
+        self.names = names
+        self.rng = check_random_state(rd_seed)
+    def __call__(self, img):
+        #print(img.shape)
+        seq_len , channel = img.shape
+        img = img.permute(1,0).view(1,channel,seq_len)
+        select_names = self.rng.choices(self.names, k=self.n)
+        for name in select_names:
+            augment = get_augment(name)
+            use_op = self.rng.random() < self.p
+            if use_op:
+                op, minval, maxval = augment
+                val = float(self.m) * float(maxval - minval) + minval
+                img = op(img, val,random_state=self.rng)
+            else: #pass
+                pass
+
+        return img.permute(0,2,1).detach().view(seq_len,channel) #back to (len,channel)
+
 if __name__ == '__main__':
     print('Test all operations')
     from datasets import EDFX,PTBXL,Chapman,WISDM
@@ -704,10 +758,11 @@ if __name__ == '__main__':
         x_aug = apply_augment(x_tensor,name,0.5).numpy()
         print(x_aug.shape)
         plot_line(t,x_aug)'''
+    randaug = RandAugment(1,0.5)
     name = 'random_time_mask'
     for i in range(3):
-        print('='*10,name,'='*10)
-        x_aug = apply_augment(x_tensor,name,0.5,rd_seed=None).numpy()
+        #print('='*10,name,'='*10)
+        x_aug = randaug(x_tensor,rd_seed=42).numpy()
         print(x_aug.shape)
         plot_line(t,x_aug)
     #ECG part

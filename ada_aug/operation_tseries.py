@@ -14,7 +14,7 @@ from mne.channels.interpolation import _make_interpolation_matrix
 from mne.channels import make_standard_montage
 import matplotlib.pyplot as plt
 from ecgdetectors import Detectors
-
+from scipy.interpolate import CubicSpline
 
 #for model: (len, channel)
 #for this file (channel, len) !!!
@@ -619,13 +619,27 @@ def QRS_resample(X, magnitude,sfreq=100, random_state=None, *args, **kwargs):
 4 METHODS FROM "Data Augmentation for Deep Learning-Based ECG Analysis"
 '''
 #Window Slicing: tseries signal (batch,channel,len)
-def Window_Slicing(X, magnitude,window_size=1000, random_state=None, *args, **kwargs):
+#WW, WS
+def window_slice(x,rng, reduce_ratio=0.9): #ref (batch, time_steps, channel)
+    # https://halshs.archives-ouvertes.fr/halshs-01357973/document
+    target_len = np.ceil(reduce_ratio*x.shape[1]).astype(int)
+    if target_len >= x.shape[1]:
+        return x
+    starts = rng.randint(low=0, high=x.shape[1]-target_len, size=(x.shape[0])).astype(int)
+    ends = (target_len + starts).astype(int)
+    
+    ret = np.zeros_like(x)
+    for i, pat in enumerate(x):
+        for dim in range(x.shape[2]):
+            ret[i,:,dim] = np.interp(np.linspace(0, target_len, num=x.shape[1]), np.arange(target_len), pat[starts[i]:ends[i],dim]).T
+    return ret
+def Window_Slicing(X, magnitude, random_state=None, *args, **kwargs):
     rng = check_random_state(random_state)
-    x = X.detach().cpu().numpy()
-    window_start = rng.randint(0, x.shape[2] - window_size)
-    new_x = x[:,:,window_start:window_start+window_size]
-    new_x = torch.from_numpy(new_x).float()
+    x = X.permute(0,2,1).detach().cpu().numpy()
+    new_x = window_slice(x,rng,1. - magnitude)
+    new_x = torch.from_numpy(new_x).float().permute(0,2,1) #back
     return new_x
+
 def Window_Slicing_Circle(X, magnitude,window_size=1000, random_state=None, *args, **kwargs):
     rng = check_random_state(random_state)
     x = X.detach().cpu().numpy()
@@ -636,8 +650,8 @@ def Window_Slicing_Circle(X, magnitude,window_size=1000, random_state=None, *arg
     return new_x
 #TS_Permutation: tseries signal (batch,channel,len)
 def TS_Permutation(X, magnitude, random_state=None, *args, **kwargs):
-    N_clip = magnitude
     rng = check_random_state(random_state)
+    N_clip = rng.randint(1, int(magnitude), size=None)
     seg_ids = [i for i in range(N_clip)]
     x = X.detach().cpu().numpy()
     num_sample, num_leads, num_len = x.shape
@@ -658,9 +672,102 @@ def TS_Permutation(X, magnitude, random_state=None, *args, **kwargs):
     new_x = torch.from_numpy(new_x).float()
     return new_x
 #Concat_Resample same as Window Slicing
-#Time Warp
-def Time_Warp():
-    pass
+#Time Warp using generalize time-series module
+def time_warp(x,rng, sigma=0.2, knot=4): #ref (batch, time_steps, channel)
+    
+    orig_steps = np.arange(x.shape[1])
+    
+    random_warps = rng.normal(loc=1.0, scale=sigma, size=(x.shape[0], knot+2, x.shape[2]))
+    warp_steps = (np.ones((x.shape[2],1))*(np.linspace(0, x.shape[1]-1., num=knot+2))).T
+    
+    ret = np.zeros_like(x)
+    for i, pat in enumerate(x):
+        for dim in range(x.shape[2]):
+            time_warp = CubicSpline(warp_steps[:,dim], warp_steps[:,dim] * random_warps[i,:,dim])(orig_steps)
+            scale = (x.shape[1]-1)/time_warp[-1]
+            ret[i,:,dim] = np.interp(orig_steps, np.clip(scale*time_warp, 0, x.shape[1]-1), pat[:,dim]).T
+    return ret
+def Time_Warp(X, magnitude, random_state=None, *args, **kwargs):
+    rng = check_random_state(random_state)
+    x = X.permute(0,2,1).detach().cpu().numpy()
+    new_x = time_warp(x,rng,magnitude)
+    new_x = torch.from_numpy(new_x).float().permute(0,2,1) #back
+    return new_x
+
+'''
+METHODS FROM Time Series Data Augmentation github
+"https://github.com/uchidalab/time_series_augmentation" and
+"https://github.com/timeseriesAI/tsai"
+Choose method appear in ECGAug: Translation, Scaling Voltage, Time Warping, 
+Reflection(reflect by q end)=>no for all ts, Adding Noise: high=>random noise, low=>baseline wander
+'''
+#add a scalar
+def Translation(X, magnitude, random_state=None, *args, **kwargs):
+    rng = check_random_state(random_state)
+    amp = rng.uniform(low=-magnitude, high=magnitude, size=(x.shape[0],x.shape[1]))
+    x = X.detach().cpu()
+    return x + amp[:,:,np.newaxis]
+#scaling voltage
+def scaling(x,rng, sigma=0.1):
+    # https://arxiv.org/pdf/1706.00527.pdf
+    factor = rng.normal(loc=1., scale=sigma, size=(x.shape[0],x.shape[1])) #diff batch&channel
+    return np.multiply(x, factor[:,:,np.newaxis])
+def Scaling(X, magnitude, random_state=None, *args, **kwargs):
+    rng = check_random_state(random_state)
+    x = X.detach().cpu().numpy()
+    new_x = scaling(x,rng,magnitude)
+    new_x = torch.from_numpy(new_x).float()
+    return new_x
+#Reflection already have sign_flip
+#Adding Noise: low=>baseline wander
+def magnitude_warp(x, rng, sigma=0.2, knot=4): #ref (batch, time_steps, channel)
+    orig_steps = np.arange(x.shape[1])
+    
+    random_warps = rng.normal(loc=1.0, scale=sigma, size=(x.shape[0], knot+2, x.shape[2]))
+    warp_steps = (np.ones((x.shape[2],1))*(np.linspace(0, x.shape[1]-1., num=knot+2))).T
+    ret = np.zeros_like(x)
+    for i, pat in enumerate(x):
+        warper = np.array([CubicSpline(warp_steps[:,dim], random_warps[i,:,dim])(orig_steps) for dim in range(x.shape[2])]).T
+        ret[i] = pat * warper
+
+    return ret
+def Magnitude_Warp(X, magnitude, random_state=None, *args, **kwargs):
+    rng = check_random_state(random_state)
+    x = X.permute(0,2,1).detach().cpu().numpy()
+    new_x = magnitude_warp(x,rng,magnitude)
+    new_x = torch.from_numpy(new_x).float().permute(0,2,1) #back
+    return new_x
+'''
+Common Time Series Augmentation from
+"https://github.com/uchidalab/time_series_augmentation" and
+T. T. Um et al, "Data augmentation of wearable sensor data for parkinson’s disease monitoring using convolutional neural networks," in ACM ICMI, pp. 216-220, 2017.
+'''
+
+def window_warp(x,rng, window_ratio=0.1, scales=[0.5, 2.]): #ref (batch, time_steps, channel)
+    # https://halshs.archives-ouvertes.fr/halshs-01357973/document
+    warp_scales = rng.choice(scales, x.shape[0])
+    warp_size = np.ceil(window_ratio*x.shape[1]).astype(int)
+    window_steps = np.arange(warp_size)
+        
+    window_starts = rng.randint(low=1, high=x.shape[1]-warp_size-1, size=(x.shape[0])).astype(int)
+    window_ends = (window_starts + warp_size).astype(int)
+            
+    ret = np.zeros_like(x)
+    for i, pat in enumerate(x):
+        for dim in range(x.shape[2]):
+            start_seg = pat[:window_starts[i],dim]
+            window_seg = np.interp(np.linspace(0, warp_size-1, num=int(warp_size*warp_scales[i])), window_steps, pat[window_starts[i]:window_ends[i],dim])
+            end_seg = pat[window_ends[i]:,dim]
+            warped = np.concatenate((start_seg, window_seg, end_seg))                
+            ret[i,:,dim] = np.interp(np.arange(x.shape[1]), np.linspace(0, x.shape[1]-1., num=warped.size), warped).T
+    return ret
+def Window_Warp(X, magnitude, random_state=None, *args, **kwargs):
+    rng = check_random_state(random_state)
+    x = X.permute(0,2,1).detach().cpu().numpy()
+    new_x = window_warp(x,rng,magnitude)
+    new_x = torch.from_numpy(new_x).float().permute(0,2,1) #back
+    return new_x
+#Advance Method not include here
 
 TS_OPS_NAMES = [
     'identity', #identity
@@ -697,6 +804,24 @@ ECG_OPS_NAMES = [
 ECG_AUGMENT_LIST = [
     (RR_permutation, 0, 1),
     (QRS_resample, 0, 1),
+]
+TS_ADD_NAMES = [
+    'Window_Slicing',
+    'Window_Slicing_Circle',
+    'TS_Permutation',
+    'Time_Warp',
+    'Scaling',
+    'Magnitude_Warp',
+    'Window_Warp',
+]
+TS_ADD_LIST = [
+    (Window_Slicing, 0, 1),  # 0
+    (Window_Slicing_Circle, 0, 1),  # 1
+    (TS_Permutation, 2, 20),  # 2
+    (Time_Warp, 0, 1),  # 3
+    (Scaling, 0, 1),  # 4
+    (Magnitude_Warp, 0, 1),  # 5
+    (Window_Warp, 0, 1),  # 6
 ]
 
 def get_augment(name):

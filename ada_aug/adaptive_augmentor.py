@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from torchvision import transforms
 
 
-from operation_tseries import apply_augment
+from operation_tseries import apply_augment,TS_ADD_NAMES,ECG_OPS_NAMES
 from networks import get_model
 from utils import PolicyHistory
 from config import OPS_NAMES,TS_OPS_NAMES
@@ -167,10 +167,14 @@ class AdaAug(nn.Module):
 
 class AdaAug_TS(AdaAug):
     def __init__(self, after_transforms, n_class, gf_model, h_model, save_dir=None, 
-                    config=default_config, multilabel=False):
+                    config=default_config, multilabel=False, augselect=''):
         super(AdaAug_TS, self).__init__(after_transforms, n_class, gf_model, h_model, save_dir, config)
         #other already define in AdaAug
         self.ops_names = TS_OPS_NAMES
+        if 'tsadd' in augselect:
+            self.ops_names += TS_ADD_NAMES
+        if 'ecg' in augselect:
+            self.ops_names += ECG_OPS_NAMES
         self.n_ops = len(self.ops_names)
         self.history = PolicyHistory(self.ops_names, self.save_dir, self.n_class)
         self.config = config

@@ -13,7 +13,7 @@ MAX_LENGTH = 1000
 LABEL_GROUPS = {"all":71, "diagnostic":44, "subdiagnostic":23, "superdiagnostic":5, "form":19, "rhythm":12}
 
 class PTBXL(BaseDataset):
-    def __init__(self, dataset_path, labelgroup="diagnostic",multilabel=True,mode='all',preprocess=[],transfroms=[],augmentations=[],label_transfroms=[],**_kwargs):
+    def __init__(self, dataset_path, labelgroup="diagnostic",multilabel=True,mode='all',denoise=False,preprocess=[],transfroms=[],augmentations=[],label_transfroms=[],**_kwargs):
         super(PTBXL,self).__init__(preprocess=preprocess,transfroms=transfroms,augmentations=augmentations,label_transfroms=label_transfroms)
         assert labelgroup in ["all", "diagnostic", "subdiagnostic", "superdiagnostic", "form", "rhythm"]
         self.dataset_path = dataset_path
@@ -21,11 +21,17 @@ class PTBXL(BaseDataset):
         self.labelgroup = labelgroup
         self.num_class = LABEL_GROUPS[labelgroup]
         self.multilabel = multilabel
+        self.denoise = denoise
         self.channel = 12
+        self.sub_tr_ratio = 1.0
+        #k, ratio, sub_tr_idx, valid_idx, test_idx
+        self.split_indices = [[0, self.sub_tr_ratio, 0, 0, 0]]
         if self.multilabel:
             print('Using multilabel')
         else:
             print('Using singlelabel')
+        if self.denoise:
+            print('Using denoise dataset')
         if mode!='all':
             print('Using default train/valid/test split: 8:1:1')
         if mode in ['val','valid']:
@@ -36,16 +42,24 @@ class PTBXL(BaseDataset):
         #file_list = os.listdir(os.path.join(self.dataset_path,self.labelgroup))
         self.input_data = None
         self.label = None
-        X_from = 'X_%s.npy'
+        if self.denoise:
+            X_from = 'X_%s_denoise.npy'
+        else:
+            X_from = 'X_%s.npy'
         if self.multilabel:
             y_from = 'y_%s.npy'
         else:
             y_from = 'y_%s_single.npy'
         if mode=='all':
             datas,labels = [0,0,0],[0,0,0]
+            start = 0
             for i,type in enumerate(['train','val','test']):
                 datas[i] = np.load(os.path.join(self.dataset_path,self.labelgroup,X_from%type),allow_pickle=True)
-                labels[i] = np.load(os.path.join(self.dataset_path,self.labelgroup,y_from%type),allow_pickle=True)
+                label = np.load(os.path.join(self.dataset_path,self.labelgroup,y_from%type),allow_pickle=True)
+                labels[i] = label
+                each_len = len(label)
+                self.split_indices[0][i+2] = np.arange(each_len) + start
+                start += each_len
             self.input_data = np.concatenate(datas,axis=0).astype(float)
             self.label = np.concatenate(labels,axis=0).astype(int)
         elif mode=='tottrain':
@@ -66,3 +80,5 @@ class PTBXL(BaseDataset):
             self.input_data = self.input_data[single_label]
             self.label = self.label[single_label]
             self.label = torch.argmax(self.label, dim=1).reshape(-1) #back to int'''
+    def get_split_indices(self):
+        return self.split_indices

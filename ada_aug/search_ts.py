@@ -56,6 +56,7 @@ parser.add_argument('--temperature', type=float, default=1.0, help="temperature"
 parser.add_argument('--search_freq', type=float, default=1, help='exploration frequency')
 parser.add_argument('--n_proj_layer', type=int, default=0, help="number of hidden layer in augmentation policy projection")
 parser.add_argument('--valselect', action='store_true', default=False, help='use valid select')
+parser.add_argument('--augselect', type=str, default='', help="augmentation selection")
 
 args = parser.parse_args()
 debug = True if args.save == "debug" else False
@@ -87,7 +88,7 @@ def main():
         Aug_type = 'AdaAug'
     else:
         Aug_type = 'NOAUG'
-    experiment_name = f'{Aug_type}_search_vselect_{args.dataset}{args.labelgroup}_{args.model_name}_e{args.epochs}_lr{args.learning_rate}'
+    experiment_name = f'{Aug_type}_search{args.augselect}_vselect_{args.dataset}{args.labelgroup}_{args.model_name}_e{args.epochs}_lr{args.learning_rate}'
     run_log = wandb.init(config=args, 
                   project='AdaAug',
                   group=experiment_name,

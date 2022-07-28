@@ -487,7 +487,7 @@ def window_warp(x,rng, window_ratio=0.1, scales=[0.5, 2.]): #ref (batch, time_st
         return x
     window_steps = np.arange(warp_size)
         
-    window_starts = rng.randint(low=1, high=x.shape[1]-warp_size-1, size=(x.shape[0])).astype(int)
+    window_starts = rng.randint(low=1, high=max(x.shape[1]-warp_size-1,2), size=(x.shape[0])).astype(int)
     window_ends = (window_starts + warp_size).astype(int)
             
     ret = np.zeros_like(x)

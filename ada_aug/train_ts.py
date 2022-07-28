@@ -167,7 +167,8 @@ def main():
 
     h_model = Projection_TSeries(in_features=gf_model.fc.in_features,
                             n_layers=args.n_proj_layer,
-                            n_hidden=args.n_proj_hidden).cuda()
+                            n_hidden=args.n_proj_hidden,
+                            augselect=args.augselect).cuda()
 
     utils.load_model(gf_model, f'{args.gf_model_path}/gf_weights.pt', location=args.gpu)
     utils.load_model(h_model, f'{args.h_model_path}/h_weights.pt', location=args.gpu)

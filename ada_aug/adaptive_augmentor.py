@@ -170,11 +170,12 @@ class AdaAug_TS(AdaAug):
                     config=default_config, multilabel=False, augselect=''):
         super(AdaAug_TS, self).__init__(after_transforms, n_class, gf_model, h_model, save_dir, config)
         #other already define in AdaAug
-        self.ops_names = TS_OPS_NAMES
+        self.ops_names = TS_OPS_NAMES.copy()
         if 'tsadd' in augselect:
-            self.ops_names += TS_ADD_NAMES
+            self.ops_names = self.ops_names + TS_ADD_NAMES.copy()
         if 'ecg' in augselect:
-            self.ops_names += ECG_OPS_NAMES
+            self.ops_names = self.ops_names + ECG_OPS_NAMES.copy()
+        print('AdaAug Using ',self.ops_names)
         self.n_ops = len(self.ops_names)
         self.history = PolicyHistory(self.ops_names, self.save_dir, self.n_class)
         self.config = config

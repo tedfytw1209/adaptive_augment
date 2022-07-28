@@ -123,7 +123,7 @@ def main():
     logging.info("param size = %fMB", utils.count_parameters_in_MB(gf_model))
 
     h_model = Projection_TSeries(in_features=gf_model.fc.in_features,
-        n_layers=args.n_proj_layer, n_hidden=128).cuda()
+        n_layers=args.n_proj_layer, n_hidden=128, augselect=args.augselect).cuda()
 
     #  training settings
     '''gf_optimizer = torch.optim.SGD(
@@ -330,6 +330,7 @@ def train(train_queue, search_queue, gf_model, adaaug, criterion, gf_optimizer,
         perfrom = perfrom_cw.mean()
         logging.info('class-wise AUROC: ' + '['+', '.join(['%.1f'%e for e in perfrom_cw])+']')
         logging.info('Overall AUROC: %f',perfrom)
+    
     #wandb dic
     out_dic = {}
     out_dic[f'train_loss'] = objs.avg

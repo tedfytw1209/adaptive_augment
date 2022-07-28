@@ -58,6 +58,7 @@ parser.add_argument('--n_proj_hidden', type=int, default=128, help="number of hi
 parser.add_argument('--restore_path', type=str, default='./', help='restore model path')
 parser.add_argument('--restore', action='store_true', default=False, help='restore model default False')
 parser.add_argument('--valselect', action='store_true', default=False, help='use valid select')
+parser.add_argument('--notwarmup', action='store_true', default=False, help='use valid select')
 parser.add_argument('--augselect', type=str, default='', help="augmentation selection")
 
 args = parser.parse_args()
@@ -137,13 +138,14 @@ def main():
     '''scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer, float(args.epochs), eta_min=args.learning_rate_min)'''
     scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=args.learning_rate, epochs = args.epochs, steps_per_epoch = len(train_queue)) #follow ptbxl batchmark!!!
-    m, e = get_warmup_config(args.dataset)
-    scheduler = GradualWarmupScheduler( #paper not mention!!!
+    if not args.notwarmup:
+        m, e = get_warmup_config(args.dataset)
+        scheduler = GradualWarmupScheduler( #paper not mention!!!
             optimizer,
             multiplier=m,
             total_epoch=e,
             after_scheduler=scheduler)
-    logging.info(f'Optimizer: SGD, scheduler: CosineAnnealing, warmup: {m}/{e}')
+        logging.info(f'Optimizer: SGD, scheduler: CosineAnnealing, warmup: {m}/{e}')
     if not multilabel:
         criterion = nn.CrossEntropyLoss()
     else:

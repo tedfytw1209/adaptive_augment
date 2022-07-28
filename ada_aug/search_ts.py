@@ -163,7 +163,8 @@ def main():
         h_model=h_model,
         save_dir=args.save,
         config=adaaug_config,
-        multilabel=multilabel)
+        multilabel=multilabel,
+        augselect=args.augselect)
     #for valid data select
     best_val_acc,best_gf,best_h = 0,None,None
     #  Start training

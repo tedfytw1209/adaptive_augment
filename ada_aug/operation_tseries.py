@@ -675,10 +675,10 @@ if __name__ == '__main__':
     'wisdm' : 10,
     'chapman' : 10,
     }
-    dataset = PTBXL(dataset_path='../CWDA_research/CWDA/datasets/Datasets/ptbxl-dataset')
+    dataset = PTBXL(dataset_path='../CWDA_research/CWDA/datasets/Datasets/ptbxl-dataset',mode='test',labelgroup='superdiagnostic',denoise=True)
     print(dataset[0])
     print(dataset[0][0].shape)
-    sample = dataset[50]
+    sample = dataset[100]
     x = sample[0]
     t = np.linspace(0, TimeS_dict['ptbxl'], 1000)
     label = sample[2]

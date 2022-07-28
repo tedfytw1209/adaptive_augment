@@ -357,7 +357,7 @@ def QRS_resample(X, magnitude,sfreq=100, random_state=None, *args, **kwargs):
 #WW, WS
 def window_slice(x,rng, reduce_ratio=0.9): #ref (batch, time_steps, channel)
     # https://halshs.archives-ouvertes.fr/halshs-01357973/document
-    target_len = np.ceil(reduce_ratio*x.shape[1]).astype(int)
+    target_len = max(np.ceil(reduce_ratio*x.shape[1]).astype(int),1)
     if target_len >= x.shape[1]:
         return x
     starts = rng.randint(low=0, high=x.shape[1]-target_len, size=(x.shape[0])).astype(int)
@@ -482,7 +482,7 @@ T. T. Um et al, "Data augmentation of wearable sensor data for parkinson’s dis
 def window_warp(x,rng, window_ratio=0.1, scales=[0.5, 2.]): #ref (batch, time_steps, channel)
     # https://halshs.archives-ouvertes.fr/halshs-01357973/document
     warp_scales = rng.choice(scales, x.shape[0])
-    warp_size = np.ceil(window_ratio*x.shape[1]).astype(int)
+    warp_size = min(np.ceil(window_ratio*x.shape[1]).astype(int),x.shape[1]-1)
     if warp_size<=1:
         return x
     window_steps = np.arange(warp_size)
@@ -591,6 +591,8 @@ def get_augment(name):
 
 def apply_augment(img, name, level, rd_seed=None):
     augment_fn, low, high = get_augment(name)
+    assert 0 <= level
+    assert level <= 1
     #change tseries signal from (len,channel) to (batch,channel,len)
     #print('Device: ',img.device)
     seq_len , channel = img.shape
@@ -675,7 +677,8 @@ if __name__ == '__main__':
     'wisdm' : 10,
     'chapman' : 10,
     }
-    dataset = PTBXL(dataset_path='../CWDA_research/CWDA/datasets/Datasets/ptbxl-dataset',mode='test',labelgroup='superdiagnostic',denoise=True)
+    #dataset = PTBXL(dataset_path='../CWDA_research/CWDA/datasets/Datasets/ptbxl-dataset',mode='test',labelgroup='superdiagnostic',denoise=True)
+    dataset = PTBXL(dataset_path='../CWDA_research/CWDA/datasets/Datasets/ptbxl-dataset',mode='test',labelgroup='superdiagnostic')
     print(dataset[0])
     print(dataset[0][0].shape)
     sample = dataset[100]
@@ -688,7 +691,7 @@ if __name__ == '__main__':
     plot_line(t,x)
     for name in TS_ADD_NAMES+TS_OPS_NAMES:
         print('='*10,name,'='*10)
-        x_aug = apply_augment(x_tensor,name,0).numpy()
+        x_aug = apply_augment(x_tensor,name,1.0).numpy()
         print(x_aug.shape)
         plot_line(t,x_aug)
     randaug = RandAugment(1,0,rd_seed=42)

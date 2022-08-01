@@ -193,9 +193,11 @@ def _sample_mask_start(X, mask_len_samples, random_state):
     ), device=X.device) * (seq_length - mask_len_samples)
     return mask_start
 def _mask_time(X, mask_start_per_sample, mask_len_samples):
+    seq_len = X.shape[2]
+    all_mask_len_samples = int(seq_len * mask_len_samples / 100.0)
     mask = torch.ones_like(X)
     for i, start in enumerate(mask_start_per_sample):
-        mask[i, :, start:start + mask_len_samples] = 0
+        mask[i, :, int(start):int(start) + all_mask_len_samples] = 0 #every channel
     return X * mask
 def _relaxed_mask_time(X, mask_start_per_sample, mask_len_samples):
     batch_size, n_channels, seq_len = X.shape
@@ -212,6 +214,9 @@ def random_time_mask(X, mask_len_samples, random_state=None, *args, **kwargs):
     mask_start = _sample_mask_start(X, mask_len_samples, random_state)
     return _relaxed_mask_time(X, mask_start, mask_len_samples)
 
+def exp_time_mask(X, mask_len_samples, random_state=None, *args, **kwargs):
+    mask_start = _sample_mask_start(X, mask_len_samples, random_state)
+    return _mask_time(X, mask_start, mask_len_samples)
 
 def random_bandstop(X, bandwidth, max_freq=50, sfreq=100, random_state=None, *args,
                     **kwargs):
@@ -228,6 +233,31 @@ def random_bandstop(X, bandwidth, max_freq=50, sfreq=100, random_state=None, *ar
     # using torch convolution might be necessary...
     for c, (sample, notched_freq) in enumerate(
             zip(transformed_X, notched_freqs)):
+        sample = sample.cpu().numpy().astype(np.float64)
+        transformed_X[c] = torch.as_tensor(notch_filter(
+            sample,
+            Fs=sfreq,
+            freqs=notched_freq,
+            method='fir',
+            notch_widths=bandwidth,
+            verbose=False
+        ))
+    return transformed_X
+
+def exp_bandstop(X, bandwidth, max_freq=50, sfreq=100, random_state=None, *args, #300 is 2 * max ecg
+                    **kwargs):
+    rng = check_random_state(random_state)
+    transformed_X = X.clone()
+    # Prevents transitions from going below 0 and above max_freq
+    notched_freqs = rng.uniform(
+        low=1 + bandwidth/2,
+        high=max_freq - 1 - bandwidth/2,
+        size=X.shape[0]
+    )
+    # I just worry that this might be to complex for gradient descent and
+    # it would be a shame to make a straight-through here... A new version
+    # using torch convolution might be necessary...
+    for c, (sample, notched_freq) in enumerate(zip(transformed_X, notched_freqs)):
         sample = sample.cpu().numpy().astype(np.float64)
         transformed_X[c] = torch.as_tensor(notch_filter(
             sample,
@@ -277,6 +307,16 @@ def _freq_shift(x, fs, f_shift):
     shifted = analytical * torch.exp(2j * np.pi * reshaped_f_shift * t)
     return shifted[..., :N_orig].real.float()
 def freq_shift(X, max_shift, sfreq=100, random_state=None, *args, **kwargs):
+    rng = check_random_state(random_state)
+    delta_freq = torch.as_tensor(
+        rng.uniform(size=X.shape[0]), device=X.device) * max_shift
+    transformed_X = _freq_shift(
+        x=X,
+        fs=sfreq,
+        f_shift=delta_freq,
+    )
+    return transformed_X
+def exp_freq_shift(X, max_shift, sfreq=100, random_state=None, *args, **kwargs):
     rng = check_random_state(random_state)
     delta_freq = torch.as_tensor(
         rng.uniform(size=X.shape[0]), device=X.device) * max_shift
@@ -583,11 +623,19 @@ NOMAG_TEST_NAMES = [
     'QRS_resample',
     'Window_Slicing_Circle',
 ]
-
+TS_EXP_LIST = [
+    (exp_time_mask, 0, 100),
+    (exp_bandstop, 0, 48), #sample freq=100, bandstop=48 because of notch
+    (exp_freq_shift, 0, 10), #sample freq=100
+]
+EXP_TEST_NAMES =[
+    'exp_time_mask',
+    'exp_bandstop',
+    'exp_freq_shift',
+]
+AUGMENT_DICT = {fn.__name__: (fn, v1, v2) for fn, v1, v2 in TS_AUGMENT_LIST+ECG_AUGMENT_LIST+TS_ADD_LIST+TS_EXP_LIST}
 def get_augment(name):
-    augment_dict = {fn.__name__: (fn, v1, v2) for fn, v1, v2 in TS_AUGMENT_LIST+ECG_AUGMENT_LIST+TS_ADD_LIST}
-    return augment_dict[name]
-
+    return AUGMENT_DICT[name]
 
 def apply_augment(img, name, level, rd_seed=None):
     augment_fn, low, high = get_augment(name)
@@ -616,10 +664,16 @@ class ToTensor:
         return torch.tensor(img).float()
 
 class RandAugment:
-    def __init__(self, n, m, rd_seed=None):
+    def __init__(self, n, m, rd_seed=None,augselect=''):
         self.n = n
         self.m = m      # [0, 1]
         self.augment_list = TS_AUGMENT_LIST
+        if 'tsadd' in augselect:
+            print('Augmentation add TS_ADD_LIST')
+            self.augment_list += TS_ADD_LIST
+        if 'ecg' in augselect:
+            print('Augmentation add ECG_AUGMENT_LIST')
+            self.augment_list += ECG_AUGMENT_LIST
         self.augment_ids = [i for i in range(len(self.augment_list))]
         self.rng = check_random_state(rd_seed)
     def __call__(self, img):
@@ -647,7 +701,7 @@ class TransfromAugment:
         #print(img.shape)
         seq_len , channel = img.shape
         img = img.permute(1,0).view(1,channel,seq_len)
-        select_names = self.rng.choices(self.names, k=self.n)
+        select_names = self.rng.choice(self.names, size=self.n)
         for name in select_names:
             augment = get_augment(name)
             use_op = self.rng.random() < self.p

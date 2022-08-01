@@ -57,6 +57,9 @@ parser.add_argument('--search_freq', type=float, default=1, help='exploration fr
 parser.add_argument('--n_proj_layer', type=int, default=0, help="number of hidden layer in augmentation policy projection")
 parser.add_argument('--valselect', action='store_true', default=False, help='use valid select')
 parser.add_argument('--augselect', type=str, default='', help="augmentation selection")
+parser.add_argument('--diff_aug', action='store_true', default=False, help='use valid select')
+parser.add_argument('--not_mix', action='store_true', default=False, help='use valid select')
+parser.add_argument('--not_reweight', action='store_true', default=False, help='use valid select')
 
 args = parser.parse_args()
 debug = True if args.save == "debug" else False
@@ -103,6 +106,9 @@ def main():
     sdiv = get_search_divider(args.model_name)
     class2label = get_label_name(args.dataset, args.dataroot)
     multilabel = args.multilabel
+    diff_augment = args.diff_aug
+    diff_mix = not args.not_mix
+    diff_reweight = not args.not_reweight
     train_queue, valid_queue, search_queue, test_queue = get_ts_dataloaders(
         args.dataset, args.batch_size, args.num_workers,
         args.dataroot, args.cutout, args.cutout_length,
@@ -176,7 +182,8 @@ def main():
         step_dic={'epoch':epoch}
         # searching
         train_acc, train_obj, train_dic = train(train_queue, search_queue, gf_model, adaaug,
-            criterion, gf_optimizer, args.grad_clip, h_optimizer, epoch, args.search_freq, multilabel=multilabel,n_class=n_class)
+            criterion, gf_optimizer, args.grad_clip, h_optimizer, epoch, args.search_freq, multilabel=multilabel,n_class=n_class,
+            difficult_aug=diff_augment,reweight=diff_reweight,mix_feature=diff_mix)
 
         # validation
         valid_acc, valid_obj,valid_dic = infer(valid_queue, gf_model, criterion, multilabel=multilabel,n_class=n_class,mode='valid')
@@ -226,7 +233,8 @@ def main():
     logging.info(f'saved to: {args.save}')
 
 def train(train_queue, search_queue, gf_model, adaaug, criterion, gf_optimizer,
-            grad_clip, h_optimizer, epoch, search_freq, multilabel=False,n_class=10):
+            grad_clip, h_optimizer, epoch, search_freq, multilabel=False,n_class=10,
+            difficult_aug=False,reweight=True,mix_feature=True):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
     top5 = utils.AvgrageMeter()
@@ -234,10 +242,11 @@ def train(train_queue, search_queue, gf_model, adaaug, criterion, gf_optimizer,
     preds = []
     targets = []
     total = 0
+    difficult_loss, adaptive_loss, search_total = 0, 0, 0
     for step, (input, seq_len, target) in enumerate(train_queue):
         input = input.float().cuda()
         target = target.cuda()
-
+        batch_size = target.shape[0]
         # exploitation
         timer = time.time()
         aug_images = adaaug(input, seq_len, mode='exploit')
@@ -265,6 +274,33 @@ def train(train_queue, search_queue, gf_model, adaaug, criterion, gf_optimizer,
         # exploration
         timer = time.time()
         if step % search_freq == 0:
+            #difficult, train input, target
+            if difficult_aug:
+                lambda_aug = 1.0
+                origin_logits = gf_model(input, seq_len)
+                mixed_features = adaaug(input, seq_len, mode='explore',mix_feature=mix_feature)
+                aug_logits = gf_model.classify(mixed_features)
+                if multilabel:
+                    aug_loss = criterion(aug_logits, target.float())
+                else:
+                    aug_loss = criterion(aug_logits, target.long())
+                if reweight: #reweight part, a,b = ?
+                    p_orig = origin_logits.softmax(dim=1)[torch.arange(batch_size), target].detach()
+                    p_aug = aug_logits.softmax(dim=1)[torch.arange(batch_size), target].clone().detach()
+                    w_aug = torch.sqrt(p_orig * torch.clamp(p_orig - p_aug, min=0))
+                    if w_aug.sum() > 0:
+                        w_aug /= (w_aug.mean().detach() + 1e-6)
+                    else:
+                        w_aug = 1
+                    loss_policy = -1 * (w_aug * lambda_aug * aug_loss).mean()
+                else:
+                    loss_policy = -1 * (lambda_aug * aug_loss).mean()
+                gf_optimizer.zero_grad()
+                h_optimizer.zero_grad()
+                loss_policy.backward()
+                h_optimizer.step()
+                difficult_loss += loss_policy.detach().item()
+            #similar
             input_search, seq_len, target_search = next(iter(search_queue))
             input_search = input_search.float().cuda()
             target_search = target_search.cuda()
@@ -282,7 +318,8 @@ def train(train_queue, search_queue, gf_model, adaaug, criterion, gf_optimizer,
             exploration_time = time.time() - timer
             gf_optimizer.zero_grad()
             h_optimizer.zero_grad()
-
+            adaptive_loss += loss.detach().item()
+            search_total += 1
             #  log policy
             adaaug.add_history(input_search, seq_len, target_search)
 
@@ -333,7 +370,9 @@ def train(train_queue, search_queue, gf_model, adaaug, criterion, gf_optimizer,
     
     #wandb dic
     out_dic = {}
-    out_dic[f'train_loss'] = objs.avg
+    out_dic['train_loss'] = objs.avg
+    out_dic['adaptive_loss'] = adaptive_loss / search_total
+    out_dic['difficult_loss'] = difficult_loss / search_total
     if multilabel:
         ptype = 'auroc'
     else:

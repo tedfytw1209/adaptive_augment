@@ -235,9 +235,8 @@ class AdaAug_TS(AdaAug):
                 trans_seqlen_list.append(e_len)
         return torch.stack(trans_image_list, dim=0), torch.stack(trans_seqlen_list, dim=0)
 
-    def explore(self, images, seq_len):
-        """Return the mixed latent feature
-
+    def explore(self, images, seq_len, mix_feature=True):
+        """Return the mixed latent feature if mix_feature==True
         Args:
             images ([Tensor]): [description]
         Returns:
@@ -247,10 +246,12 @@ class AdaAug_TS(AdaAug):
         a_imgs, a_seq_len = self.get_aug_valid_imgs(images, seq_len, magnitudes)
         a_features = self.gf_model.extract_features(a_imgs, a_seq_len)
         ba_features = a_features.reshape(len(images), self.n_ops, -1) # batch, n_ops, n_hidden
-        
-        mixed_features = [w.matmul(feat) for w, feat in zip(weights, ba_features)]
-        mixed_features = torch.stack(mixed_features, dim=0)
-        return mixed_features
+        if mix_feature:
+            mixed_features = [w.matmul(feat) for w, feat in zip(weights, ba_features)]
+            mixed_features = torch.stack(mixed_features, dim=0)
+            return mixed_features
+        else:
+            return ba_features, weights
 
     def get_training_aug_images(self, images, magnitudes, weights):
         # visualization
@@ -287,10 +288,10 @@ class AdaAug_TS(AdaAug):
         aug_imgs = self.get_training_aug_images(images, magnitudes, weights)
         return aug_imgs
 
-    def forward(self, images, seq_len, mode):
+    def forward(self, images, seq_len, mode, mix_feature=True):
         if mode == 'explore':
-            #  return a set of mixed augmented features
-            return self.explore(images,seq_len)
+            #  return a set of mixed augmented features, mix_feature is for experiment
+            return self.explore(images,seq_len,mix_feature=mix_feature)
         elif mode == 'exploit':
             #  return a set of augmented images
             return self.exploit(images,seq_len)

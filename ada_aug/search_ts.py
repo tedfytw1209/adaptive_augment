@@ -91,7 +91,11 @@ def main():
         Aug_type = 'AdaAug'
     else:
         Aug_type = 'NOAUG'
-    experiment_name = f'{Aug_type}_search{args.augselect}_vselect_{args.dataset}{args.labelgroup}_{args.model_name}_e{args.epochs}_lr{args.learning_rate}'
+    if args.diff_aug:
+        description = 'diff'
+    else:
+        description = ''
+    experiment_name = f'{Aug_type}{description}_search{args.augselect}_vselect_{args.dataset}{args.labelgroup}_{args.model_name}_e{args.epochs}_lr{args.learning_rate}'
     run_log = wandb.init(config=args, 
                   project='AdaAug',
                   group=experiment_name,

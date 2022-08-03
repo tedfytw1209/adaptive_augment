@@ -60,10 +60,21 @@ parser.add_argument('--augselect', type=str, default='', help="augmentation sele
 parser.add_argument('--diff_aug', action='store_true', default=False, help='use valid select')
 parser.add_argument('--not_mix', action='store_true', default=False, help='use valid select')
 parser.add_argument('--not_reweight', action='store_true', default=False, help='use valid select')
+parser.add_argument('--lambda_aug', type=float, default=1.0, help="temperature")
 
 args = parser.parse_args()
 debug = True if args.save == "debug" else False
-args.save = '{}-{}'.format(time.strftime("%Y%m%d-%H%M%S"), args.save)
+if args.k_ops>0:
+    Aug_type = 'AdaAug'
+else:
+    Aug_type = 'NOAUG'
+if args.diff_aug:
+    description = 'diff'
+else:
+    description = ''
+if not args.not_reweight:
+    description+='rew'
+args.save = '{}-{}-{}{}'.format(time.strftime("%Y%m%d-%H%M%S"), args.save,Aug_type,description)
 if debug:
     args.save = os.path.join('debug', args.save)
 else:
@@ -81,21 +92,12 @@ def main():
     if not torch.cuda.is_available():
         logging.info('no gpu device available')
         sys.exit(1)
-
     torch.cuda.set_device(args.gpu)
     utils.reproducibility(args.seed)
     logging.info('gpu device = %d' % args.gpu)
     logging.info("args = %s", args)
     #wandb
-    if args.k_ops>0:
-        Aug_type = 'AdaAug'
-    else:
-        Aug_type = 'NOAUG'
-    if args.diff_aug:
-        description = 'diff'
-    else:
-        description = ''
-    experiment_name = f'{Aug_type}{description}_search{args.augselect}_vselect_{args.dataset}{args.labelgroup}_{args.model_name}_e{args.epochs}_lr{args.learning_rate}'
+    experiment_name = f'{Aug_type}{description}lamda{args.lambda_aug}_search{args.augselect}_vselect_{args.dataset}{args.labelgroup}_{args.model_name}_e{args.epochs}_lr{args.learning_rate}'
     run_log = wandb.init(config=args, 
                   project='AdaAug',
                   group=experiment_name,
@@ -186,13 +188,13 @@ def main():
         step_dic={'epoch':epoch}
         # searching
         train_acc, train_obj, train_dic = train(train_queue, search_queue, gf_model, adaaug,
-            criterion, gf_optimizer, args.grad_clip, h_optimizer, epoch, args.search_freq, multilabel=multilabel,n_class=n_class,
-            difficult_aug=diff_augment,reweight=diff_reweight,mix_feature=diff_mix)
+            criterion, gf_optimizer,scheduler, args.grad_clip, h_optimizer, epoch, args.search_freq, multilabel=multilabel,n_class=n_class,
+            difficult_aug=diff_augment,reweight=diff_reweight,mix_feature=diff_mix,lambda_aug=args.lambda_aug)
 
         # validation
         valid_acc, valid_obj,valid_dic = infer(valid_queue, gf_model, criterion, multilabel=multilabel,n_class=n_class,mode='valid')
         logging.info(f'train_acc {train_acc} valid_acc {valid_acc}')
-        scheduler.step()
+        #scheduler.step()
         #test
         test_acc, test_obj, test_dic  = infer(test_queue, gf_model, criterion, multilabel=multilabel,n_class=n_class,mode='test')
         logging.info('test_acc %f', test_acc)
@@ -236,9 +238,9 @@ def main():
     logging.info('elapsed time: %.3f Hours' % (elapsed / 3600.))
     logging.info(f'saved to: {args.save}')
 
-def train(train_queue, search_queue, gf_model, adaaug, criterion, gf_optimizer,
+def train(train_queue, search_queue, gf_model, adaaug, criterion, gf_optimizer,scheduler,
             grad_clip, h_optimizer, epoch, search_freq, multilabel=False,n_class=10,
-            difficult_aug=False,reweight=True,mix_feature=True):
+            difficult_aug=False,reweight=True,mix_feature=True,lambda_aug = 1.0):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
     top5 = utils.AvgrageMeter()
@@ -265,7 +267,7 @@ def train(train_queue, search_queue, gf_model, adaaug, criterion, gf_optimizer,
         loss.backward()
         nn.utils.clip_grad_norm_(gf_model.parameters(), grad_clip)
         gf_optimizer.step()
-
+        scheduler.step() #8/03 add!!!
         #  stats
         n = target.size(0)
         objs.update(loss.detach().item(), n)
@@ -280,10 +282,9 @@ def train(train_queue, search_queue, gf_model, adaaug, criterion, gf_optimizer,
         if step % search_freq == 0:
             #difficult, train input, target
             if difficult_aug:
-                lambda_aug = 1.0
                 origin_logits = gf_model(input, seq_len)
                 mixed_features = adaaug(input, seq_len, mode='explore',mix_feature=mix_feature)
-                aug_logits = gf_model.classify(mixed_features)
+                aug_logits = gf_model.classify(mixed_features) 
                 if multilabel:
                     aug_loss = criterion(aug_logits, target.float())
                 else:
@@ -291,7 +292,7 @@ def train(train_queue, search_queue, gf_model, adaaug, criterion, gf_optimizer,
                 if reweight: #reweight part, a,b = ?
                     p_orig = origin_logits.softmax(dim=1)[torch.arange(batch_size), target].detach()
                     p_aug = aug_logits.softmax(dim=1)[torch.arange(batch_size), target].clone().detach()
-                    w_aug = torch.sqrt(p_orig * torch.clamp(p_orig - p_aug, min=0))
+                    w_aug = torch.sqrt(p_orig * torch.clamp(p_orig - p_aug, min=0)) #a=0.5,b=0.5
                     if w_aug.sum() > 0:
                         w_aug /= (w_aug.mean().detach() + 1e-6)
                     else:

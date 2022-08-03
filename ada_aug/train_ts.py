@@ -63,6 +63,10 @@ parser.add_argument('--augselect', type=str, default='', help="augmentation sele
 
 args = parser.parse_args()
 debug = True if args.save == "debug" else False
+if args.k_ops>0:
+    Aug_type = 'AdaAug'
+else:
+    Aug_type = 'NOAUG'
 now_str = time.strftime("%Y%m%d-%H%M%S")
 args.save = '{}-{}'.format(now_str, args.save)
 if debug:
@@ -88,12 +92,10 @@ def main():
     logging.info('gpu device = %d' % args.gpu)
     logging.info("args = %s", args)
     date_time_str = now_str
+    h_model_dir = args.h_model_path
+    h_model_dir = h_model_dir.split('/')[-1]
     #wandb
-    if args.k_ops>0:
-        Aug_type = 'AdaAug'
-    else:
-        Aug_type = 'NOAUG'
-    experiment_name = f'{Aug_type}{args.k_ops}_tottrain{args.augselect}_vselect_{args.dataset}{args.labelgroup}_{args.model_name}_e{args.epochs}_lr{args.learning_rate}'
+    experiment_name = f'{Aug_type}{args.k_ops}_tottrain{args.augselect}_vselect_{args.dataset}{args.labelgroup}_{args.model_name}_hmodel{h_model_dir}_e{args.epochs}_lr{args.learning_rate}'
     run_log = wandb.init(config=args, 
                   project='AdaAug',
                   group=experiment_name,

@@ -69,7 +69,7 @@ if args.k_ops>0:
 else:
     Aug_type = 'NOAUG'
 if args.diff_aug:
-    description = 'diff'
+    description = 'diff2'
 else:
     description = ''
 if not args.not_reweight:
@@ -281,6 +281,8 @@ def train(train_queue, search_queue, gf_model, adaaug, criterion, gf_optimizer,s
         timer = time.time()
         if step % search_freq == 0:
             #difficult, train input, target
+            gf_optimizer.zero_grad()
+            h_optimizer.zero_grad()
             if difficult_aug:
                 origin_logits = gf_model(input, seq_len)
                 mixed_features = adaaug(input, seq_len, mode='explore',mix_feature=mix_feature)
@@ -300,17 +302,14 @@ def train(train_queue, search_queue, gf_model, adaaug, criterion, gf_optimizer,s
                     loss_policy = -1 * (w_aug * lambda_aug * aug_loss).mean()
                 else:
                     loss_policy = -1 * (lambda_aug * aug_loss).mean()
-                gf_optimizer.zero_grad()
-                h_optimizer.zero_grad()
+                
                 loss_policy.backward()
-                h_optimizer.step()
+                #h_optimizer.step() wait till validation set
                 difficult_loss += loss_policy.detach().item()
             #similar
             input_search, seq_len, target_search = next(iter(search_queue))
             input_search = input_search.float().cuda()
             target_search = target_search.cuda()
-            gf_optimizer.zero_grad()
-            h_optimizer.zero_grad()
             mixed_features = adaaug(input_search, seq_len, mode='explore')
             logits_search = gf_model.classify(mixed_features)
             if multilabel:

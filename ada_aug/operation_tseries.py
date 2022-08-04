@@ -650,11 +650,12 @@ def apply_augment(img, name, level, rd_seed=None):
     aug_img = augment_fn(img, aug_value,random_state=rd_seed)
     return aug_img.permute(0,2,1).detach().view(seq_len,channel) #back to (len,channel)
 
-def plot_line(t,x):
+def plot_line(t,x,title=''):
     plt.clf()
     channel_num = x.shape[-1]
     for i in  range(channel_num):
         plt.plot(t, x[:,i])
+    plt.title(title)
     plt.show()
 
 class ToTensor:
@@ -742,12 +743,13 @@ if __name__ == '__main__':
     print(t.shape)
     print(x.shape)
     x_tensor = torch.from_numpy(x).float()
-    plot_line(t,x)
+    m = 0.5
+    plot_line(t,x,title='identity')
     for name in EXP_TEST_NAMES:
         print('='*10,name,'='*10)
-        x_aug = apply_augment(x_tensor,name,0.98).numpy()
+        x_aug = apply_augment(x_tensor,name,m).numpy()
         print(x_aug.shape)
-        plot_line(t,x_aug)
+        plot_line(t,x_aug,title=f'{name}_m{m}')
     randaug = RandAugment(1,0,rd_seed=42)
     name = 'random_time_mask'
     for i in range(3):

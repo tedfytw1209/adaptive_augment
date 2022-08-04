@@ -93,7 +93,7 @@ def main():
     logging.info("args = %s", args)
     date_time_str = now_str
     h_model_dir = args.h_model_path
-    h_model_dir = h_model_dir.split('/')[-1]
+    h_model_dir = h_model_dir.strip('/').split('/')[-1]
     #wandb
     experiment_name = f'{Aug_type}{args.k_ops}_tottrain{args.augselect}_vselect_{args.dataset}{args.labelgroup}_{args.model_name}_hmodel{h_model_dir}_e{args.epochs}_lr{args.learning_rate}'
     run_log = wandb.init(config=args, 
@@ -211,14 +211,14 @@ def main():
         step_dic = {'epoch':epoch}
 
         train_acc, train_obj, train_dic = train(
-            train_queue, task_model, criterion, optimizer, epoch, args.grad_clip, adaaug, multilabel=multilabel,n_class=n_class)
+            train_queue, task_model, criterion, optimizer, scheduler, epoch, args.grad_clip, adaaug, multilabel=multilabel,n_class=n_class)
         logging.info('train_acc %f', train_acc)
 
         valid_acc, valid_obj, _, _, valid_dic = infer(valid_queue, task_model, criterion, multilabel=multilabel,n_class=n_class,mode='valid')
         logging.info('valid_acc %f', valid_acc)
         test_acc, test_obj, test_acc5, _,test_dic  = infer(test_queue, task_model, criterion, multilabel=multilabel,n_class=n_class,mode='test')
         logging.info('test_acc %f %f', test_acc, test_acc5)
-        scheduler.step()
+        #scheduler.step()
         #val select
         if args.valselect and valid_acc>best_val_acc:
             best_val_acc = valid_acc
@@ -251,7 +251,7 @@ def main():
     logging.info(f'save to {args.save}')
 
 
-def train(train_queue, model, criterion, optimizer, epoch, grad_clip, adaaug, multilabel=False,n_class=10):
+def train(train_queue, model, criterion, optimizer,scheduler, epoch, grad_clip, adaaug, multilabel=False,n_class=10):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
     top5 = utils.AvgrageMeter()
@@ -274,6 +274,7 @@ def train(train_queue, model, criterion, optimizer, epoch, grad_clip, adaaug, mu
         loss.backward()
         nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
         optimizer.step()
+        scheduler.step()
         n = input.size(0)
         objs.update(loss.detach().item(), n)
         if not multilabel:

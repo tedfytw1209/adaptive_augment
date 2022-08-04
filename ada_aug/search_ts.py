@@ -268,6 +268,7 @@ def train(train_queue, search_queue, gf_model, adaaug, criterion, gf_optimizer,s
         nn.utils.clip_grad_norm_(gf_model.parameters(), grad_clip)
         gf_optimizer.step()
         scheduler.step() #8/03 add!!!
+        gf_optimizer.zero_grad()
         #  stats
         n = target.size(0)
         objs.update(loss.detach().item(), n)
@@ -275,6 +276,16 @@ def train(train_queue, search_queue, gf_model, adaaug, criterion, gf_optimizer,s
             prec1, prec5 = utils.accuracy(logits.detach(), target.detach(), topk=(1, 5))
             top1.update(prec1.detach().item(), n)
             top5.update(prec5.detach().item(), n)
+            _, predicted = torch.max(logits.data, 1)
+            total += target.size(0)
+            for t, p in zip(target.data.view(-1), predicted.view(-1)):
+                confusion_matrix[t.long(), p.long()] += 1
+        else:
+            predicted = torch.sigmoid(logits)
+        
+        #ACC-AUROC
+        preds.append(predicted.cpu().detach())
+        targets.append(target.cpu().detach())
         exploitation_time = time.time() - timer
 
         # exploration
@@ -284,7 +295,7 @@ def train(train_queue, search_queue, gf_model, adaaug, criterion, gf_optimizer,s
             gf_optimizer.zero_grad()
             h_optimizer.zero_grad()
             if difficult_aug:
-                origin_logits = gf_model(input, seq_len)
+                origin_logits = gf_model(input, seq_len) #!!! big bug that search batch < normal batch
                 mixed_features = adaaug(input, seq_len, mode='explore',mix_feature=mix_feature)
                 aug_logits = gf_model.classify(mixed_features) 
                 if multilabel:
@@ -303,9 +314,10 @@ def train(train_queue, search_queue, gf_model, adaaug, criterion, gf_optimizer,s
                 else:
                     loss_policy = -1 * (lambda_aug * aug_loss).mean()
                 
-                loss_policy.backward()
+                #loss_policy.backward()
                 #h_optimizer.step() wait till validation set
                 difficult_loss += loss_policy.detach().item()
+                torch.cuda.empty_cache()
             #similar
             input_search, seq_len, target_search = next(iter(search_queue))
             input_search = input_search.float().cuda()
@@ -316,7 +328,7 @@ def train(train_queue, search_queue, gf_model, adaaug, criterion, gf_optimizer,s
                 loss = criterion(logits_search, target_search.float())
             else:
                 loss = criterion(logits_search, target_search.long())
-            
+            loss += loss_policy
             loss.backward()
             h_optimizer.step()
             exploration_time = time.time() - timer
@@ -326,21 +338,13 @@ def train(train_queue, search_queue, gf_model, adaaug, criterion, gf_optimizer,s
             search_total += 1
             #  log policy
             adaaug.add_history(input_search, seq_len, target_search)
-
+            torch.cuda.empty_cache()
+        #log
         global_step = epoch * len(train_queue) + step
         if global_step % args.report_freq == 0:
             logging.info('  |train %03d %e %f %f | %.3f + %.3f s', global_step,
                 objs.avg, top1.avg, top5.avg, exploitation_time, exploration_time)
-        #ACC-AUROC
-        if not multilabel:
-            _, predicted = torch.max(logits.data, 1)
-            total += target.size(0)
-            for t, p in zip(target.data.view(-1), predicted.view(-1)):
-                confusion_matrix[t.long(), p.long()] += 1
-        else:
-            predicted = torch.sigmoid(logits)
-        preds.append(predicted.cpu().detach())
-        targets.append(target.cpu().detach())
+
     #Total
     if not multilabel:
         perfrom = top1.avg

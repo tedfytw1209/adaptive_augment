@@ -252,7 +252,7 @@ def train(train_queue, search_queue, tr_search_queue, gf_model, adaaug, criterio
     for step, (input, seq_len, target) in enumerate(train_queue):
         input = input.float().cuda()
         target = target.cuda()
-        batch_size = target.shape[0]
+        
         # exploitation
         timer = time.time()
         aug_images = adaaug(input, seq_len, mode='exploit')
@@ -296,7 +296,10 @@ def train(train_queue, search_queue, tr_search_queue, gf_model, adaaug, criterio
             h_optimizer.zero_grad()
             if difficult_aug:
                 input_trsearch, seq_len, target_trsearch = next(iter(tr_search_queue))
-                origin_logits = gf_model(input_trsearch, seq_len) #!!! big bug that search batch < normal batch
+                input_trsearch = input_trsearch.float().cuda()
+                target_trsearch = target_trsearch.cuda()
+                batch_size = target_trsearch.shape[0]
+                origin_logits = gf_model(input_trsearch, seq_len)
                 mixed_features = adaaug(input_trsearch, seq_len, mode='explore',mix_feature=mix_feature)
                 aug_logits = gf_model.classify(mixed_features) 
                 if multilabel:

@@ -109,7 +109,7 @@ def main():
     n_class = get_num_class(args.dataset,args.labelgroup)
     class2label = get_label_name(args.dataset, args.dataroot)
     multilabel = args.multilabel
-    train_queue, valid_queue, _, test_queue = get_ts_dataloaders(
+    train_queue, valid_queue, _, test_queue,_ = get_ts_dataloaders(
         args.dataset, args.batch_size, args.num_workers,
         args.dataroot, args.cutout, args.cutout_length,
         split=args.train_portion, split_idx=0, target_lb=-1,

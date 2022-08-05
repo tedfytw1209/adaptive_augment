@@ -115,7 +115,7 @@ def main():
     diff_augment = args.diff_aug
     diff_mix = not args.not_mix
     diff_reweight = not args.not_reweight
-    train_queue, valid_queue, search_queue, test_queue = get_ts_dataloaders(
+    train_queue, valid_queue, search_queue, test_queue, tr_search_queue = get_ts_dataloaders(
         args.dataset, args.batch_size, args.num_workers,
         args.dataroot, args.cutout, args.cutout_length,
         split=args.train_portion, split_idx=0, target_lb=-1,
@@ -187,7 +187,7 @@ def main():
         logging.info('epoch %d lr %e', epoch, lr)
         step_dic={'epoch':epoch}
         # searching
-        train_acc, train_obj, train_dic = train(train_queue, search_queue, gf_model, adaaug,
+        train_acc, train_obj, train_dic = train(train_queue, search_queue, tr_search_queue, gf_model, adaaug,
             criterion, gf_optimizer,scheduler, args.grad_clip, h_optimizer, epoch, args.search_freq, multilabel=multilabel,n_class=n_class,
             difficult_aug=diff_augment,reweight=diff_reweight,mix_feature=diff_mix,lambda_aug=args.lambda_aug)
 
@@ -238,7 +238,7 @@ def main():
     logging.info('elapsed time: %.3f Hours' % (elapsed / 3600.))
     logging.info(f'saved to: {args.save}')
 
-def train(train_queue, search_queue, gf_model, adaaug, criterion, gf_optimizer,scheduler,
+def train(train_queue, search_queue, tr_search_queue, gf_model, adaaug, criterion, gf_optimizer,scheduler,
             grad_clip, h_optimizer, epoch, search_freq, multilabel=False,n_class=10,
             difficult_aug=False,reweight=True,mix_feature=True,lambda_aug = 1.0):
     objs = utils.AvgrageMeter()
@@ -295,16 +295,17 @@ def train(train_queue, search_queue, gf_model, adaaug, criterion, gf_optimizer,s
             gf_optimizer.zero_grad()
             h_optimizer.zero_grad()
             if difficult_aug:
-                origin_logits = gf_model(input, seq_len) #!!! big bug that search batch < normal batch
-                mixed_features = adaaug(input, seq_len, mode='explore',mix_feature=mix_feature)
+                input_trsearch, seq_len, target_trsearch = next(iter(tr_search_queue))
+                origin_logits = gf_model(input_trsearch, seq_len) #!!! big bug that search batch < normal batch
+                mixed_features = adaaug(input_trsearch, seq_len, mode='explore',mix_feature=mix_feature)
                 aug_logits = gf_model.classify(mixed_features) 
                 if multilabel:
-                    aug_loss = criterion(aug_logits, target.float())
+                    aug_loss = criterion(aug_logits, target_trsearch.float())
                 else:
-                    aug_loss = criterion(aug_logits, target.long())
+                    aug_loss = criterion(aug_logits, target_trsearch.long())
                 if reweight: #reweight part, a,b = ?
-                    p_orig = origin_logits.softmax(dim=1)[torch.arange(batch_size), target].detach()
-                    p_aug = aug_logits.softmax(dim=1)[torch.arange(batch_size), target].clone().detach()
+                    p_orig = origin_logits.softmax(dim=1)[torch.arange(batch_size), target_trsearch].detach()
+                    p_aug = aug_logits.softmax(dim=1)[torch.arange(batch_size), target_trsearch].clone().detach()
                     w_aug = torch.sqrt(p_orig * torch.clamp(p_orig - p_aug, min=0)) #a=0.5,b=0.5
                     if w_aug.sum() > 0:
                         w_aug /= (w_aug.mean().detach() + 1e-6)
@@ -314,10 +315,10 @@ def train(train_queue, search_queue, gf_model, adaaug, criterion, gf_optimizer,s
                 else:
                     loss_policy = -1 * (lambda_aug * aug_loss).mean()
                 
-                #loss_policy.backward()
+                loss_policy.backward()
                 #h_optimizer.step() wait till validation set
                 difficult_loss += loss_policy.detach().item()
-                torch.cuda.empty_cache()
+                #torch.cuda.empty_cache()
             #similar
             input_search, seq_len, target_search = next(iter(search_queue))
             input_search = input_search.float().cuda()
@@ -328,7 +329,6 @@ def train(train_queue, search_queue, gf_model, adaaug, criterion, gf_optimizer,s
                 loss = criterion(logits_search, target_search.float())
             else:
                 loss = criterion(logits_search, target_search.long())
-            loss += loss_policy
             loss.backward()
             h_optimizer.step()
             exploration_time = time.time() - timer
@@ -338,7 +338,7 @@ def train(train_queue, search_queue, gf_model, adaaug, criterion, gf_optimizer,s
             search_total += 1
             #  log policy
             adaaug.add_history(input_search, seq_len, target_search)
-            torch.cuda.empty_cache()
+        torch.cuda.empty_cache()
         #log
         global_step = epoch * len(train_queue) + step
         if global_step % args.report_freq == 0:

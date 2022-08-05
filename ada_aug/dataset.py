@@ -448,8 +448,13 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
             search_data, batch_size=search_divider,
             shuffle=True, drop_last=True, pin_memory=True,
             num_workers=num_workers)
+        tr_searchloader = torch.utils.data.DataLoader(
+            train_data, batch_size=search_divider,
+            shuffle=True, drop_last=True, pin_memory=True,
+            num_workers=num_workers)
     else:
         searchloader = None
+        tr_searchloader = None
 
     testloader = torch.utils.data.DataLoader(
         test_data, batch_size=batch,
@@ -464,7 +469,7 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
     print(f'  |test: {len(testloader)*batch}')
     if search and search_dataset is not None:
         print(f'  |search: {len(searchloader)*search_divider}')
-    return trainloader, validloader, searchloader, testloader
+    return trainloader, validloader, searchloader, testloader, tr_searchloader
 
 def unpickle(file):
     import pickle

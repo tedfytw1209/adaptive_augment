@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 from config import OPS_NAMES,TS_OPS_NAMES
 from operation_tseries import TS_ADD_NAMES,ECG_OPS_NAMES
@@ -16,8 +17,12 @@ class Projection(nn.Module):
             layers = [nn.Linear(in_features, 2*len(OPS_NAMES))]
         self.projection = nn.Sequential(*layers)
 
-    def forward(self, x):
-        return self.projection(x)
+    def forward(self, x,y=None):
+        if torch.is_tensor(y):
+            agg_x = torch.cat([x,y], dim=1) #feature dim
+        else:
+            agg_x = x
+        return self.projection(agg_x)
 
 class Projection_TSeries(nn.Module):
     def __init__(self, in_features, n_layers, n_hidden=128, augselect=''):
@@ -40,5 +45,9 @@ class Projection_TSeries(nn.Module):
             layers = [nn.Linear(in_features, 2*self.ops_len)]
         self.projection = nn.Sequential(*layers)
 
-    def forward(self, x):
-        return self.projection(x)
+    def forward(self, x,y=None):
+        if torch.is_tensor(y):
+            agg_x = torch.cat([x,y], dim=1) #feature dim
+        else:
+            agg_x = x
+        return self.projection(agg_x)

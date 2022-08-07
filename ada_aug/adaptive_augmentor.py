@@ -167,7 +167,7 @@ class AdaAug(nn.Module):
 
 class AdaAug_TS(AdaAug):
     def __init__(self, after_transforms, n_class, gf_model, h_model, save_dir=None, 
-                    config=default_config, multilabel=False, augselect=''):
+                    config=default_config, multilabel=False, augselect='',class_adaptive=False):
         super(AdaAug_TS, self).__init__(after_transforms, n_class, gf_model, h_model, save_dir, config)
         #other already define in AdaAug
         self.ops_names = TS_OPS_NAMES.copy()
@@ -180,8 +180,9 @@ class AdaAug_TS(AdaAug):
         self.history = PolicyHistory(self.ops_names, self.save_dir, self.n_class)
         self.config = config
         self.multilabel = multilabel
+        self.class_adaptive = class_adaptive
 
-    def predict_aug_params(self, X, seq_len, mode):
+    def predict_aug_params(self, X, seq_len, mode,y=None):
         self.gf_model.eval()
         if mode == 'exploit':
             self.h_model.eval()
@@ -193,14 +194,14 @@ class AdaAug_TS(AdaAug):
                 print(e)
             self.h_model.train()
             T = 1.0
-        a_params = self.h_model(self.gf_model.extract_features(X.cuda(),seq_len))
+        a_params = self.h_model(self.gf_model.extract_features(X.cuda(),seq_len),y=y)
         magnitudes, weights = torch.split(a_params, self.n_ops, dim=1)
         magnitudes = torch.sigmoid(magnitudes)
         weights = torch.nn.functional.softmax(weights/T, dim=-1)
         return magnitudes, weights
 
-    def add_history(self, images, seq_len, targets):
-        magnitudes, weights = self.predict_aug_params(images, seq_len, 'exploit')
+    def add_history(self, images, seq_len, targets,y=None):
+        magnitudes, weights = self.predict_aug_params(images, seq_len, 'exploit',y=y)
         for k in range(self.n_class):
             if self.multilabel:
                 idxs = (targets[:,k] == 1).nonzero().squeeze()
@@ -235,14 +236,14 @@ class AdaAug_TS(AdaAug):
                 trans_seqlen_list.append(e_len)
         return torch.stack(trans_image_list, dim=0), torch.stack(trans_seqlen_list, dim=0)
 
-    def explore(self, images, seq_len, mix_feature=True):
+    def explore(self, images, seq_len, mix_feature=True,y=None):
         """Return the mixed latent feature if mix_feature==True
         Args:
             images ([Tensor]): [description]
         Returns:
             [Tensor]: return a batch of mixed features
         """
-        magnitudes, weights = self.predict_aug_params(images, seq_len,'explore')
+        magnitudes, weights = self.predict_aug_params(images, seq_len,'explore',y=y)
         a_imgs, a_seq_len = self.get_aug_valid_imgs(images, seq_len, magnitudes)
         a_features = self.gf_model.extract_features(a_imgs, a_seq_len)
         ba_features = a_features.reshape(len(images), self.n_ops, -1) # batch, n_ops, n_hidden
@@ -278,22 +279,22 @@ class AdaAug_TS(AdaAug):
         aug_imgs = torch.stack(trans_images, dim=0).cuda()
         return aug_imgs
 
-    def exploit(self, images, seq_len):
+    def exploit(self, images, seq_len,y=None):
         if self.resize and 'lstm' not in self.config['gf_model_name']:
             resize_imgs = F.interpolate(images, size=self.search_d)
         else:
             resize_imgs = images
         #resize_imgs = F.interpolate(images, size=self.search_d) if self.resize else images
-        magnitudes, weights = self.predict_aug_params(resize_imgs, seq_len, 'exploit')
+        magnitudes, weights = self.predict_aug_params(resize_imgs, seq_len, 'exploit',y=y)
         aug_imgs = self.get_training_aug_images(images, magnitudes, weights)
         return aug_imgs
 
-    def forward(self, images, seq_len, mode, mix_feature=True):
+    def forward(self, images, seq_len, mode, mix_feature=True,y=None):
         if mode == 'explore':
             #  return a set of mixed augmented features, mix_feature is for experiment
-            return self.explore(images,seq_len,mix_feature=mix_feature)
+            return self.explore(images,seq_len,mix_feature=mix_feature,y=y)
         elif mode == 'exploit':
             #  return a set of augmented images
-            return self.exploit(images,seq_len)
+            return self.exploit(images,seq_len,y=y)
         elif mode == 'inference':
             return images

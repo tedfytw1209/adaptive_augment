@@ -61,6 +61,7 @@ parser.add_argument('--diff_aug', action='store_true', default=False, help='use 
 parser.add_argument('--not_mix', action='store_true', default=False, help='use valid select')
 parser.add_argument('--not_reweight', action='store_true', default=False, help='use valid select')
 parser.add_argument('--lambda_aug', type=float, default=1.0, help="temperature")
+parser.add_argument('--class_adapt', action='store_true', default=False, help='class adaptive')
 
 args = parser.parse_args()
 debug = True if args.save == "debug" else False
@@ -72,9 +73,14 @@ if args.diff_aug:
     description = 'diff2'
 else:
     description = ''
+if args.class_adapt:
+    description += 'cada'
+else:
+    description += ''
 if not args.not_reweight:
     description+='rew'
-args.save = '{}-{}-{}{}'.format(time.strftime("%Y%m%d-%H%M%S"), args.save,Aug_type,description)
+now_str = time.strftime("%Y%m%d-%H%M%S")
+args.save = '{}-{}-{}{}'.format(now_str, args.save,Aug_type,description)
 if debug:
     args.save = os.path.join('debug', args.save)
 else:
@@ -101,7 +107,7 @@ def main():
     run_log = wandb.init(config=args, 
                   project='AdaAug',
                   group=experiment_name,
-                  name=experiment_name,
+                  name=f'{now_str}_' + experiment_name,
                   dir='./',
                   job_type="DataAugment",
                   reinit=True)
@@ -133,8 +139,10 @@ def main():
     gf_model = get_model_tseries(model_name=args.model_name, num_class=n_class,n_channel=n_channel,
         use_cuda=True, data_parallel=False,dataset=args.dataset)
     logging.info("param size = %fMB", utils.count_parameters_in_MB(gf_model))
-
-    h_model = Projection_TSeries(in_features=gf_model.fc.in_features,
+    h_input = gf_model.fc.in_features
+    if args.class_adapt:
+        h_input += n_class
+    h_model = Projection_TSeries(in_features=h_input,
         n_layers=args.n_proj_layer, n_hidden=128, augselect=args.augselect).cuda()
 
     #  training settings
@@ -177,7 +185,8 @@ def main():
         save_dir=args.save,
         config=adaaug_config,
         multilabel=multilabel,
-        augselect=args.augselect)
+        augselect=args.augselect,
+        class_adaptive=args.class_adapt)
     #for valid data select
     best_val_acc,best_gf,best_h = 0,None,None
     #  Start training
@@ -189,7 +198,7 @@ def main():
         # searching
         train_acc, train_obj, train_dic = train(train_queue, search_queue, tr_search_queue, gf_model, adaaug,
             criterion, gf_optimizer,scheduler, args.grad_clip, h_optimizer, epoch, args.search_freq, multilabel=multilabel,n_class=n_class,
-            difficult_aug=diff_augment,reweight=diff_reweight,mix_feature=diff_mix,lambda_aug=args.lambda_aug)
+            difficult_aug=diff_augment,reweight=diff_reweight,mix_feature=diff_mix,lambda_aug=args.lambda_aug,class_adaptive=args.class_adapt)
 
         # validation
         valid_acc, valid_obj,valid_dic = infer(valid_queue, gf_model, criterion, multilabel=multilabel,n_class=n_class,mode='valid')
@@ -240,7 +249,7 @@ def main():
 
 def train(train_queue, search_queue, tr_search_queue, gf_model, adaaug, criterion, gf_optimizer,scheduler,
             grad_clip, h_optimizer, epoch, search_freq, multilabel=False,n_class=10,
-            difficult_aug=False,reweight=True,mix_feature=True,lambda_aug = 1.0):
+            difficult_aug=False,reweight=True,mix_feature=True,lambda_aug = 1.0,class_adaptive=False):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
     top5 = utils.AvgrageMeter()
@@ -252,10 +261,13 @@ def train(train_queue, search_queue, tr_search_queue, gf_model, adaaug, criterio
     for step, (input, seq_len, target) in enumerate(train_queue):
         input = input.float().cuda()
         target = target.cuda()
-        
+        if class_adaptive: #target to onehot
+            policy_y = nn.functional.one_hot(target, num_classes=n_class).cuda().float()
+        else:
+            policy_y = None
         # exploitation
         timer = time.time()
-        aug_images = adaaug(input, seq_len, mode='exploit')
+        aug_images = adaaug(input, seq_len, mode='exploit',y=policy_y)
         aug_images = aug_images.cuda()
         gf_model.train()
         gf_optimizer.zero_grad()

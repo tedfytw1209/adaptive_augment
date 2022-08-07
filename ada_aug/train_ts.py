@@ -60,6 +60,8 @@ parser.add_argument('--restore', action='store_true', default=False, help='resto
 parser.add_argument('--valselect', action='store_true', default=False, help='use valid select')
 parser.add_argument('--notwarmup', action='store_true', default=False, help='use valid select')
 parser.add_argument('--augselect', type=str, default='', help="augmentation selection")
+parser.add_argument('--not_reweight', action='store_true', default=False, help='use valid select')
+parser.add_argument('--class_adapt', action='store_true', default=False, help='class adaptive')
 
 args = parser.parse_args()
 debug = True if args.save == "debug" else False
@@ -168,8 +170,10 @@ def main():
     gf_model = get_model_tseries(model_name=args.gf_model_name,
                             num_class=search_n_class,n_channel=n_channel,
                             use_cuda=True, data_parallel=False,dataset=args.dataset)
-
-    h_model = Projection_TSeries(in_features=gf_model.fc.in_features,
+    h_input = gf_model.fc.in_features
+    if args.class_adapt:
+        h_input += n_class
+    h_model = Projection_TSeries(in_features=h_input,
                             n_layers=args.n_proj_layer,
                             n_hidden=args.n_proj_hidden,
                             augselect=args.augselect).cuda()
@@ -199,7 +203,8 @@ def main():
                     save_dir=args.save,
                     config=adaaug_config,
                     multilabel=multilabel,
-                    augselect=args.augselect)
+                    augselect=args.augselect,
+                    class_adaptive=args.class_adapt)
     #for valid data select
     best_val_acc,best_task = 0,None
     result_valid_dic, result_test_dic = {}, {}
@@ -211,7 +216,8 @@ def main():
         step_dic = {'epoch':epoch}
 
         train_acc, train_obj, train_dic = train(
-            train_queue, task_model, criterion, optimizer, scheduler, epoch, args.grad_clip, adaaug, multilabel=multilabel,n_class=n_class)
+            train_queue, task_model, criterion, optimizer, scheduler, epoch, args.grad_clip, adaaug, 
+                multilabel=multilabel,n_class=n_class,class_adaptive=args.class_adapt)
         logging.info('train_acc %f', train_acc)
 
         valid_acc, valid_obj, _, _, valid_dic = infer(valid_queue, task_model, criterion, multilabel=multilabel,n_class=n_class,mode='valid')
@@ -251,7 +257,7 @@ def main():
     logging.info(f'save to {args.save}')
 
 
-def train(train_queue, model, criterion, optimizer,scheduler, epoch, grad_clip, adaaug, multilabel=False,n_class=10):
+def train(train_queue, model, criterion, optimizer,scheduler, epoch, grad_clip, adaaug, multilabel=False,n_class=10,class_adaptive=False):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
     top5 = utils.AvgrageMeter()
@@ -263,7 +269,11 @@ def train(train_queue, model, criterion, optimizer,scheduler, epoch, grad_clip, 
         input = input.float().cuda()
         target = target.cuda(non_blocking=True)
         #  get augmented training data from adaaug
-        aug_images = adaaug(input, seq_len, mode='exploit')
+        if class_adaptive: #target to onehot
+            policy_y = nn.functional.one_hot(target, num_classes=n_class).cuda().float()
+        else:
+            policy_y = None
+        aug_images = adaaug(input, seq_len, mode='exploit',y=policy_y)
         model.train()
         optimizer.zero_grad()
         logits = model(aug_images, seq_len)

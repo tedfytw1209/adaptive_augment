@@ -50,6 +50,7 @@ parser.add_argument('--diff_aug', action='store_true', default=False, help='use 
 parser.add_argument('--not_mix', action='store_true', default=False, help='use valid select')
 parser.add_argument('--not_reweight', action='store_true', default=False, help='use valid select')
 parser.add_argument('--lambda_aug', type=float, default=1.0, help="temperature")
+parser.add_argument('--class_adapt', action='store_true', default=False, help='class adaptive')
 
 args = parser.parse_args()
 debug = True if args.save == "debug" else False

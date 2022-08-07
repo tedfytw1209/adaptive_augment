@@ -147,7 +147,7 @@ def get_num_channel(dataset):
 
 def get_dataloaders(dataset, batch, num_workers, dataroot, cutout,
                     cutout_length, split=0.5, split_idx=0, target_lb=-1,
-                    search=True, search_divider=1, search_size=0):
+                    search=True, search_divider=1, search_size=0, tr_search=False):
     '''
     If search is True, dataloader will give batches of image without after_transforms,
     the transform will be done by augment agent
@@ -268,8 +268,13 @@ def get_dataloaders(dataset, batch, num_workers, dataroot, cutout,
             search_data, batch_size=search_divider,
             shuffle=True, drop_last=True, pin_memory=True,
             num_workers=num_workers)
+        tr_searchloader = torch.utils.data.DataLoader(
+            train_data, batch_size=search_divider,
+            shuffle=True, drop_last=True, pin_memory=True,
+            num_workers=num_workers)
     else:
         searchloader = None
+        tr_searchloader = None
 
     testloader = torch.utils.data.DataLoader(
         test_data, batch_size=batch,
@@ -283,7 +288,10 @@ def get_dataloaders(dataset, batch, num_workers, dataroot, cutout,
     print(f'  |test: {len(testloader)*batch}')
     if search and search_dataset is not None:
         print(f'  |search: {len(searchloader)*search_divider}')
-    return trainloader, validloader, searchloader, testloader
+    if tr_search:
+        return trainloader, validloader, searchloader, testloader, tr_searchloader
+    else:
+        return trainloader, validloader, searchloader, testloader
 
 def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
                     cutout_length, split=0.5, split_idx=0, target_lb=-1,

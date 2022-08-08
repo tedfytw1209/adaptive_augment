@@ -141,7 +141,7 @@ def main():
     logging.info("param size = %fMB", utils.count_parameters_in_MB(gf_model))
     h_input = gf_model.fc.in_features
     if args.class_adapt:
-        h_input += n_class
+        h_input =h_input + n_class
     h_model = Projection_TSeries(in_features=h_input,
         n_layers=args.n_proj_layer, n_hidden=128, augselect=args.augselect).cuda()
 
@@ -333,7 +333,11 @@ def train(train_queue, search_queue, tr_search_queue, gf_model, adaaug, criterio
                 target_trsearch = target_trsearch.cuda()
                 batch_size = target_trsearch.shape[0]
                 origin_logits = gf_model(input_trsearch, seq_len)
-                mixed_features = adaaug(input_trsearch, seq_len, mode='explore',mix_feature=mix_feature)
+                if class_adaptive: #target to onehot
+                    policy_y = nn.functional.one_hot(target_trsearch, num_classes=n_class).cuda().float()
+                else:
+                    policy_y = None
+                mixed_features = adaaug(input_trsearch, seq_len, mode='explore',mix_feature=mix_feature,y=policy_y)
                 aug_logits = gf_model.classify(mixed_features) 
                 if multilabel:
                     aug_loss = criterion(aug_logits, target_trsearch.float())
@@ -361,7 +365,11 @@ def train(train_queue, search_queue, tr_search_queue, gf_model, adaaug, criterio
             input_search, seq_len, target_search = next(iter(search_queue))
             input_search = input_search.float().cuda()
             target_search = target_search.cuda()
-            mixed_features = adaaug(input_search, seq_len, mode='explore')
+            if class_adaptive: #target to onehot
+                policy_y = nn.functional.one_hot(target_search, num_classes=n_class).cuda().float()
+            else:
+                policy_y = None
+            mixed_features = adaaug(input_search, seq_len, mode='explore',y=policy_y)
             logits_search = gf_model.classify(mixed_features)
             if multilabel:
                 loss = criterion(logits_search, target_search.float())
@@ -375,7 +383,7 @@ def train(train_queue, search_queue, tr_search_queue, gf_model, adaaug, criterio
             adaptive_loss += loss.detach().item()
             search_total += 1
             #  log policy
-            adaaug.add_history(input_search, seq_len, target_search)
+            adaaug.add_history(input_search, seq_len, target_search,y=policy_y)
         torch.cuda.empty_cache()
         #log
         global_step = epoch * len(train_queue) + step

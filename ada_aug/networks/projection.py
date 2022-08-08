@@ -34,6 +34,7 @@ class Projection_TSeries(nn.Module):
             self.ops_names += ECG_OPS_NAMES.copy()
         self.ops_len = len(self.ops_names)
         print('Projection Using ',self.ops_names)
+        print('In_features: ',in_features)
         self.n_layers = n_layers
         if self.n_layers > 0:
             layers = [nn.Linear(in_features, n_hidden), nn.ReLU()]

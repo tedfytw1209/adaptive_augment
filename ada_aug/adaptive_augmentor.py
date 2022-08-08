@@ -8,6 +8,7 @@ from torchvision import transforms
 
 
 from operation_tseries import apply_augment,TS_ADD_NAMES,ECG_OPS_NAMES
+import operation
 from networks import get_model
 from utils import PolicyHistory
 from config import OPS_NAMES,TS_OPS_NAMES
@@ -137,7 +138,7 @@ class AdaAug(nn.Module):
                 pil_image = transforms.ToPILImage()(image)
                 for idx in idx_matrix[i]:
                     m_pi = perturb_param(magnitudes[i][idx], self.delta)
-                    pil_image = apply_augment(pil_image, self.ops_names[idx], m_pi)
+                    pil_image = operation.apply_augment(pil_image, self.ops_names[idx], m_pi)
                 trans_images.append(self.after_transforms(pil_image))
         else:
             trans_images = []

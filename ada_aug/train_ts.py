@@ -325,7 +325,7 @@ def train(train_queue, model, criterion, optimizer,scheduler, epoch, grad_clip, 
 
         # log the policy
         if step == 0:
-            adaaug.add_history(input, seq_len, target)
+            adaaug.add_history(input, seq_len, target,y=policy_y)
         
         # Accuracy / AUROC
         if not multilabel:

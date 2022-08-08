@@ -9,11 +9,12 @@ from torch.utils.data import Dataset
 
 
 class BaseDataset(Dataset):
-    def __init__(self,preprocess=[],transfroms=[],augmentations=[],label_transfroms=[],**_kwargs):
+    def __init__(self,preprocess=[],transfroms=[],augmentations=[],class_augmentations=[],label_transfroms=[],**_kwargs):
         #common args
         self.preprocess = preprocess
         self.transfroms = transfroms
         self.augmentations = augmentations
+        self.class_augmentations = class_augmentations
         self.label_transfroms = label_transfroms
         self.input_data = None
         self.label = None
@@ -30,6 +31,8 @@ class BaseDataset(Dataset):
             input_data = transfrom(input_data)
         for augmentation in self.augmentations:
             input_data = augmentation(input_data)
+        for augmentation in self.class_augmentations:
+            input_data = augmentation(input_data,label)
         for label_trans in self.label_transfroms:
             label = label_trans(label)
         input_data_tmp = torch.zeros(self.max_len, input_data.shape[1])

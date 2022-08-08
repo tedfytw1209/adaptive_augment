@@ -13,8 +13,10 @@ MAX_LENGTH = 1000
 LABEL_GROUPS = {"all":71, "diagnostic":44, "subdiagnostic":23, "superdiagnostic":5, "form":19, "rhythm":12}
 
 class PTBXL(BaseDataset):
-    def __init__(self, dataset_path, labelgroup="diagnostic",multilabel=True,mode='all',denoise=False,preprocess=[],transfroms=[],augmentations=[],label_transfroms=[],**_kwargs):
-        super(PTBXL,self).__init__(preprocess=preprocess,transfroms=transfroms,augmentations=augmentations,label_transfroms=label_transfroms)
+    def __init__(self, dataset_path, labelgroup="diagnostic",multilabel=True,mode='all',denoise=False,
+    preprocess=[],transfroms=[],augmentations=[],class_augmentations=[],label_transfroms=[],**_kwargs):
+        super(PTBXL,self).__init__(preprocess=preprocess,transfroms=transfroms,augmentations=augmentations,
+            class_augmentations=class_augmentations,label_transfroms=label_transfroms)
         assert labelgroup in ["all", "diagnostic", "subdiagnostic", "superdiagnostic", "form", "rhythm"]
         self.dataset_path = dataset_path
         self.max_len = MAX_LENGTH

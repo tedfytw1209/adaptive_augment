@@ -60,7 +60,7 @@ parser.add_argument('--augselect', type=str, default='', help="augmentation sele
 parser.add_argument('--diff_aug', action='store_true', default=False, help='use valid select')
 parser.add_argument('--not_mix', action='store_true', default=False, help='use valid select')
 parser.add_argument('--not_reweight', action='store_true', default=False, help='use valid select')
-parser.add_argument('--lambda_aug', type=float, default=1.0, help="temperature")
+parser.add_argument('--lambda_aug', type=float, default=1.0, help="augment sample weight")
 parser.add_argument('--class_adapt', action='store_true', default=False, help='class adaptive')
 
 args = parser.parse_args()
@@ -273,9 +273,30 @@ def train(train_queue, search_queue, tr_search_queue, gf_model, adaaug, criterio
         gf_optimizer.zero_grad()
         logits = gf_model(aug_images, seq_len)
         if multilabel:
-            loss = criterion(logits, target.float())
+            aug_loss = criterion(logits, target.float())
         else:
-            loss = criterion(logits, target.long())
+            aug_loss = criterion(logits, target.long())
+        #difficult aug
+        ori_loss = 0
+        batch_size = target.shape[0]
+        if difficult_aug:
+            origin_logits = gf_model(input, seq_len)
+            if multilabel:
+                ori_loss = criterion(origin_logits, target.float())
+            else:
+                ori_loss = criterion(origin_logits, target.long())
+            if reweight: #reweight part, a,b = ?
+                p_orig = origin_logits.softmax(dim=1)[torch.arange(batch_size), target].detach()
+                p_aug = logits.softmax(dim=1)[torch.arange(batch_size), target].clone().detach()
+                w_aug = torch.sqrt(p_orig * torch.clamp(p_orig - p_aug, min=0)) #a=0.5,b=0.5
+                if w_aug.sum() > 0:
+                    w_aug /= (w_aug.mean().detach() + 1e-6)
+                else:
+                    w_aug = 1
+                aug_loss = (w_aug * lambda_aug * aug_loss).mean()
+            else:
+                aug_loss = (lambda_aug * aug_loss).mean()
+        loss = ori_loss + aug_loss
         loss.backward()
         nn.utils.clip_grad_norm_(gf_model.parameters(), grad_clip)
         gf_optimizer.step()
@@ -316,8 +337,10 @@ def train(train_queue, search_queue, tr_search_queue, gf_model, adaaug, criterio
                 aug_logits = gf_model.classify(mixed_features) 
                 if multilabel:
                     aug_loss = criterion(aug_logits, target_trsearch.float())
+                    ori_loss = criterion(origin_logits, target_trsearch.float())
                 else:
                     aug_loss = criterion(aug_logits, target_trsearch.long())
+                    ori_loss = criterion(origin_logits, target_trsearch.long())
                 if reweight: #reweight part, a,b = ?
                     p_orig = origin_logits.softmax(dim=1)[torch.arange(batch_size), target_trsearch].detach()
                     p_aug = aug_logits.softmax(dim=1)[torch.arange(batch_size), target_trsearch].clone().detach()
@@ -396,6 +419,7 @@ def train(train_queue, search_queue, tr_search_queue, gf_model, adaaug, criterio
     out_dic['train_loss'] = objs.avg
     out_dic['adaptive_loss'] = adaptive_loss / search_total
     out_dic['difficult_loss'] = difficult_loss / search_total
+    out_dic['search_loss'] = out_dic['adaptive_loss']+out_dic['difficult_loss']
     if multilabel:
         ptype = 'auroc'
     else:

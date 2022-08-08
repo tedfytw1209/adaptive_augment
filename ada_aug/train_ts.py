@@ -60,7 +60,9 @@ parser.add_argument('--restore', action='store_true', default=False, help='resto
 parser.add_argument('--valselect', action='store_true', default=False, help='use valid select')
 parser.add_argument('--notwarmup', action='store_true', default=False, help='use valid select')
 parser.add_argument('--augselect', type=str, default='', help="augmentation selection")
+parser.add_argument('--diff_aug', action='store_true', default=False, help='use valid select')
 parser.add_argument('--not_reweight', action='store_true', default=False, help='use valid select')
+parser.add_argument('--lambda_aug', type=float, default=1.0, help="augment sample weight")
 parser.add_argument('--class_adapt', action='store_true', default=False, help='class adaptive')
 
 args = parser.parse_args()
@@ -111,6 +113,8 @@ def main():
     n_class = get_num_class(args.dataset,args.labelgroup)
     class2label = get_label_name(args.dataset, args.dataroot)
     multilabel = args.multilabel
+    diff_augment = args.diff_aug
+    diff_reweight = not args.not_reweight
     train_queue, valid_queue, _, test_queue,_ = get_ts_dataloaders(
         args.dataset, args.batch_size, args.num_workers,
         args.dataroot, args.cutout, args.cutout_length,
@@ -217,7 +221,8 @@ def main():
 
         train_acc, train_obj, train_dic = train(
             train_queue, task_model, criterion, optimizer, scheduler, epoch, args.grad_clip, adaaug, 
-                multilabel=multilabel,n_class=n_class,class_adaptive=args.class_adapt)
+                multilabel=multilabel,n_class=n_class,difficult_aug=diff_augment,reweight=diff_reweight,
+                lambda_aug = args.lambda_aug,class_adaptive=args.class_adapt)
         logging.info('train_acc %f', train_acc)
 
         valid_acc, valid_obj, _, _, valid_dic = infer(valid_queue, task_model, criterion, multilabel=multilabel,n_class=n_class,mode='valid')
@@ -257,7 +262,8 @@ def main():
     logging.info(f'save to {args.save}')
 
 
-def train(train_queue, model, criterion, optimizer,scheduler, epoch, grad_clip, adaaug, multilabel=False,n_class=10,class_adaptive=False):
+def train(train_queue, model, criterion, optimizer,scheduler, epoch, grad_clip, adaaug, multilabel=False,n_class=10,
+        difficult_aug=False,reweight=True,lambda_aug = 1.0,class_adaptive=False):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
     top5 = utils.AvgrageMeter()
@@ -278,9 +284,30 @@ def train(train_queue, model, criterion, optimizer,scheduler, epoch, grad_clip, 
         optimizer.zero_grad()
         logits = model(aug_images, seq_len)
         if multilabel:
-            loss = criterion(logits, target.float())
+            aug_loss = criterion(logits, target.float())
         else:
-            loss = criterion(logits, target.long())
+            aug_loss = criterion(logits, target.long())
+        #difficult aug
+        batch_size = target.shape[0]
+        ori_loss = 0
+        if difficult_aug:
+            origin_logits = model(input, seq_len)
+            if multilabel:
+                ori_loss = criterion(origin_logits, target.float())
+            else:
+                ori_loss = criterion(origin_logits, target.long())
+            if reweight: #reweight part, a,b = ?
+                p_orig = origin_logits.softmax(dim=1)[torch.arange(batch_size), target].detach()
+                p_aug = logits.softmax(dim=1)[torch.arange(batch_size), target].clone().detach()
+                w_aug = torch.sqrt(p_orig * torch.clamp(p_orig - p_aug, min=0)) #a=0.5,b=0.5
+                if w_aug.sum() > 0:
+                    w_aug /= (w_aug.mean().detach() + 1e-6)
+                else:
+                    w_aug = 1
+                aug_loss = (w_aug * lambda_aug * aug_loss).mean()
+            else:
+                aug_loss = (lambda_aug * aug_loss).mean()
+        loss = ori_loss + aug_loss
         loss.backward()
         nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
         optimizer.step()

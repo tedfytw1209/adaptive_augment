@@ -208,13 +208,13 @@ def train(train_queue, search_queue,tr_search_queue, gf_model, adaaug, criterion
             gf_optimizer.zero_grad()
             h_optimizer.zero_grad()
             if difficult_aug:
-                input_trsearch, seq_len, target_trsearch = next(iter(tr_search_queue))
+                input_trsearch, target_trsearch = next(iter(tr_search_queue))
                 input_trsearch = input_trsearch.float().cuda()
-                target_trsearch = target_trsearch.cuda()
+                target_trsearch = target_trsearch.cuda(non_blocking=True)
                 batch_size = target_trsearch.shape[0]
-                origin_logits = gf_model(input_trsearch, seq_len)
-                mixed_features = adaaug(input_trsearch, seq_len, mode='explore',mix_feature=mix_feature)
-                aug_logits = gf_model.classify(mixed_features) 
+                origin_logits = gf_model(input_trsearch)
+                mixed_features = adaaug(input_trsearch, mode='explore')
+                aug_logits = gf_model.g(mixed_features) 
                 aug_loss = criterion(aug_logits, target_trsearch.long())
                 if reweight: #reweight part, a,b = ?
                     p_orig = origin_logits.softmax(dim=1)[torch.arange(batch_size), target_trsearch].detach()

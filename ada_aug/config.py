@@ -74,4 +74,4 @@ def get_search_divider(model_name):
     elif model_name == 'resnet50':
         return 128
     else:
-        return 16
+        return 8 #!!!tmp fix

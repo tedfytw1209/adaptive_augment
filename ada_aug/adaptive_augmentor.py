@@ -102,7 +102,7 @@ class AdaAug(nn.Module):
             pil_img = transforms.ToPILImage()(image)
             # Prepare transformed image for mixing
             for k, ops_name in enumerate(self.ops_names):
-                trans_image = apply_augment(pil_img, ops_name, magnitudes[i][k])
+                trans_image = operation.apply_augment(pil_img, ops_name, magnitudes[i][k])
                 trans_image = self.after_transforms(trans_image)
                 trans_image = stop_gradient(trans_image.cuda(), magnitudes[i][k])
                 trans_image_list.append(trans_image)

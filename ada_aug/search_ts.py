@@ -77,7 +77,7 @@ if args.class_adapt:
     description += 'cada'
 else:
     description += ''
-if not args.not_reweight:
+if args.diff_aug and not args.not_reweight:
     description+='rew'
 now_str = time.strftime("%Y%m%d-%H%M%S")
 args.save = '{}-{}-{}{}'.format(now_str, args.save,Aug_type,description)

@@ -219,8 +219,9 @@ def exp_time_mask(X, mask_len_samples, random_state=None, *args, **kwargs):
 def _sample_mask_start_info(X, mask_len_samples,start,end, random_state):
     rng = check_random_state(random_state)
     seq_length = X.shape[-1]
+    #print(f'start:{start} ,end:{end} ,masklen:{mask_len_samples}')
     c_start = max(min(start,end-mask_len_samples),0)
-    c_end = min(max(end,c_start+mask_len_samples),seq_length-mask_len_samples)
+    c_end = min(end,seq_length-mask_len_samples+1)
     mask_start = torch.as_tensor(rng.randint(
         low=c_start, high=c_end, size=X.shape[0],
     ), device=X.device)
@@ -419,7 +420,10 @@ def window_slice(x,rng, reduce_ratio=0.9,start=0,end=None): #ref (batch, time_st
         end = x.shape[1]-target_len
     else:
         end = end - target_len
-    starts = rng.randint(low=start, high=max(end,start+1), size=(x.shape[0])).astype(int)
+    if start>0:
+        start = min(start,end-1)
+    #print(f'start:{start} ,end:{end} ,masklen:{target_len}')
+    starts = rng.randint(low=max(start,0), high=max(end,1), size=(x.shape[0])).astype(int)
     ends = (target_len + starts).astype(int)
     
     ret = np.zeros_like(x)
@@ -544,7 +548,7 @@ Common Time Series Augmentation from
 T. T. Um et al, "Data augmentation of wearable sensor data for parkinson’s disease monitoring using convolutional neural networks," in ACM ICMI, pp. 216-220, 2017.
 '''
 
-def window_warp(x,rng, window_ratio=0.1, scales=[0.5, 2.],start=0,end=None): #ref (batch, time_steps, channel)
+def window_warp(x,rng, window_ratio=0.1, scales=[0.5, 2.],start=1,end=None): #ref (batch, time_steps, channel)
     # https://halshs.archives-ouvertes.fr/halshs-01357973/document
     warp_scales = rng.choice(scales, x.shape[0])
     warp_size = min(np.ceil(window_ratio*x.shape[1]).astype(int),x.shape[1]-1)
@@ -555,9 +559,12 @@ def window_warp(x,rng, window_ratio=0.1, scales=[0.5, 2.],start=0,end=None): #re
         end = x.shape[1]-warp_size-1
     else:
         end = end - warp_size - 1
-    window_starts = rng.randint(low=start+1, high=max(end,2), size=(x.shape[0])).astype(int)
+    if start>1:
+        start = min(start,end-1)
+    #print(f'start:{start} ,end:{end} ,masklen:{warp_size}')
+    window_starts = rng.randint(low=max(start,1), high=max(end,2), size=(x.shape[0])).astype(int)
     window_ends = (window_starts + warp_size).astype(int)
-            
+    
     ret = np.zeros_like(x)
     for i, pat in enumerate(x):
         for dim in range(x.shape[2]):
@@ -695,11 +702,13 @@ def apply_augment(img, name, level, rd_seed=None):
     aug_img = augment_fn(img, aug_value,random_state=rd_seed)
     return aug_img.permute(0,2,1).detach().view(seq_len,channel) #back to (len,channel)
 
-def plot_line(t,x):
+def plot_line(t,x,title=None):
     plt.clf()
     channel_num = x.shape[-1]
     for i in  range(channel_num):
         plt.plot(t, x[:,i])
+    if title:
+        plt.title(title)
     plt.show()
 
 class ToTensor:
@@ -808,11 +817,11 @@ class InfoRAugment:
         if self.mode=='a':
             self.start_s,self.end_s = 0,None
         elif self.mode=='p':
-            self.start_s,self.end_s = -0.2*sfreq,-1
+            self.start_s,self.end_s = -0.2*sfreq,-0.06*sfreq
         elif self.mode=='qrs':
             self.start_s,self.end_s = -0.1*sfreq,-1
         elif self.mode=='t':
-            self.start_s,self.end_s = 0,0.4*sfreq
+            self.start_s,self.end_s = 0.06*sfreq,0.4*sfreq
         else:
             self.start_s,self.end_s = 0.4*sfreq,-0.2*sfreq
         self.p = p
@@ -840,6 +849,7 @@ class InfoRAugment:
         for i in range(1,len(seg_list)-1): #ignore first&last
             #calculate start and end
             seg_len = seg_list[i].shape[2]
+            #print('seg len: ',seg_len)
             if self.end_s==None:
                 seg_start,seg_end = 0,seg_len
             elif self.mode=='n' and seg_len<0.6*self.sfreq:
@@ -847,9 +857,11 @@ class InfoRAugment:
             elif seg_len>0.4*self.sfreq:
                 seg_start,seg_end = int(self.start_s),int(self.end_s)
                 if seg_start<0:
-                    seg_start = seg_len-seg_start
+                    seg_start = seg_len+seg_start
                 if seg_end<0:
-                    seg_end = seg_len-seg_end+1
+                    seg_end = seg_len+seg_end+1
+                if seg_start>=seg_end:
+                    seg_start = seg_end-1
             else: #heart beat too short
                 seg_start,seg_end = 0,seg_len
             #augment
@@ -894,19 +906,22 @@ if __name__ == '__main__':
     print(t.shape)
     print(x.shape)
     x_tensor = torch.from_numpy(x).float()
-    plot_line(t,x)
-    for name in EXP_TEST_NAMES:
-        print('='*10,name,'='*10)
-        x_aug = apply_augment(x_tensor,name,0.98).numpy()
-        print(x_aug.shape)
-        plot_line(t,x_aug)
-    randaug = RandAugment(1,0,rd_seed=42)
+    plot_line(t,x,title='identity')
+    for each_mode in ['n']:
+        for name in INFO_TEST_NAMES:
+            for m in [0,0.1,0.5,0.98]:
+                print(each_mode,'='*10,name,'='*10,m)
+                info_aug = InfoRAugment([name],m=m,p=1.0,mode=each_mode)
+                x_aug = info_aug(x_tensor).numpy()
+                print(x_aug.shape)
+                plot_line(t,x_aug,f'{name}_mode:{each_mode}_m:{m}')
+    '''randaug = RandAugment(1,0,rd_seed=42)
     name = 'random_time_mask'
     for i in range(3):
         #print('='*10,name,'='*10)
         x_aug = randaug(x_tensor).numpy()
         print(x_aug.shape)
-        plot_line(t,x_aug)
+        plot_line(t,x_aug)'''
     #ECG part
     '''print('ECG Augmentation')
     for name in ECG_OPS_NAMES:

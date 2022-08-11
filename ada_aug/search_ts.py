@@ -62,6 +62,7 @@ parser.add_argument('--not_mix', action='store_true', default=False, help='use v
 parser.add_argument('--not_reweight', action='store_true', default=False, help='use valid select')
 parser.add_argument('--lambda_aug', type=float, default=1.0, help="augment sample weight")
 parser.add_argument('--class_adapt', action='store_true', default=False, help='class adaptive')
+parser.add_argument('--relative_loss', action='store_true', default=False, help='use valid select')
 
 args = parser.parse_args()
 debug = True if args.save == "debug" else False
@@ -196,7 +197,7 @@ def main():
         logging.info('epoch %d lr %e', epoch, lr)
         step_dic={'epoch':epoch}
         diff_dic = {'difficult_aug':diff_augment,'reweight':diff_reweight,'lambda_aug':args.lambda_aug, 'class_adaptive':args.class_adapt,
-                'relative_loss':True}
+                'relative_loss':args.relative_loss}
         # searching
         train_acc, train_obj, train_dic = train(train_queue, search_queue, tr_search_queue, gf_model, adaaug,
             criterion, gf_optimizer,scheduler, args.grad_clip, h_optimizer, epoch, args.search_freq, multilabel=multilabel,n_class=n_class,

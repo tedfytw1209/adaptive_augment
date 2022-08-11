@@ -195,10 +195,12 @@ def main():
         lr = scheduler.get_last_lr()[0]
         logging.info('epoch %d lr %e', epoch, lr)
         step_dic={'epoch':epoch}
+        diff_dic = {'difficult_aug':diff_augment,'reweight':diff_reweight,'lambda_aug':args.lambda_aug, 'class_adaptive':args.class_adapt,
+                'relative_loss':True}
         # searching
         train_acc, train_obj, train_dic = train(train_queue, search_queue, tr_search_queue, gf_model, adaaug,
             criterion, gf_optimizer,scheduler, args.grad_clip, h_optimizer, epoch, args.search_freq, multilabel=multilabel,n_class=n_class,
-            difficult_aug=diff_augment,reweight=diff_reweight,mix_feature=diff_mix,lambda_aug=args.lambda_aug,class_adaptive=args.class_adapt)
+            **diff_dic)
 
         # validation
         valid_acc, valid_obj,valid_dic = infer(valid_queue, gf_model, criterion, multilabel=multilabel,n_class=n_class,mode='valid')
@@ -249,7 +251,8 @@ def main():
 
 def train(train_queue, search_queue, tr_search_queue, gf_model, adaaug, criterion, gf_optimizer,scheduler,
             grad_clip, h_optimizer, epoch, search_freq, multilabel=False,n_class=10,
-            difficult_aug=False,reweight=True,mix_feature=True,lambda_aug = 1.0,class_adaptive=False):
+            difficult_aug=False,reweight=True,mix_feature=True,lambda_aug = 1.0,relative_loss=False,
+            class_adaptive=False):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
     top5 = utils.AvgrageMeter()
@@ -345,6 +348,10 @@ def train(train_queue, search_queue, tr_search_queue, gf_model, adaaug, criterio
                 else:
                     aug_loss = criterion(aug_logits, target_trsearch.long())
                     ori_loss = criterion(origin_logits, target_trsearch.long())
+                if relative_loss:
+                    loss_prepolicy = lambda_aug * (ori_loss.detach() / aug_loss)
+                else:
+                    loss_prepolicy = -1 * lambda_aug * aug_loss
                 if reweight: #reweight part, a,b = ?
                     p_orig = origin_logits.softmax(dim=1)[torch.arange(batch_size), target_trsearch].detach()
                     p_aug = aug_logits.softmax(dim=1)[torch.arange(batch_size), target_trsearch].clone().detach()
@@ -353,9 +360,9 @@ def train(train_queue, search_queue, tr_search_queue, gf_model, adaaug, criterio
                         w_aug /= (w_aug.mean().detach() + 1e-6)
                     else:
                         w_aug = 1
-                    loss_policy = -1 * (w_aug * lambda_aug * aug_loss).mean()
+                    loss_policy = (w_aug * loss_prepolicy).mean()
                 else:
-                    loss_policy = -1 * (lambda_aug * aug_loss).mean()
+                    loss_policy = loss_prepolicy.mean()
                 
                 loss_policy.backward()
                 #h_optimizer.step() wait till validation set

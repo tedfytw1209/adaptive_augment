@@ -218,11 +218,11 @@ def main():
         lr = scheduler.get_last_lr()[0]
         logging.info('epoch %d lr %e', epoch, lr)
         step_dic = {'epoch':epoch}
-
+        diff_dic = {'difficult_aug':diff_augment,'reweight':diff_reweight,'lambda_aug':args.lambda_aug, 'class_adaptive':args.class_adapt,
+                }
         train_acc, train_obj, train_dic = train(
             train_queue, task_model, criterion, optimizer, scheduler, epoch, args.grad_clip, adaaug, 
-                multilabel=multilabel,n_class=n_class,difficult_aug=diff_augment,reweight=diff_reweight,
-                lambda_aug = args.lambda_aug,class_adaptive=args.class_adapt)
+                multilabel=multilabel,n_class=n_class,**diff_dic)
         logging.info('train_acc %f', train_acc)
 
         valid_acc, valid_obj, _, _, valid_dic = infer(valid_queue, task_model, criterion, multilabel=multilabel,n_class=n_class,mode='valid')

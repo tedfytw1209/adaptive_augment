@@ -242,8 +242,8 @@ def main():
     step_dic.update(result_test_dic)
     wandb.log(step_dic)
     #save&log
-    utils.save_model(gf_model, os.path.join(args.save, 'gf_weights.pt'))
-    utils.save_model(h_model, os.path.join(args.save, 'h_weights.pt'))
+    #utils.save_model(gf_model, os.path.join(args.save, 'gf_weights.pt'))
+    #utils.save_model(h_model, os.path.join(args.save, 'h_weights.pt'))
     adaaug.save_history(class2label)
     figure = adaaug.plot_history()
 

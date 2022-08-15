@@ -42,6 +42,7 @@ parser.add_argument('--weight_decay', type=float, default=2e-4, help='weight dec
 parser.add_argument('--report_freq', type=float, default=1, help='report frequency')
 ###for ray###
 parser.add_argument('--ray_dir', type=str, default=RAY_DIR,  help='Ray directory.')
+parser.add_argument('--ray_name', type=str, default='ray_experiment')
 parser.add_argument('--cpu', type=float, default=4, help='Allocated by Ray')
 parser.add_argument('--gpu', type=float, default=0.12, help='Allocated by Ray')
 ###for ray###
@@ -291,7 +292,8 @@ def main():
         'class_adapt': args.class_adapt,
         'relative_loss': args.relative_loss,
         'kfold': tune.grid_search([i for i in range(args.kfold)]),
-        'save': args.save
+        'save': args.save,
+        'ray_name': args.ray_name,
     }
     #wandb
     wandb_config = {

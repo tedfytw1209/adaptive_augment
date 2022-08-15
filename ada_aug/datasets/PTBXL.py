@@ -84,9 +84,9 @@ class PTBXL(BaseDataset):
         self.label = None
         X_from = 'X_fold%d_raw.npy'
         if self.multilabel:
-            y_from = 'y_fold%d.npy'
-        else:
             y_from = 'y_fold%d_ml.npy'
+        else:
+            y_from = 'y_fold%d_single.npy'
         datas,labels = [],[]
         for f in folds:
             data = np.load(os.path.join(self.dataset_path,self.labelgroup,X_from%f),allow_pickle=True)

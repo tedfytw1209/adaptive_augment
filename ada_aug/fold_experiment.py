@@ -99,6 +99,8 @@ if debug:
 else:
     args.save = os.path.join('search', args.dataset, args.save)
 utils.create_exp_dir(args.save)
+for i in range(args.kfold):
+    utils.create_exp_dir(os.path.join(args.save,f'fold{i}'))
 log_format = '%(asctime)s %(message)s'
 logging.basicConfig(stream=sys.stdout, level=logging.INFO,
                     format=log_format, datefmt='%m/%d %I:%M:%S %p')
@@ -106,11 +108,11 @@ fh = logging.FileHandler(os.path.join(args.save, 'log.txt'))
 fh.setFormatter(logging.Formatter(log_format))
 logging.getLogger().addHandler(fh)
 API_KEY = 'cb4c412d9f47cd551e38050ced659b0c58926986'
+BASE_PATH = '/mnt/data2/teddy/adaptive_augment/'
 #ray model
 class RayModel(WandbTrainableMixin, tune.Trainable):
     def setup(self, *_args): #use new setup replace _setup
         #self.trainer = TSeriesModelTrainer(self.config)
-        self.result_valid_dic, self.result_test_dic = {}, {}
         args = self.config['args']
         #  dataset settings for search
         n_channel = get_num_channel(args.dataset)
@@ -122,7 +124,6 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         diff_mix = not args.not_mix
         diff_reweight = not args.not_reweight
         test_fold_idx = self.config['kfold']
-        utils.create_exp_dir(os.path.join(self.config['save'],f'fold{test_fold_idx}'))
         train_val_test_folds = [[],[],[]] #train,valid,test
         for i in range(10):
             curr_fold = (i+test_fold_idx)%10 +1 #fold is 1~10
@@ -191,6 +192,10 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         self.test_fold_idx = test_fold_idx
         self.diff_augment = diff_augment
         self.diff_reweight =diff_reweight
+        self.result_valid_dic, self.result_test_dic = {}, {}
+        self.best_val_acc = -1
+        self.best_gf,self.best_h = None,None
+        self.base_path = self.config['BASE_PATH']
     def step(self):#use step replace _train
         if self._iteration==0:
             wandb.config.update(self.config)
@@ -201,30 +206,30 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         diff_dic = {'difficult_aug':self.diff_augment,'reweight':self.diff_reweight,'lambda_aug':args.lambda_aug, 'class_adaptive':args.class_adapt,
                 'relative_loss':args.relative_loss}
         # searching
-        train_acc, train_obj, train_dic = train(self.train_queue, self.search_queue, self.tr_search_queue, self.gf_model, self.adaaug,
+        train_acc, train_obj, train_dic = search_train(args,self.train_queue, self.search_queue, self.tr_search_queue, self.gf_model, self.adaaug,
             self.criterion, self.gf_optimizer,self.scheduler, args.grad_clip, self.h_optimizer, self._iteration, args.search_freq, 
             multilabel=self.multilabel,n_class=self.n_class, **diff_dic)
 
         # validation
-        valid_acc, valid_obj,valid_dic = infer(self.valid_queue, self.gf_model, self.criterion, multilabel=self.multilabel,n_class=self.n_class,mode='valid')
+        valid_acc, valid_obj,valid_dic = search_infer(self.valid_queue, self.gf_model, self.criterion, multilabel=self.multilabel,n_class=self.n_class,mode='valid')
         #scheduler.step()
         #test
-        test_acc, test_obj, test_dic  = infer(self.test_queue, self.gf_model, self.criterion, multilabel=self.multilabel,n_class=self.n_class,mode='test')
+        test_acc, test_obj, test_dic  = search_infer(self.test_queue, self.gf_model, self.criterion, multilabel=self.multilabel,n_class=self.n_class,mode='test')
         #val select
-        if args.valselect and valid_acc>best_val_acc:
-            best_val_acc = valid_acc
+        if args.valselect and valid_acc>self.best_val_acc:
+            self.best_val_acc = valid_acc
             self.result_valid_dic = {f'result_{k}': valid_dic[k] for k in valid_dic.keys()}
             self.result_test_dic = {f'result_{k}': test_dic[k] for k in test_dic.keys()}
             valid_dic['best_valid_acc_avg'] = valid_acc
             test_dic['best_test_acc_avg'] = test_acc
-            best_gf = self.gf_model
-            best_h = self.h_model
+            self.best_gf = self.gf_model
+            self.best_h = self.h_model
         elif not args.valselect:
-            best_gf = self.gf_model
-            best_h = self.h_model
+            self.best_gf = self.gf_model
+            self.best_h = self.h_model
 
-        utils.save_model(best_gf, os.path.join(self.config['save'],f'fold{self.test_fold_idx}', 'gf_weights.pt'))
-        utils.save_model(best_h, os.path.join(self.config['save'],f'fold{self.test_fold_idx}', 'h_weights.pt'))
+        utils.save_model(self.best_gf, os.path.join(self.base_path,self.config['save'],f'fold{self.test_fold_idx}', 'gf_weights.pt'))
+        utils.save_model(self.best_h, os.path.join(self.base_path,self.config['save'],f'fold{self.test_fold_idx}', 'h_weights.pt'))
         
         step_dic.update(test_dic)
         step_dic.update(train_dic)
@@ -294,12 +299,13 @@ def main():
         'kfold': tune.grid_search([i for i in range(args.kfold)]),
         'save': args.save,
         'ray_name': args.ray_name,
+        'BASE_PATH': BASE_PATH
     }
     #wandb
     wandb_config = {
         #'config':FLAGS, 
         'project':'AdaAug',
-        'group':experiment_name,
+        'group':f'{now_str}_' + experiment_name,
         #'name':experiment_name,
         'dir':'./',
         'job_type':"DataAugment",

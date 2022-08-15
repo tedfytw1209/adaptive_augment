@@ -6,7 +6,7 @@ from torch.utils.data import Sampler, Subset, SubsetRandomSampler
 from torchvision import transforms
 from datasets import EDFX,PTBXL,Chapman,WISDM
 import random
-
+from sklearn.preprocessing import StandardScaler
 
 _CIFAR_MEAN, _CIFAR_STD = (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)
 _SVHN_MEAN, _SVHN_STD = (0.43090966, 0.4302428, 0.44634357), (0.19652855, 0.19832038, 0.19942076)
@@ -338,9 +338,16 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
         search_trainset = Subset(dataset,rd_idxs[int(total*test_size):])
         validset = None
     elif len(fold_assign)==3: #train,valid,test
+        #dataset raw
         search_trainset = dataset_func(dataroot,mode=fold_assign[0],multilabel=multilabel,**kwargs)
         validset = dataset_func(dataroot,mode=fold_assign[1],multilabel=multilabel,**kwargs)
         testset = dataset_func(dataroot,mode=fold_assign[2],multilabel=multilabel,**kwargs)
+        #preprocess
+        ss = StandardScaler()
+        ss = search_trainset.fit_preprocess(ss)
+        ss = search_trainset.trans_preprocess(ss)
+        ss = validset.trans_preprocess(ss)
+        ss = testset.trans_preprocess(ss)
     else:
         if dataset_name == 'edfx': #edfx have special split method
             dataset = dataset_func(dataroot,multilabel=multilabel,**kwargs)

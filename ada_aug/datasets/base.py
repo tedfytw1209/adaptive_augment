@@ -6,12 +6,17 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 import torch
 from torch.utils.data import Dataset
-
+def apply_standardizer(X, ss):
+    X_tmp = []
+    for x in X:
+        x_shape = x.shape
+        X_tmp.append(ss.transform(x.flatten()[:,np.newaxis]).reshape(x_shape))
+    X_tmp = np.array(X_tmp)
+    return X_tmp
 
 class BaseDataset(Dataset):
-    def __init__(self,preprocess=[],transfroms=[],augmentations=[],class_augmentations=[],label_transfroms=[],**_kwargs):
+    def __init__(self,transfroms=[],augmentations=[],class_augmentations=[],label_transfroms=[],**_kwargs):
         #common args
-        self.preprocess = preprocess
         self.transfroms = transfroms
         self.augmentations = augmentations
         self.class_augmentations = class_augmentations
@@ -25,8 +30,6 @@ class BaseDataset(Dataset):
 
     def __getitem__(self, index):
         input_data, label = self.input_data[index], self.label[index]
-        for process in self.preprocess:
-            input_data = process(input_data)
         for transfrom in self.transfroms:
             input_data = transfrom(input_data)
         for augmentation in self.augmentations:
@@ -41,3 +44,10 @@ class BaseDataset(Dataset):
     
     def _get_data(self):
         return
+    
+    def fit_preprocess(self,preprocessor):
+        preprocessor.fit(np.vstack(self.input_data).flatten()[:,np.newaxis].astype(float))
+        return preprocessor
+    def trans_preprocess(self,preprocessor):
+        self.input_data = apply_standardizer(self.input_data,preprocessor)
+        return preprocessor

@@ -13,8 +13,8 @@ from .base import BaseDataset
 MAX_LENGTH = 5000
 
 class Chapman(BaseDataset):
-    def __init__(self, dataset_path,preprocess=[],transfroms=[],augmentations=[],label_transfroms=[],**_kwargs):
-        super(Chapman,self).__init__(preprocess=preprocess,transfroms=transfroms,augmentations=augmentations,label_transfroms=label_transfroms)
+    def __init__(self, dataset_path,transfroms=[],augmentations=[],label_transfroms=[],**_kwargs):
+        super(Chapman,self).__init__(transfroms=transfroms,augmentations=augmentations,label_transfroms=label_transfroms)
         self.dataset_path = dataset_path
         self.max_len = MAX_LENGTH
         self.num_class = 12

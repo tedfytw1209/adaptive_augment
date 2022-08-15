@@ -150,8 +150,8 @@ def _get_split_indices(
     return splits_proportions
 
 class EDFX(BaseDataset):
-    def __init__(self, dataset_path,preprocess=[],transfroms=[],augmentations=[],label_transfroms=[],**_kwargs):
-        super(EDFX,self).__init__(preprocess=preprocess,transfroms=transfroms,augmentations=augmentations,label_transfroms=label_transfroms)
+    def __init__(self, dataset_path,transfroms=[],augmentations=[],label_transfroms=[],**_kwargs):
+        super(EDFX,self).__init__(transfroms=transfroms,augmentations=augmentations,label_transfroms=label_transfroms)
         self.dataset_path = dataset_path
         self.max_len = MAX_LENGTH
         self.dataset = None

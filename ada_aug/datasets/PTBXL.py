@@ -14,8 +14,8 @@ LABEL_GROUPS = {"all":71, "diagnostic":44, "subdiagnostic":23, "superdiagnostic"
 
 class PTBXL(BaseDataset):
     def __init__(self, dataset_path, labelgroup="diagnostic",multilabel=True,mode='all',denoise=False,
-    preprocess=[],transfroms=[],augmentations=[],class_augmentations=[],label_transfroms=[],**_kwargs):
-        super(PTBXL,self).__init__(preprocess=preprocess,transfroms=transfroms,augmentations=augmentations,
+    transfroms=[],augmentations=[],class_augmentations=[],label_transfroms=[],**_kwargs):
+        super(PTBXL,self).__init__(transfroms=transfroms,augmentations=augmentations,
             class_augmentations=class_augmentations,label_transfroms=label_transfroms)
         assert labelgroup in ["all", "diagnostic", "subdiagnostic", "superdiagnostic", "form", "rhythm"]
         self.dataset_path = dataset_path
@@ -34,11 +34,15 @@ class PTBXL(BaseDataset):
             print('Using singlelabel')
         if self.denoise:
             print('Using denoise dataset')
-        if mode!='all':
-            print('Using default train/valid/test split: 8:1:1')
-        if mode in ['val','valid']:
-            mode = 'val'
-        self._get_data(mode=mode)
+        if isinstance(mode,list):
+            print('Using 10-fold classification fold ',mode)
+            self._get_data_fold(folds=mode)
+        else:
+            if mode!='all':
+                print('Using default train/valid/test split: 8:1:1')
+            if mode in ['val','valid']:
+                mode = 'val'
+            self._get_data(mode=mode)
     
     def _get_data(self,mode='all'):
         #file_list = os.listdir(os.path.join(self.dataset_path,self.labelgroup))
@@ -75,12 +79,22 @@ class PTBXL(BaseDataset):
             self.input_data = np.load(os.path.join(self.dataset_path,self.labelgroup,X_from%mode),allow_pickle=True).astype(float)
             self.label = np.load(os.path.join(self.dataset_path,self.labelgroup,y_from%mode),allow_pickle=True).astype(int)
 
-        '''if not self.multilabel:
-            label_count = np.sum(self.label,axis=1)
-            single_label = (label_count==1)
-            # no_label = (label_count==0) no normal in PTBXL
-            self.input_data = self.input_data[single_label]
-            self.label = self.label[single_label]
-            self.label = torch.argmax(self.label, dim=1).reshape(-1) #back to int'''
+    def _get_data_fold(self,folds):
+        self.input_data = None
+        self.label = None
+        X_from = 'X_fold%d_raw.npy'
+        if self.multilabel:
+            y_from = 'y_fold%d.npy'
+        else:
+            y_from = 'y_fold%d_ml.npy'
+        datas,labels = [],[]
+        for f in folds:
+            data = np.load(os.path.join(self.dataset_path,self.labelgroup,X_from%f),allow_pickle=True)
+            label = np.load(os.path.join(self.dataset_path,self.labelgroup,y_from%f),allow_pickle=True)
+            datas.append(data)
+            labels.append(label)
+        self.input_data = np.concatenate(datas,axis=0).astype(float)
+        self.label = np.concatenate(labels,axis=0).astype(int)
+
     def get_split_indices(self):
         return self.split_indices

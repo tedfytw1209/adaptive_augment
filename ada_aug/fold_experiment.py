@@ -20,7 +20,7 @@ from networks.projection import Projection_TSeries
 from config import get_search_divider
 from dataset import get_ts_dataloaders, get_num_class, get_label_name, get_dataset_dimension,get_num_channel
 from operation_tseries import TS_OPS_NAMES,ECG_OPS_NAMES,TS_ADD_NAMES,MAG_TEST_NAMES,NOMAG_TEST_NAMES
-from step_function import search_train,search_infer
+from step_function import train,infer,search_train,search_infer
 import wandb
 
 parser = argparse.ArgumentParser("ada_aug")
@@ -44,6 +44,7 @@ parser.add_argument('--grad_clip', type=float, default=5, help='gradient clippin
 parser.add_argument('--multilabel', action='store_true', default=False, help='using multilabel default False')
 parser.add_argument('--train_portion', type=float, default=1, help='portion of training data')
 parser.add_argument('--default_split', action='store_true', help='use dataset deault split')
+parser.add_argument('--kfold', type=int, default=0, help='use kfold cross validation')
 parser.add_argument('--proj_learning_rate', type=float, default=1e-2, help='learning rate for h')
 parser.add_argument('--proj_weight_decay', type=float, default=1e-3, help='weight decay for h]')
 parser.add_argument('--cutout', action='store_true', default=False, help='use cutout')
@@ -114,7 +115,7 @@ def main():
                   job_type="DataAugment",
                   reinit=True)
 
-    #  dataset settings
+    #  dataset settings for search
     n_channel = get_num_channel(args.dataset)
     n_class = get_num_class(args.dataset,args.labelgroup)
     sdiv = get_search_divider(args.model_name)
@@ -148,29 +149,20 @@ def main():
         n_layers=args.n_proj_layer, n_hidden=128, augselect=args.augselect).cuda()
 
     #  training settings
-    '''gf_optimizer = torch.optim.SGD(
-        gf_model.parameters(),
-        args.learning_rate,
-        momentum=args.momentum,
-        weight_decay=args.weight_decay)'''
     gf_optimizer = torch.optim.AdamW(gf_model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay) #follow ptbxl batchmark!!!
-    '''scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(gf_optimizer,
-        float(args.epochs), eta_min=args.learning_rate_min)'''
     scheduler = torch.optim.lr_scheduler.OneCycleLR(gf_optimizer, max_lr=args.learning_rate, epochs = args.epochs, steps_per_epoch = len(train_queue)) #follow ptbxl batchmark!!!
-
     h_optimizer = torch.optim.Adam(
         h_model.parameters(),
         lr=args.proj_learning_rate,
         betas=(0.9, 0.999),
         weight_decay=args.proj_weight_decay)
-
     if not multilabel:
         criterion = nn.CrossEntropyLoss()
     else:
         criterion = nn.BCEWithLogitsLoss(reduction='mean')
     criterion = criterion.cuda()
 
-    #  AdaAug settings
+    #  AdaAug settings for search
     after_transforms = train_queue.dataset.after_transforms
     adaaug_config = {'sampling': 'prob',
                     'k_ops': 1, #as paper
@@ -200,16 +192,16 @@ def main():
         diff_dic = {'difficult_aug':diff_augment,'reweight':diff_reweight,'lambda_aug':args.lambda_aug, 'class_adaptive':args.class_adapt,
                 'relative_loss':args.relative_loss}
         # searching
-        train_acc, train_obj, train_dic = search_train(args,train_queue, search_queue, tr_search_queue, gf_model, adaaug,
+        train_acc, train_obj, train_dic = train(train_queue, search_queue, tr_search_queue, gf_model, adaaug,
             criterion, gf_optimizer,scheduler, args.grad_clip, h_optimizer, epoch, args.search_freq, multilabel=multilabel,n_class=n_class,
             **diff_dic)
 
         # validation
-        valid_acc, valid_obj,valid_dic = search_infer(valid_queue, gf_model, criterion, multilabel=multilabel,n_class=n_class,mode='valid')
+        valid_acc, valid_obj,valid_dic = infer(valid_queue, gf_model, criterion, multilabel=multilabel,n_class=n_class,mode='valid')
         logging.info(f'train_acc {train_acc} valid_acc {valid_acc}')
         #scheduler.step()
         #test
-        test_acc, test_obj, test_dic  = search_infer(test_queue, gf_model, criterion, multilabel=multilabel,n_class=n_class,mode='test')
+        test_acc, test_obj, test_dic  = infer(test_queue, gf_model, criterion, multilabel=multilabel,n_class=n_class,mode='test')
         logging.info('test_acc %f', test_acc)
         #val select
         if args.valselect and valid_acc>best_val_acc:
@@ -235,7 +227,7 @@ def main():
     end_time = time.time()
     elapsed = end_time - start_time
 
-    test_acc, test_obj, test_dic = search_infer(test_queue, gf_model, criterion, multilabel=multilabel,n_class=n_class,mode='test')
+    test_acc, test_obj, test_dic = infer(test_queue, gf_model, criterion, multilabel=multilabel,n_class=n_class,mode='test')
     #wandb
     step_dic.update(test_dic)
     step_dic.update(result_valid_dic)

@@ -296,58 +296,24 @@ def get_dataloaders(dataset, batch, num_workers, dataroot, cutout,
 def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
                     cutout_length, split=0.5, split_idx=0, target_lb=-1,
                     search=True, search_divider=1, search_size=0, test_size=0.2, multilabel=False,
-                    default_split=False, labelgroup=''):
+                    default_split=False,fold_assign=[], labelgroup=''):
     '''
     If search is True, dataloader will give batches of image without after_transforms,
     the transform will be done by augment agent
     If search is False, used in benchmark training
     search_size = % of data only for search
     '''
-    if 'cifar10' in dataset_name:
-        transform_train_pre = transforms.Compose([
-            transforms.RandomCrop(32, padding=4),
-            transforms.RandomHorizontalFlip(),
+    transform_train_pre = transforms.Compose([
         ])
-        transform_train_after = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize(_CIFAR_MEAN, _CIFAR_STD),
-        ])
-        transform_test = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize(_CIFAR_MEAN, _CIFAR_STD),
-        ])
-    else:   #default for time series dataset_name
-        transform_train_pre = transforms.Compose([
-        ])
-        transform_train_after = transforms.Compose([
+    transform_train_after = transforms.Compose([
             #transforms.ToTensor(),
             #transforms.Normalize(_SVHN_MEAN, _SVHN_STD), assume already normalize
         ])
-        transform_test = transforms.Compose([
+    transform_test = transforms.Compose([
             #transforms.ToTensor(),
             #transforms.Normalize(_SVHN_MEAN, _SVHN_STD), assume already normalize
         ])
 
-    #if cutout and cutout_length != 0:
-    #    transform_train_after.transforms.append(CutoutDefault(cutout_length))
-    valid_size = split
-    subtrain_ratio = 1 - search_size
-    '''if dataset_name == 'cifar10':
-        total_trainset = torchvision.datasets.CIFAR10(root=dataroot, train=True, download=True, transform=None)
-        search_dataset = None
-        testset = torchvision.datasets.CIFAR10(root=dataroot, train=False, download=True, transform=None)
-    elif dataset_name == 'reduced_cifar10':
-        search_dataset = torchvision.datasets.CIFAR10(root=dataroot, train=True, download=True, transform=None)
-        sss = StratifiedShuffleSplit(n_splits=1, test_size=45744, random_state=0)
-        sss = sss.split(list(range(len(search_dataset))), search_dataset.targets)
-        train_idx, valid_idx = next(sss)
-        targets = [search_dataset.targets[idx] for idx in train_idx]
-        total_trainset = Subset(search_dataset, train_idx)
-        total_trainset.targets = targets
-        targets = [search_dataset.targets[idx] for idx in valid_idx]
-        search_dataset = Subset(search_dataset, valid_idx)
-        search_dataset.targets = targets
-        testset = torchvision.datasets.CIFAR10(root=dataroot, train=False, download=True, transform=None)'''
     kwargs = {}
     if dataset_name == 'ptbxl':
         dataset_func = PTBXL
@@ -362,7 +328,7 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
     else:
         ValueError(f'Invalid dataset name={dataset}')
     
-    if not default_split or dataset_name=='chapman': #chapman didn't have default split now!!!
+    if (not default_split or dataset_name=='chapman') and len(fold_assign)==0: #chapman didn't have default split now!!!
         dataset = dataset_func(dataroot,multilabel=multilabel,**kwargs)
         total = len(dataset)
         random.seed(0) #!!!
@@ -371,6 +337,10 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
         testset = Subset(dataset,rd_idxs[:int(total*test_size)])
         search_trainset = Subset(dataset,rd_idxs[int(total*test_size):])
         validset = None
+    elif len(fold_assign)==3: #train,valid,test
+        search_trainset = dataset_func(dataroot,mode=fold_assign[0],multilabel=multilabel,**kwargs)
+        validset = dataset_func(dataroot,mode=fold_assign[1],multilabel=multilabel,**kwargs)
+        testset = dataset_func(dataroot,mode=fold_assign[2],multilabel=multilabel,**kwargs)
     else:
         if dataset_name == 'edfx': #edfx have special split method
             dataset = dataset_func(dataroot,multilabel=multilabel,**kwargs)

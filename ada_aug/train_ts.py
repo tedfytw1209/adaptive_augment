@@ -16,6 +16,7 @@ from networks import get_model,get_model_tseries
 from networks.projection import Projection_TSeries
 from dataset import get_num_class, get_dataloaders, get_label_name, get_dataset_dimension, get_ts_dataloaders, get_num_channel
 from config import get_warmup_config
+from step_function import train,infer
 from warmup_scheduler import GradualWarmupScheduler
 import wandb
 
@@ -220,7 +221,7 @@ def main():
         step_dic = {'epoch':epoch}
         diff_dic = {'difficult_aug':diff_augment,'reweight':diff_reweight,'lambda_aug':args.lambda_aug, 'class_adaptive':args.class_adapt,
                 }
-        train_acc, train_obj, train_dic = train(
+        train_acc, train_obj, train_dic = train(args,
             train_queue, task_model, criterion, optimizer, scheduler, epoch, args.grad_clip, adaaug, 
                 multilabel=multilabel,n_class=n_class,**diff_dic)
         logging.info('train_acc %f', train_acc)
@@ -260,192 +261,6 @@ def main():
     wandb.log(step_dic)
     logging.info('test_acc %f %f', test_acc, test_acc5)
     logging.info(f'save to {args.save}')
-
-
-def train(train_queue, model, criterion, optimizer,scheduler, epoch, grad_clip, adaaug, multilabel=False,n_class=10,
-        difficult_aug=False,reweight=True,lambda_aug = 1.0,class_adaptive=False):
-    objs = utils.AvgrageMeter()
-    top1 = utils.AvgrageMeter()
-    top5 = utils.AvgrageMeter()
-    confusion_matrix = torch.zeros(n_class,n_class)
-    preds = []
-    targets = []
-    total = 0
-    for step, (input, seq_len, target) in enumerate(train_queue):
-        input = input.float().cuda()
-        target = target.cuda(non_blocking=True)
-        #  get augmented training data from adaaug
-        if class_adaptive: #target to onehot
-            policy_y = nn.functional.one_hot(target, num_classes=n_class).cuda().float()
-        else:
-            policy_y = None
-        aug_images = adaaug(input, seq_len, mode='exploit',y=policy_y)
-        model.train()
-        optimizer.zero_grad()
-        logits = model(aug_images, seq_len)
-        if multilabel:
-            aug_loss = criterion(logits, target.float())
-        else:
-            aug_loss = criterion(logits, target.long())
-        #difficult aug
-        batch_size = target.shape[0]
-        ori_loss = 0
-        if difficult_aug:
-            origin_logits = model(input, seq_len)
-            if multilabel:
-                ori_loss = criterion(origin_logits, target.float())
-            else:
-                ori_loss = criterion(origin_logits, target.long())
-            if reweight: #reweight part, a,b = ?
-                p_orig = origin_logits.softmax(dim=1)[torch.arange(batch_size), target].detach()
-                p_aug = logits.softmax(dim=1)[torch.arange(batch_size), target].clone().detach()
-                w_aug = torch.sqrt(p_orig * torch.clamp(p_orig - p_aug, min=0)) #a=0.5,b=0.5
-                if w_aug.sum() > 0:
-                    w_aug /= (w_aug.mean().detach() + 1e-6)
-                else:
-                    w_aug = 1
-                aug_loss = (w_aug * lambda_aug * aug_loss).mean()
-            else:
-                aug_loss = (lambda_aug * aug_loss).mean()
-        loss = ori_loss + aug_loss
-        loss.backward()
-        nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
-        optimizer.step()
-        scheduler.step()
-        n = input.size(0)
-        objs.update(loss.detach().item(), n)
-        if not multilabel:
-            prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))    
-            top1.update(prec1.detach().item(), n)
-            top5.update(prec5.detach().item(), n)
-
-        global_step = step + epoch * len(train_queue)
-        if global_step % args.report_freq == 0 and not multilabel:
-            logging.info('train: step=%03d loss=%e top1acc=%f top5acc=%f', global_step, objs.avg, top1.avg, top5.avg)
-
-        # log the policy
-        if step == 0:
-            adaaug.add_history(input, seq_len, target,y=policy_y)
-        
-        # Accuracy / AUROC
-        if not multilabel:
-            _, predicted = torch.max(logits.data, 1)
-            total += target.size(0)
-            for t, p in zip(target.data.view(-1), predicted.view(-1)):
-                confusion_matrix[t.long(), p.long()] += 1
-        else:
-            predicted = torch.sigmoid(logits.data)
-        preds.append(predicted.cpu().detach())
-        targets.append(target.cpu().detach())
-    #Total
-    if not multilabel:
-        perfrom = 100 * top1.avg
-        logging.info('Epoch train: loss=%e top1acc=%f top5acc=%f', objs.avg, top1.avg, top5.avg)
-    else:
-        targets_np = torch.cat(targets).numpy()
-        preds_np = torch.cat(preds).numpy()
-        try:
-            perfrom = 100 * roc_auc_score(targets_np, preds_np,average='macro')
-        except Exception as e:
-            nan_count = np.sum(np.isnan(preds_np))
-            inf_count = np.sum(np.isinf(preds_np))
-            print('predict nan, inf count: ',nan_count,inf_count)
-            raise e
-        logging.info('Epoch train: loss=%e macroAUROC=%f', objs.avg, perfrom)
-    #class-wise
-    if not multilabel:
-        cw_acc = 100 * confusion_matrix.diag()/(confusion_matrix.sum(1)+1e-9)
-        logging.info('class-wise Acc: ' + str(cw_acc))
-        nol_acc = 100 * confusion_matrix.diag().sum() / (confusion_matrix.sum()+1e-9)
-        logging.info('Overall Acc: %f',nol_acc)
-        perfrom = top1.avg
-        perfrom_cw = cw_acc
-    else:
-        targets_np = torch.cat(targets).numpy()
-        preds_np = torch.cat(preds).numpy()
-        perfrom_cw = utils.AUROC_cw(targets_np,preds_np)
-        perfrom = perfrom_cw.mean()
-        logging.info('class-wise AUROC: ' + '['+', '.join(['%.1f'%e for e in perfrom_cw])+']')
-        logging.info('Overall AUROC: %f',perfrom)
-    #wandb dic
-    out_dic = {}
-    out_dic[f'train_loss'] = objs.avg
-    if multilabel:
-        ptype = 'auroc'
-    else:
-        ptype = 'acc'
-    out_dic[f'train_{ptype}_avg'] = perfrom
-    for i,e_c in enumerate(perfrom_cw):
-        out_dic[f'train_{ptype}_c{i}'] = e_c
-    
-    return perfrom, objs.avg, out_dic
-
-
-def infer(valid_queue, model, criterion, multilabel=False, n_class=10,mode='test'):
-    objs = utils.AvgrageMeter()
-    top1 = utils.AvgrageMeter()
-    top5 = utils.AvgrageMeter()
-    model.eval()
-    confusion_matrix = torch.zeros(n_class,n_class)
-    preds = []
-    targets = []
-    total = 0
-    with torch.no_grad():
-        for input,seq_len, target in valid_queue:
-            input = input.float().cuda()
-            target = target.cuda(non_blocking=True)
-
-            logits = model(input,seq_len)
-            if multilabel:
-                loss = criterion(logits, target.float())
-            else:
-                loss = criterion(logits, target.long())
-            
-            n = input.size(0)
-            objs.update(loss.detach().item(), n)
-            if not multilabel:
-                _, predicted = torch.max(logits.data, 1)
-                prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
-                top1.update(prec1.detach().item(), n)
-                top5.update(prec5.detach().item(), n)
-                for t, p in zip(target.data.view(-1), predicted.view(-1)):
-                    confusion_matrix[t.long(), p.long()] += 1
-                _, predicted = torch.max(logits.data, 1)
-                total += target.size(0)
-            else:
-                predicted = torch.sigmoid(logits.data)
-            preds.append(predicted.cpu().detach())
-            targets.append(target.cpu().detach())
-
-    #class-wise
-    if not multilabel:
-        cw_acc = 100 * confusion_matrix.diag()/(confusion_matrix.sum(1)+1e-9)
-        logging.info('class-wise Acc: ' + str(cw_acc))
-        nol_acc = 100 * confusion_matrix.diag().sum() / (confusion_matrix.sum()+1e-9)
-        logging.info('Overall Acc: %f',nol_acc)
-        perfrom = top1.avg
-        perfrom_cw = cw_acc
-        perfrom2 = top5.avg
-    else:
-        targets_np = torch.cat(targets).numpy()
-        preds_np = torch.cat(preds).numpy()
-        perfrom_cw = utils.AUROC_cw(targets_np,preds_np)
-        perfrom = perfrom_cw.mean()
-        perfrom2 = perfrom
-        logging.info('class-wise AUROC: ' + '['+', '.join(['%.1f'%e for e in perfrom_cw])+']')
-        logging.info('Overall AUROC: %f',perfrom)
-    #wandb dic
-    out_dic = {}
-    out_dic[f'{mode}_loss'] = objs.avg
-    if multilabel:
-        ptype = 'auroc'
-    else:
-        ptype = 'acc'
-    out_dic[f'{mode}_{ptype}_avg'] = perfrom
-    for i,e_c in enumerate(perfrom_cw):
-        out_dic[f'{mode}_{ptype}_c{i}'] = e_c
-    
-    return perfrom, objs.avg, perfrom2, objs.avg, out_dic
 
 if __name__ == '__main__':
     main()

@@ -121,6 +121,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         diff_mix = not args.not_mix
         diff_reweight = not args.not_reweight
         test_fold_idx = self.config['kfold']
+        utils.create_exp_dir(os.path.join(self.config['save'],f'fold{test_fold_idx}'))
         train_val_test_folds = [[],[],[]] #train,valid,test
         for i in range(10):
             curr_fold = (i+test_fold_idx)%10 +1 #fold is 1~10
@@ -175,7 +176,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             n_class=n_class,
             gf_model=self.gf_model,
             h_model=self.h_model,
-            save_dir=args.save,
+            save_dir=os.path.join(self.config['save'],f'fold{test_fold_idx}'),
             config=adaaug_config,
             multilabel=multilabel,
             augselect=args.augselect,
@@ -221,8 +222,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             best_gf = self.gf_model
             best_h = self.h_model
 
-        utils.save_model(best_gf, os.path.join(args.save, 'gf_weights.pt'))
-        utils.save_model(best_h, os.path.join(args.save, 'h_weights.pt'))
+        utils.save_model(best_gf, os.path.join(self.config['save'],f'fold{self.test_fold_idx}', 'gf_weights.pt'))
+        utils.save_model(best_h, os.path.join(self.config['save'],f'fold{self.test_fold_idx}', 'h_weights.pt'))
         
         step_dic.update(test_dic)
         step_dic.update(train_dic)
@@ -289,7 +290,8 @@ def main():
         'lambda_aug': args.lambda_aug,
         'class_adapt': args.class_adapt,
         'relative_loss': args.relative_loss,
-        'kfold': tune.grid_search([i for i in range(args.kfold)])
+        'kfold': tune.grid_search([i for i in range(args.kfold)]),
+        'save': args.save
     }
     #wandb
     wandb_config = {

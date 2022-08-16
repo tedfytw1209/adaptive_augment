@@ -21,6 +21,8 @@ from config import get_search_divider
 from dataset import get_ts_dataloaders, get_num_class, get_label_name, get_dataset_dimension,get_num_channel
 from operation_tseries import TS_OPS_NAMES,ECG_OPS_NAMES,TS_ADD_NAMES,MAG_TEST_NAMES,NOMAG_TEST_NAMES
 from step_function import train,infer,search_train,search_infer
+from warmup_scheduler import GradualWarmupScheduler
+from config import get_warmup_config
 import wandb
 
 import ray
@@ -45,7 +47,7 @@ parser.add_argument('--ray_dir', type=str, default=RAY_DIR,  help='Ray directory
 parser.add_argument('--ray_name', type=str, default='ray_experiment')
 parser.add_argument('--cpu', type=float, default=4, help='Allocated by Ray')
 parser.add_argument('--gpu', type=float, default=0.12, help='Allocated by Ray')
-###for ray###
+###
 parser.add_argument('--epochs', type=int, default=20, help='number of training epochs')
 parser.add_argument('--model_path', type=str, default='saved_models', help='path to save the model')
 parser.add_argument('--save', type=str, default='EXP', help='experiment name')
@@ -63,18 +65,25 @@ parser.add_argument('--use_cuda', type=bool, default=True, help="use cuda defaul
 parser.add_argument('--use_parallel', type=bool, default=False, help="use data parallel default False")
 parser.add_argument('--model_name', type=str, default='wresnet40_2', help="mode _name")
 parser.add_argument('--num_workers', type=int, default=0, help="num_workers")
+parser.add_argument('--search_dataset', type=str, default='./', help='search dataset name')
+parser.add_argument('--gf_model_name', type=str, default='./', help='gf_model name')
+parser.add_argument('--gf_model_path', type=str, default='./', help='gf_model path')
+parser.add_argument('--h_model_path', type=str, default='./', help='h_model path')
 parser.add_argument('--k_ops', type=int, default=1, help="number of augmentation applied during training")
+parser.add_argument('--delta', type=float, default=0.3, help="degree of perturbation in magnitude")
 parser.add_argument('--temperature', type=float, default=1.0, help="temperature")
-parser.add_argument('--search_freq', type=float, default=1, help='exploration frequency')
-parser.add_argument('--n_proj_layer', type=int, default=0, help="number of hidden layer in augmentation policy projection")
+parser.add_argument('--n_proj_layer', type=int, default=0, help="number of additional hidden layer in augmentation policy projection")
+parser.add_argument('--n_proj_hidden', type=int, default=128, help="number of hidden units in augmentation policy projection layers")
+parser.add_argument('--restore_path', type=str, default='./', help='restore model path')
+parser.add_argument('--restore', action='store_true', default=False, help='restore model default False')
 parser.add_argument('--valselect', action='store_true', default=False, help='use valid select')
+parser.add_argument('--notwarmup', action='store_true', default=False, help='use valid select')
 parser.add_argument('--augselect', type=str, default='', help="augmentation selection")
 parser.add_argument('--diff_aug', action='store_true', default=False, help='use valid select')
 parser.add_argument('--not_mix', action='store_true', default=False, help='use valid select')
 parser.add_argument('--not_reweight', action='store_true', default=False, help='use valid select')
 parser.add_argument('--lambda_aug', type=float, default=1.0, help="augment sample weight")
 parser.add_argument('--class_adapt', action='store_true', default=False, help='class adaptive')
-parser.add_argument('--relative_loss', action='store_true', default=False, help='use valid select')
 
 args = parser.parse_args()
 debug = True if args.save == "debug" else False
@@ -121,7 +130,6 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         class2label = get_label_name(args.dataset, args.dataroot)
         multilabel = args.multilabel
         diff_augment = args.diff_aug
-        diff_mix = not args.not_mix
         diff_reweight = not args.not_reweight
         test_fold_idx = self.config['kfold']
         train_val_test_folds = [[],[],[]] #train,valid,test
@@ -138,51 +146,70 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             args.dataset, args.batch_size, args.num_workers,
             args.dataroot, args.cutout, args.cutout_length,
             split=args.train_portion, split_idx=0, target_lb=-1,
-            search=True, search_divider=sdiv,search_size=args.search_size,
-            test_size=args.test_size,multilabel=args.multilabel,default_split=args.default_split,
+            search=False,test_size=args.test_size,multilabel=args.multilabel,default_split=args.default_split,
             fold_assign=train_val_test_folds,labelgroup=args.labelgroup)
-        #  model settings
-        self.gf_model = get_model_tseries(model_name=args.model_name, num_class=n_class,n_channel=n_channel,
-            use_cuda=True, data_parallel=False,dataset=args.dataset)
-        h_input = self.gf_model.fc.in_features
-        if args.class_adapt:
-            h_input =h_input + n_class
-        self.h_model = Projection_TSeries(in_features=h_input,
-            n_layers=args.n_proj_layer, n_hidden=128, augselect=args.augselect).cuda()
-        #  training settings
-        self.gf_optimizer = torch.optim.AdamW(self.gf_model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay) #follow ptbxl batchmark!!!
-        self.scheduler = torch.optim.lr_scheduler.OneCycleLR(self.gf_optimizer, max_lr=args.learning_rate, 
-            epochs = args.epochs, steps_per_epoch = len(self.train_queue)) #follow ptbxl batchmark!!!
-        self.h_optimizer = torch.optim.Adam(
-            self.h_model.parameters(),
-            lr=args.proj_learning_rate,
-            betas=(0.9, 0.999),
-            weight_decay=args.proj_weight_decay)
+        #  task model settings
+        self.task_model = get_model_tseries(model_name=args.model_name,
+                            num_class=n_class,n_channel=n_channel,
+                            use_cuda=True, data_parallel=False,dataset=args.dataset)
+        #follow ptbxl batchmark!!!
+        self.optimizer = torch.optim.AdamW(self.task_model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
+        self.scheduler = torch.optim.lr_scheduler.OneCycleLR(self.optimizer, max_lr=args.learning_rate, epochs = args.epochs, steps_per_epoch = len(self.train_queue)) #follow ptbxl batchmark!!!
+        if not args.notwarmup:
+            m, e = get_warmup_config(args.dataset)
+            self.scheduler = GradualWarmupScheduler( #paper not mention!!!
+                self.optimizer,
+                multiplier=m,
+                total_epoch=e,
+                after_scheduler=self.scheduler)
         if not multilabel:
             self.criterion = nn.CrossEntropyLoss()
         else:
-            self.criterion = nn.BCEWithLogitsLoss(reduction='mean')
+            self.criterion = nn.BCEWithLogitsLoss(reduce='mean')
         self.criterion = self.criterion.cuda()
+        #  restore setting
+        if args.restore:
+            trained_epoch = utils.restore_ckpt(self.task_model, self.optimizer, self.scheduler, args.restore_path, location=args.gpu) + 1
+            n_epoch = args.epochs - trained_epoch
+        else:
+            trained_epoch = 0
+            n_epoch = args.epochs
+        #  load trained adaaug sub models
+        search_n_class = get_num_class(args.search_dataset,args.labelgroup)
+        self.gf_model = get_model_tseries(model_name=args.gf_model_name,
+                            num_class=search_n_class,n_channel=n_channel,
+                            use_cuda=True, data_parallel=False,dataset=args.dataset)
+        h_input = self.gf_model.fc.in_features
+        if args.class_adapt:
+            h_input += n_class
+        self.h_model = Projection_TSeries(in_features=h_input,
+                            n_layers=args.n_proj_layer,
+                            n_hidden=args.n_proj_hidden,
+                            augselect=args.augselect).cuda()
+        utils.load_model(self.gf_model, os.path.join(self.config['BASE_PATH'],self.config['save'],f'fold{test_fold_idx}', 'gf_weights.pt'), location=args.gpu)
+        utils.load_model(self.h_model, os.path.join(self.config['BASE_PATH'],self.config['save'],f'fold{test_fold_idx}', 'h_weights.pt'), location=args.gpu)
 
-        #  AdaAug settings for search
+        for param in self.gf_model.parameters():
+            param.requires_grad = False
+        for param in self.h_model.parameters():
+            param.requires_grad = False
         after_transforms = self.train_queue.dataset.after_transforms
         adaaug_config = {'sampling': 'prob',
-                    'k_ops': self.config['k_ops'], #as paper
-                    'delta': 0.0, 
-                    'temp': 1.0, 
-                    'search_d': get_dataset_dimension(args.dataset),
+                    'k_ops': args.k_ops,
+                    'delta': args.delta,
+                    'temp': args.temperature,
+                    'search_d': get_dataset_dimension(args.search_dataset),
                     'target_d': get_dataset_dimension(args.dataset),
-                    'gf_model_name': args.model_name}
-
+                    'gf_model_name': args.gf_model_name}
         self.adaaug = AdaAug_TS(after_transforms=after_transforms,
-            n_class=n_class,
-            gf_model=self.gf_model,
-            h_model=self.h_model,
-            save_dir=os.path.join(self.config['save'],f'fold{test_fold_idx}'),
-            config=adaaug_config,
-            multilabel=multilabel,
-            augselect=args.augselect,
-            class_adaptive=args.class_adapt)
+                    n_class=search_n_class,
+                    gf_model=self.gf_model,
+                    h_model=self.h_model,
+                    save_dir=os.path.join(self.config['BASE_PATH'],self.config['save'],f'fold{test_fold_idx}'),
+                    config=adaaug_config,
+                    multilabel=multilabel,
+                    augselect=args.augselect,
+                    class_adaptive=args.class_adapt)
         #to self
         self.n_channel = n_channel
         self.n_class = n_class
@@ -194,6 +221,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         self.diff_reweight =diff_reweight
         self.result_valid_dic, self.result_test_dic = {}, {}
         self.best_val_acc = -1
+        self.best_task = None
         self.best_gf,self.best_h = None,None
         self.base_path = self.config['BASE_PATH']
     def step(self):#use step replace _train
@@ -201,20 +229,19 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             wandb.config.update(self.config)
         print(f'Starting Ray ID {self.trial_id} Iteration: {self._iteration}')
         args = self.config['args']
-        lr = self.scheduler.get_last_lr()[0]
         step_dic={'epoch':self._iteration}
-        diff_dic = {'difficult_aug':self.diff_augment,'reweight':self.diff_reweight,'lambda_aug':args.lambda_aug, 'class_adaptive':args.class_adapt,
-                'relative_loss':args.relative_loss}
-        # searching
-        train_acc, train_obj, train_dic = search_train(args,self.train_queue, self.search_queue, self.tr_search_queue, self.gf_model, self.adaaug,
-            self.criterion, self.gf_optimizer,self.scheduler, args.grad_clip, self.h_optimizer, self._iteration, args.search_freq, 
-            multilabel=self.multilabel,n_class=self.n_class, **diff_dic)
-
+        diff_dic = {'difficult_aug':self.diff_augment,'reweight':self.diff_reweight,'lambda_aug':args.lambda_aug, 'class_adaptive':args.class_adapt
+                }
+        # training
+        train_acc, train_obj, train_dic = train(args,
+            self.train_queue, self.task_model, self.criterion, self.optimizer, self.scheduler, self._iteration, args.grad_clip, self.adaaug, 
+                multilabel=self.multilabel,n_class=self.n_class,**diff_dic)
         # validation
-        valid_acc, valid_obj,valid_dic = search_infer(self.valid_queue, self.gf_model, self.criterion, multilabel=self.multilabel,n_class=self.n_class,mode='valid')
-        #scheduler.step()
+        valid_acc, valid_obj, _, _, valid_dic = infer(self.valid_queue, self.task_model, self.criterion, multilabel=self.multilabel,
+                n_class=self.n_class,mode='valid')
         #test
-        test_acc, test_obj, test_dic  = search_infer(self.test_queue, self.gf_model, self.criterion, multilabel=self.multilabel,n_class=self.n_class,mode='test')
+        test_acc, test_obj, test_acc5, _,test_dic  = infer(self.test_queue, self.task_model, self.criterion, multilabel=self.multilabel,
+                n_class=self.n_class,mode='test')
         #val select
         if args.valselect and valid_acc>self.best_val_acc:
             self.best_val_acc = valid_acc
@@ -222,15 +249,13 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             self.result_test_dic = {f'result_{k}': test_dic[k] for k in test_dic.keys()}
             valid_dic['best_valid_acc_avg'] = valid_acc
             test_dic['best_test_acc_avg'] = test_acc
-            self.best_gf = self.gf_model
-            self.best_h = self.h_model
+            self.best_task = self.task_model
         elif not args.valselect:
-            self.best_gf = self.gf_model
-            self.best_h = self.h_model
+            self.best_task = self.task_model
 
-        utils.save_model(self.best_gf, os.path.join(self.base_path,self.config['save'],f'fold{self.test_fold_idx}', 'gf_weights.pt'))
-        utils.save_model(self.best_h, os.path.join(self.base_path,self.config['save'],f'fold{self.test_fold_idx}', 'h_weights.pt'))
-        
+        #utils.save_model(self.best_task, os.path.join(self.base_path,self.config['save'],f'fold{self.test_fold_idx}', 'h_weights.pt'))
+        utils.save_ckpt(self.best_task, self.optimizer, self.scheduler, self._iteration,
+            os.path.join(self.base_path,self.config['save'],f'fold{self.test_fold_idx}', 'weights.pt'))
         step_dic.update(test_dic)
         step_dic.update(train_dic)
         step_dic.update(valid_dic)
@@ -268,8 +293,12 @@ def main():
     utils.reproducibility(args.seed)
     #logging.info('gpu device = %d' % args.gpu)
     #logging.info("args = %s", args)
+    date_time_str = now_str
+    h_model_dir = args.h_model_path
+    h_model_dir = h_model_dir.strip('/').split('/')[-1]
     #wandb
-    experiment_name = f'{Aug_type}{description}lamda{args.lambda_aug}_search{args.augselect}_vselect_{args.dataset}{args.labelgroup}_{args.model_name}_e{args.epochs}_lr{args.learning_rate}'
+    group_name = f'{Aug_type}_tottrain{args.augselect}_vselect_{args.dataset}{args.labelgroup}_{args.model_name}_hmodel{h_model_dir}_e{args.epochs}_lr{args.learning_rate}'
+    experiment_name = f'{Aug_type}{args.k_ops}_tottrain{args.augselect}_vselect_{args.dataset}{args.labelgroup}_{args.model_name}_hmodel{h_model_dir}_e{args.epochs}_lr{args.learning_rate}'
     '''run_log = wandb.init(config=args, 
                   project='AdaAug',
                   group=experiment_name,
@@ -286,6 +315,7 @@ def main():
         'lr': args.learning_rate,
         'wd': args.weight_decay,
         'momentum': args.momentum,
+        'delta': args.delta,
         'temperature': args.temperature,
         'k_ops': args.k_ops,
         'train_portion': args.train_portion, ## for text data controlling ratio of training data
@@ -295,11 +325,12 @@ def main():
         'diff_aug': args.diff_aug, #!!!class-wise search not finish yet
         'lambda_aug': args.lambda_aug,
         'class_adapt': args.class_adapt,
-        'relative_loss': args.relative_loss,
         'kfold': tune.grid_search([i for i in range(args.kfold)]),
         'save': args.save,
         'ray_name': args.ray_name,
-        'BASE_PATH': BASE_PATH
+        'BASE_PATH': BASE_PATH,
+        'gf_model_path': args.gf_model_path,
+        'h_model_path': args.gf_model_path,
     }
     #wandb
     wandb_config = {

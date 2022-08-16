@@ -121,7 +121,7 @@ def main():
         args.dataset, args.batch_size, args.num_workers,
         args.dataroot, args.cutout, args.cutout_length,
         split=args.train_portion, split_idx=0, target_lb=-1,
-        search=True, test_size=args.test_size,multilabel=args.multilabel,
+        search=False, test_size=args.test_size,multilabel=args.multilabel,
         default_split=args.default_split,labelgroup=args.labelgroup)
 
     logging.info(f'Dataset: {args.dataset}')

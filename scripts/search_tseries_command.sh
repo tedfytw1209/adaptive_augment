@@ -72,7 +72,7 @@ python ada_aug/search_ts.py --k_ops 1 --report_freq 5 --num_workers 4 --epochs 5
  --dataset ptbxl --model_name lstm_ptb --save ptbxl_lstmptb --gpu 4 --weight_decay 0.01 --proj_learning_rate 0.0001 --search_freq 10 \
  --temperature 3 --default_split --dataroot /mnt/data2/teddy/ptbxl-dataset --train_portion 0.5 --search_size 0.5 --labelgroup subdiagnostic --valselect
 
-CUDA_VISIBLE_DEVICES=1 python ada_aug/fold_experiment.py --k_ops 1 --report_freq 5 --num_workers 4 --epochs 50 --batch_size 128 \
+CUDA_VISIBLE_DEVICES=1 python ada_aug/fold_search_ts.py --k_ops 1 --report_freq 5 --num_workers 4 --epochs 50 --batch_size 128 \
  --learning_rate 0.01  --dataset ptbxl --model_name resnet_wang --save ptbsup_resnet_kfold --gpu 1 --cpu 2 \
  --ray_name ptbsup_resnet_kfold --kfold 10 --weight_decay 0.01 --proj_learning_rate 0.0001 --search_freq 10 \
  --temperature 3 --dataroot /mnt/data2/teddy/ptbxl-dataset --train_portion 0.5 --search_size 0.5 --labelgroup superdiagnostic --valselect

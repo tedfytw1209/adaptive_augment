@@ -100,10 +100,11 @@ def main():
     h_model_dir = args.h_model_path
     h_model_dir = h_model_dir.strip('/').split('/')[-1]
     #wandb
+    group_name = f'{Aug_type}_tottrain{args.augselect}_vselect_{args.dataset}{args.labelgroup}_{args.model_name}_hmodel{h_model_dir}_e{args.epochs}_lr{args.learning_rate}'
     experiment_name = f'{Aug_type}{args.k_ops}_tottrain{args.augselect}_vselect_{args.dataset}{args.labelgroup}_{args.model_name}_hmodel{h_model_dir}_e{args.epochs}_lr{args.learning_rate}'
     run_log = wandb.init(config=args, 
                   project='AdaAug',
-                  group=experiment_name,
+                  group=group_name,
                   name=f'{date_time_str}_' + experiment_name,
                   dir='./',
                   job_type="DataAugment",

@@ -319,8 +319,7 @@ def main():
     #     train_spec["restore"] = FLAGS.restore
 
     ray.init()
-    fold_len = len(hparams['kfold'])
-    print(f'Run {fold_len} folds experiment')
+    print(f'Run {args.kfold} folds experiment')
     #tune_scheduler = ASHAScheduler(metric="valid_acc", mode="max",max_t=hparams['num_epochs'],grace_period=10,
     #    reduction_factor=3,brackets=1)1
     tune_scheduler = None

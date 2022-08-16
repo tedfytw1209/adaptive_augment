@@ -69,5 +69,10 @@ fi
 SAVE=${DATASET}_${MODEL}_${BATCH}_${EPOCH}_SLR${SLR}_SF${SF}_cutout_${CUTOUT}_lr${LR}_wd${WD}
 #python ada_aug/search_ts.py --k_ops ${KOPS}  --report_freq 10 --num_workers 4 --epochs ${EPOCH} --batch_size ${BATCH} --learning_rate ${LR} --dataset ${DATASET} --model_name ${MODEL} --save ${SAVE} --gpu ${GPU} --weight_decay ${WD} --proj_learning_rate ${SLR} --search_freq ${SF} --cutout --cutout_length ${CUTOUT} --temperature ${TEMP}
 python ada_aug/search_ts.py --k_ops 1 --report_freq 5 --num_workers 4 --epochs 50 --batch_size 128 --learning_rate 0.01 \
- --dataset ptbxl --model_name lstm_ptb --save ptbxl_lstmptb --gpu 4 --weight_decay 0.01 --proj_learning_rate 0.001 --search_freq 5 \
+ --dataset ptbxl --model_name lstm_ptb --save ptbxl_lstmptb --gpu 4 --weight_decay 0.01 --proj_learning_rate 0.0001 --search_freq 10 \
  --temperature 3 --default_split --dataroot /mnt/data2/teddy/ptbxl-dataset --train_portion 0.5 --search_size 0.5 --labelgroup subdiagnostic --valselect
+
+CUDA_VISIBLE_DEVICES=1 python ada_aug/fold_experiment.py --k_ops 1 --report_freq 5 --num_workers 4 --epochs 50 --batch_size 128 \
+ --learning_rate 0.01  --dataset ptbxl --model_name resnet_wang --save ptbsup_resnet_kfold --gpu 1 --cpu 2 \
+ --ray_name ptbsup_resnet_kfold --kfold 10 --weight_decay 0.01 --proj_learning_rate 0.0001 --search_freq 10 \
+ --temperature 3 --dataroot /mnt/data2/teddy/ptbxl-dataset --train_portion 0.5 --search_size 0.5 --labelgroup superdiagnostic --valselect

@@ -170,10 +170,9 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         #  restore setting
         if args.restore:
             trained_epoch = utils.restore_ckpt(self.task_model, self.optimizer, self.scheduler, args.restore_path, location=args.gpu) + 1
-            n_epoch = args.epochs - trained_epoch
+            print(f'From epoch {trained_epoch}, Resume')
         else:
             trained_epoch = 0
-            n_epoch = args.epochs
         #  load trained adaaug sub models
         search_n_class = get_num_class(args.search_dataset,args.labelgroup)
         self.gf_model = get_model_tseries(model_name=args.gf_model_name,
@@ -222,7 +221,6 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         self.result_valid_dic, self.result_test_dic = {}, {}
         self.best_val_acc = -1
         self.best_task = None
-        self.best_gf,self.best_h = None,None
         self.base_path = self.config['BASE_PATH']
     def step(self):#use step replace _train
         if self._iteration==0:
@@ -274,12 +272,12 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
     def _save(self, checkpoint_dir):
         print(checkpoint_dir)
         path = os.path.join(checkpoint_dir, 'gf_check_weights.pt')
-        utils.save_model(self.best_gf, path)
+        utils.save_model(self.best_task, path)
         print(path)
         return path
 
     def _restore(self, checkpoint_path):
-        utils.load_model(self.gf_model, f'{checkpoint_path}/gf_check_weights.pt', location=0) #0 as default
+        utils.load_model(self.task_model, f'{checkpoint_path}/gf_check_weights.pt', location=0) #0 as default
 
     def reset_config(self, new_config):
         self.config = new_config

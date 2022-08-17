@@ -169,7 +169,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         self.criterion = self.criterion.cuda()
         #  restore setting
         if args.restore:
-            trained_epoch = utils.restore_ckpt(self.task_model, self.optimizer, self.scheduler, args.restore_path, location=args.gpu) + 1
+            trained_epoch = utils.restore_ckpt(self.task_model, self.optimizer, self.scheduler, args.restore_path, location=0) + 1
             print(f'From epoch {trained_epoch}, Resume')
         else:
             trained_epoch = 0
@@ -185,8 +185,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                             n_layers=args.n_proj_layer,
                             n_hidden=args.n_proj_hidden,
                             augselect=args.augselect).cuda()
-        utils.load_model(self.gf_model, os.path.join(self.config['BASE_PATH'],f'{args.gf_model_path}',f'fold{test_fold_idx}', 'gf_weights.pt'), location=args.gpu)
-        utils.load_model(self.h_model, os.path.join(self.config['BASE_PATH'],f'{args.h_model_path}',f'fold{test_fold_idx}', 'h_weights.pt'), location=args.gpu)
+        utils.load_model(self.gf_model, os.path.join(self.config['BASE_PATH'],f'{args.gf_model_path}',f'fold{test_fold_idx}', 'gf_weights.pt'), location=0)
+        utils.load_model(self.h_model, os.path.join(self.config['BASE_PATH'],f'{args.h_model_path}',f'fold{test_fold_idx}', 'h_weights.pt'), location=0)
 
         for param in self.gf_model.parameters():
             param.requires_grad = False

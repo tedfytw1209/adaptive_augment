@@ -53,7 +53,7 @@ def get_model_tseries(model_name='lstm', num_class=10, n_channel=3, use_cuda=Tru
                   }
         net = LSTM_ecg
     elif model_name == 'lstm_ptb':
-        n_hidden = 256
+        n_hidden = 128
         model_config = {
                   'n_hidden': n_hidden,
                   'n_layers': 2,

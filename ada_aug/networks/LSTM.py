@@ -54,10 +54,10 @@ class LSTM_ecg(nn.Module): #LSTM for time series
         self.concat_pool = config.get('concat_pool',False)
         if self.concat_pool:
             self.concat_fc = nn.Sequential(*[nn.Dropout(config['fc_drop']),
-                nn.Linear(3 * config['n_hidden'], config['n_hidden']/2),
-                nn.BatchNorm1d(config['n_hidden']/2),
+                nn.Linear(3 * config['n_hidden'], config['n_hidden']),
+                nn.BatchNorm1d(config['n_hidden']),
                 nn.ReLU(),])
-        self.fc = nn.Linear(config['n_hidden']/2, config['n_output'])
+        self.fc = nn.Linear(config['n_hidden'], config['n_output'])
 
     def extract_features(self, texts, seq_lens):
         batch_size = texts.shape[0]
@@ -96,7 +96,7 @@ class LSTM_ptb(nn.Module): #LSTM for PTBXL
         self.n_layers = config['n_layers']   # number of layers
         self.bidir_factor = 1 + int(config['b_dir'])
         self.config = config
-        self.lstm = nn.LSTM(config['n_embed'], config['n_hidden'], num_layers=config['n_layers']
+        self.lstm = nn.LSTM(config['n_embed'], 2*config['n_hidden'], num_layers=config['n_layers']
                 , bidirectional=config['b_dir'], batch_first=True)
         self.concat_pool = config.get('concat_pool',False)
         if self.concat_pool:
@@ -106,9 +106,9 @@ class LSTM_ptb(nn.Module): #LSTM for PTBXL
             mult_factor = 1
             self.pool = LastPoolRNN(config['b_dir'])
         self.concat_fc = nn.Sequential(*[
-                nn.BatchNorm1d(self.bidir_factor * mult_factor * config['n_hidden']),
+                nn.BatchNorm1d(self.bidir_factor * mult_factor * 2*config['n_hidden']),
                 nn.Dropout(config['rnn_drop']),
-                nn.Linear(self.bidir_factor * mult_factor * config['n_hidden'], config['n_hidden']),
+                nn.Linear(self.bidir_factor * mult_factor * 2*config['n_hidden'], config['n_hidden']),
                 nn.ReLU(),])
         self.fc = nn.Sequential(*[
                 nn.BatchNorm1d(config['n_hidden']),

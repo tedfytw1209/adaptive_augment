@@ -93,10 +93,13 @@ class LSTM_ptb(nn.Module): #LSTM for PTBXL
     def __init__(self, config):
         super().__init__()
         # params: "n_" means dimension
+        self.input_channels = config['n_embed']
+        self.z_dim = config['n_hidden']
+        self.num_classes = config['n_output']
         self.n_layers = config['n_layers']   # number of layers
         self.bidir_factor = 1 + int(config['b_dir'])
         self.config = config
-        self.lstm = nn.LSTM(config['n_embed'], 2*config['n_hidden'], num_layers=config['n_layers']
+        self.lstm = nn.LSTM(config['n_embed'], config['n_hidden'], num_layers=config['n_layers']
                 , bidirectional=config['b_dir'], batch_first=True)
         self.concat_pool = config.get('concat_pool',False)
         if self.concat_pool:
@@ -106,9 +109,9 @@ class LSTM_ptb(nn.Module): #LSTM for PTBXL
             mult_factor = 1
             self.pool = LastPoolRNN(config['b_dir'])
         self.concat_fc = nn.Sequential(*[
-                nn.BatchNorm1d(self.bidir_factor * mult_factor * 2*config['n_hidden']),
+                nn.BatchNorm1d(self.bidir_factor * mult_factor * config['n_hidden']),
                 nn.Dropout(config['rnn_drop']),
-                nn.Linear(self.bidir_factor * mult_factor * 2*config['n_hidden'], config['n_hidden']),
+                nn.Linear(self.bidir_factor * mult_factor * config['n_hidden'], config['n_hidden']),
                 nn.ReLU(),])
         self.fc = nn.Sequential(*[
                 nn.BatchNorm1d(config['n_hidden']),
@@ -116,12 +119,22 @@ class LSTM_ptb(nn.Module): #LSTM for PTBXL
                 nn.Linear(config['n_hidden'], config['n_output'])])
         self.fc.in_features = config['n_hidden']
 
-    def extract_features(self, texts, seq_lens):
-        packed_embedded = nn.utils.rnn.pack_padded_sequence(
-            texts, seq_lens.cpu(), batch_first=True)  # seq_len:128 [0]: lenght of each sentence
+    def extract_features(self, x, seq_lens=None):
+        x_shape = x.shape
+        if self.input_channels == x_shape[1]:
+            x = x.transpose(1, 2) #(bs,ch,len) -> (bs, len, ch)
+        
+        if seq_lens!=None:
+            packed_embedded = nn.utils.rnn.pack_padded_sequence(
+                x, seq_lens.cpu(), batch_first=True)  # seq_len:128 [0]: lenght of each sentence
+        else:
+            packed_embedded = x
         rnn_out, (hidden, cell) = self.lstm(
             packed_embedded)  # bs X len X n_hidden
-        out_pad, _out_len = rnn_utils.pad_packed_sequence(rnn_out, batch_first=True)
+        if seq_lens!=None:
+            out_pad, _out_len = rnn_utils.pad_packed_sequence(rnn_out, batch_first=True)
+        else:
+            out_pad = rnn_out
         out_pad = out_pad.transpose(1, 2) # bs, n_hidden, len
         features = self.pool(out_pad) #bs, ch * (1+b_dir) * concat pool
         features = self.concat_fc(features) #bs, ch
@@ -131,7 +144,7 @@ class LSTM_ptb(nn.Module): #LSTM for PTBXL
         fc_out = self.fc(features)  # bs x d_out
         return fc_out
 
-    def forward(self, x, seq_lens):
+    def forward(self, x, seq_lens=None):
         x = self.extract_features(x, seq_lens)
         return self.classify(x)
 

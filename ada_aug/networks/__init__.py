@@ -78,6 +78,7 @@ def get_model_tseries(model_name='lstm', num_class=10, n_channel=3, use_cuda=Tru
                   'inplanes': n_hidden,
                   'num_classes': num_class,
                   'kernel_size': 5,
+                  'lin_ftrs_head': [n_hidden], #8/17 add
                   'ps_head': 0.5}
         model_config = {}
         net = resnet1d_wang
@@ -92,6 +93,7 @@ def get_model_tseries(model_name='lstm', num_class=10, n_channel=3, use_cuda=Tru
         raise NameError('no model named, %s' % name)
     config.update(model_config)
     model = net(config)
+    print(model)
     if data_parallel:
         model = model.cuda()
         model = DataParallel(model)

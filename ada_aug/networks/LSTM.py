@@ -54,10 +54,10 @@ class LSTM_ecg(nn.Module): #LSTM for time series
         self.concat_pool = config.get('concat_pool',False)
         if self.concat_pool:
             self.concat_fc = nn.Sequential(*[nn.Dropout(config['fc_drop']),
-                nn.Linear(3 * config['n_hidden'], config['n_hidden']),
-                nn.BatchNorm1d(config['n_hidden']),
+                nn.Linear(3 * config['n_hidden'], config['n_hidden']/2),
+                nn.BatchNorm1d(config['n_hidden']/2),
                 nn.ReLU(),])
-        self.fc = nn.Linear(config['n_hidden'], config['n_output'])
+        self.fc = nn.Linear(config['n_hidden']/2, config['n_output'])
 
     def extract_features(self, texts, seq_lens):
         batch_size = texts.shape[0]

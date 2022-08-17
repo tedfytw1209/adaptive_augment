@@ -221,6 +221,8 @@ def main():
             best_gf = gf_model
             best_h = h_model
         elif not args.valselect:
+            result_valid_dic = {f'result_{k}': valid_dic[k] for k in valid_dic.keys()}
+            result_test_dic = {f'result_{k}': test_dic[k] for k in test_dic.keys()}
             best_gf = gf_model
             best_h = h_model
 

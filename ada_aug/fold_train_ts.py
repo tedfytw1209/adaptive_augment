@@ -185,8 +185,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                             n_layers=args.n_proj_layer,
                             n_hidden=args.n_proj_hidden,
                             augselect=args.augselect).cuda()
-        utils.load_model(self.gf_model, os.path.join(self.config['BASE_PATH'],self.config['save'],f'fold{test_fold_idx}', 'gf_weights.pt'), location=args.gpu)
-        utils.load_model(self.h_model, os.path.join(self.config['BASE_PATH'],self.config['save'],f'fold{test_fold_idx}', 'h_weights.pt'), location=args.gpu)
+        utils.load_model(self.gf_model, os.path.join(self.config['BASE_PATH'],f'{args.gf_model_path}',f'fold{test_fold_idx}', 'gf_weights.pt'), location=args.gpu)
+        utils.load_model(self.h_model, os.path.join(self.config['BASE_PATH'],f'{args.h_model_path}',f'fold{test_fold_idx}', 'h_weights.pt'), location=args.gpu)
 
         for param in self.gf_model.parameters():
             param.requires_grad = False

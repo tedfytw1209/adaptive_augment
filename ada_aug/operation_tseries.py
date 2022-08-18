@@ -880,9 +880,10 @@ class InfoRAugment:
 
 class BeatAugment:
     def __init__(self, names,m ,p=0.5,n=1,mode='a',sfreq=100,
-        pw_len=0.2,qw_len=0.1,tw_len=0.4,reverse=False,rd_seed=None):
+        pw_len=0.2,qw_len=0.1,tw_len=0.4,selective='cut',reverse=False,rd_seed=None):
         print(f'Using Fix transfroms {names}, m={m}, n={n}, p={p}, mode={mode}')
         assert mode in ['a','b','p','t'] #a: all, b: heart beat(-0.2,0.4), p: p-wave(-0.2,0), t: t-wave(0,0.4)
+        assert selective in ['cut', 'paste']
         self.detectors = Detectors(sfreq) #need input ecg: (seq_len)
         self.mode = mode
         self.sfreq = sfreq
@@ -918,13 +919,13 @@ class BeatAugment:
         seg_list = [] #to segment
         start_point = 0
         for rpeak_point in rpeaks_array:
-            beat_start = max(rpeak_point+self.start_s,start_point)
-            beat_end = min(rpeak_point+self.end_s,seg_len)
+            beat_start = max(int(rpeak_point+self.start_s),start_point)
+            beat_end = min(int(rpeak_point+self.end_s),seq_len)
             seg_list.append(x[:,:,start_point:beat_start])
             seg_list.append(x[:,:,beat_start:beat_end])
             start_point = beat_end
         #last
-        seg_list.append(x[:,:,start_point:seg_len])
+        seg_list.append(x[:,:,start_point:seq_len])
         #segment augment
         seg_start = 1
         seg_step = 2
@@ -938,7 +939,7 @@ class BeatAugment:
             seg_len = seg_list[i].shape[2]
             print('seg len: ',seg_len)
             if seg_len == 0:
-                pass
+                continue
             #augment
             select_names = self.rng.choice(self.names, size=self.n)
             for name in select_names:
@@ -949,7 +950,7 @@ class BeatAugment:
                     val = float(self.m_dic[name]) * float(maxval - minval) + minval
                     seg_list[i] = op(seg_list[i], val,random_state=self.rng)
         new_x = torch.cat(seg_list,dim=2)
-        assert new_x.shape[2]==seg_len
+        assert new_x.shape[2]==seq_len
         return new_x.permute(0,2,1).detach().view(seq_len,channel) #back to (len,channel)
 
 if __name__ == '__main__':
@@ -980,9 +981,15 @@ if __name__ == '__main__':
     print(t.shape)
     print(x.shape)
     x_tensor = torch.from_numpy(x).float()
+    test_ops = [
+    'time_reverse', #time reverse
+    'random_time_mask',
+    'add_gaussian_noise',
+    'freq_shift',
+    ]
     plot_line(t,x,title='identity')
-    for each_mode in ['n']:
-        for name in TS_OPS_NAMES:
+    for each_mode in ['b','p','t']:
+        for name in test_ops:
             for m in [0,0.1,0.5,0.98]:
                 print(each_mode,'='*10,name,'='*10,m)
                 info_aug = BeatAugment([name],m=m,p=1.0,mode=each_mode)
@@ -1003,9 +1010,9 @@ if __name__ == '__main__':
         x_aug = apply_augment(x_tensor,name,0.5).numpy()
         print(x_aug.shape)
         plot_line(t,x_aug)'''
-    name = 'QRS_resample'
+    '''name = 'QRS_resample'
     for i in range(3):
         print('='*10,name,'='*10)
         x_aug = apply_augment(x_tensor,name,0.5,rd_seed=None).numpy()
         print(x_aug.shape)
-        plot_line(t,x_aug)
+        plot_line(t,x_aug)'''

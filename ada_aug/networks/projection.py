@@ -25,7 +25,7 @@ class Projection(nn.Module):
         return self.projection(agg_x)
 
 class Projection_TSeries(nn.Module):
-    def __init__(self, in_features, n_layers, n_hidden=128, augselect=''):
+    def __init__(self, in_features, n_layers, n_hidden=128,label_num=None,label_embed=None, augselect=''):
         super(Projection_TSeries, self).__init__()
         self.ops_names = TS_OPS_NAMES.copy()
         if 'tsadd' in augselect:
@@ -35,6 +35,8 @@ class Projection_TSeries(nn.Module):
         self.ops_len = len(self.ops_names)
         print('Projection Using ',self.ops_names)
         print('In_features: ',in_features)
+        if label_embed!=None:
+            self.label_embed = nn.Linear(label_num, label_embed)
         self.n_layers = n_layers
         if self.n_layers > 0:
             layers = [nn.Linear(in_features, n_hidden), nn.ReLU()]

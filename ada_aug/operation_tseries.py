@@ -676,8 +676,8 @@ EXP_TEST_NAMES =[
 ]
 INFO_EXP_LIST = [
     (info_time_mask, 0, 100),
-    (info_Window_Warp, 0, 1), #sample freq=100, bandstop=48 because of notch
-    (info_Window_Slicing, 0, 1), #sample freq=100
+    (info_Window_Warp, 0, 1),
+    (info_Window_Slicing, 0, 1),
 ]
 INFO_TEST_NAMES =[
     'info_time_mask',
@@ -872,10 +872,84 @@ class InfoRAugment:
                 if use_op:
                     op, minval, maxval = augment
                     val = float(self.m_dic[name]) * float(maxval - minval) + minval
-                    seg_list[i] = op(seg_list[i], val,seg_start,seg_end,random_state=self.rng)
+                    seg_list[i] = op(seg_list[i], val,start=seg_start,end=seg_end,random_state=self.rng)
                 else: #pass
                     pass
         new_x = torch.cat(seg_list,dim=2)
+        return new_x.permute(0,2,1).detach().view(seq_len,channel) #back to (len,channel)
+
+class BeatAugment:
+    def __init__(self, names,m ,p=0.5,n=1,mode='a',sfreq=100,
+        pw_len=0.2,qw_len=0.1,tw_len=0.4,reverse=False,rd_seed=None):
+        print(f'Using Fix transfroms {names}, m={m}, n={n}, p={p}, mode={mode}')
+        assert mode in ['a','b','p','t'] #a: all, b: heart beat(-0.2,0.4), p: p-wave(-0.2,0), t: t-wave(0,0.4)
+        self.detectors = Detectors(sfreq) #need input ecg: (seq_len)
+        self.mode = mode
+        self.sfreq = sfreq
+        self.pw_len = pw_len
+        self.qw_len = qw_len
+        self.tw_len = tw_len
+        if self.mode=='a':
+            self.start_s,self.end_s = 0,0
+        elif self.mode=='p':
+            self.start_s,self.end_s = -0.2*sfreq,0
+        elif self.mode=='b':
+            self.start_s,self.end_s = -0.2*sfreq,0.4*sfreq
+        elif self.mode=='t':
+            self.start_s,self.end_s = 0,0.4*sfreq
+        self.reverse = reverse
+        self.p = p
+        if isinstance(m,list):
+            self.list_m = True
+            assert len(m)==len(names)
+            self.m_dic = {name:em for (name,em) in zip(names,m)}
+        else:
+            self.m_dic = {name:m for name in names}
+        self.m = m      # [0, 1]
+        self.n = n
+        self.names = names
+        self.rng = check_random_state(rd_seed)
+    def __call__(self, x):
+        #print(img.shape)
+        seq_len , channel = x.shape
+        x = x.permute(1,0).view(1,channel,seq_len)
+        select_lead = 0 #!!!tmp
+        rpeaks_array = self.detectors.pan_tompkins_detector(x[0,select_lead,:])
+        seg_list = [] #to segment
+        start_point = 0
+        for rpeak_point in rpeaks_array:
+            beat_start = max(rpeak_point+self.start_s,start_point)
+            beat_end = min(rpeak_point+self.end_s,seg_len)
+            seg_list.append(x[:,:,start_point:beat_start])
+            seg_list.append(x[:,:,beat_start:beat_end])
+            start_point = beat_end
+        #last
+        seg_list.append(x[:,:,start_point:seg_len])
+        #segment augment
+        seg_start = 1
+        seg_step = 2
+        if self.mode=='a':
+            seg_start = 0
+            seg_step = 1
+        elif self.reverse:
+            seg_start = 0
+        for i in range(seg_start,len(seg_list),seg_step):
+            #calculate start and end
+            seg_len = seg_list[i].shape[2]
+            print('seg len: ',seg_len)
+            if seg_len == 0:
+                pass
+            #augment
+            select_names = self.rng.choice(self.names, size=self.n)
+            for name in select_names:
+                augment = get_augment(name)
+                use_op = self.rng.random() < self.p
+                if use_op:
+                    op, minval, maxval = augment
+                    val = float(self.m_dic[name]) * float(maxval - minval) + minval
+                    seg_list[i] = op(seg_list[i], val,random_state=self.rng)
+        new_x = torch.cat(seg_list,dim=2)
+        assert new_x.shape[2]==seg_len
         return new_x.permute(0,2,1).detach().view(seq_len,channel) #back to (len,channel)
 
 if __name__ == '__main__':
@@ -908,10 +982,10 @@ if __name__ == '__main__':
     x_tensor = torch.from_numpy(x).float()
     plot_line(t,x,title='identity')
     for each_mode in ['n']:
-        for name in INFO_TEST_NAMES:
+        for name in TS_OPS_NAMES:
             for m in [0,0.1,0.5,0.98]:
                 print(each_mode,'='*10,name,'='*10,m)
-                info_aug = InfoRAugment([name],m=m,p=1.0,mode=each_mode)
+                info_aug = BeatAugment([name],m=m,p=1.0,mode=each_mode)
                 x_aug = info_aug(x_tensor).numpy()
                 print(x_aug.shape)
                 plot_line(t,x_aug,f'{name}_mode:{each_mode}_m:{m}')

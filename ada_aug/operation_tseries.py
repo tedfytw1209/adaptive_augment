@@ -1,5 +1,7 @@
 # code is adapted from CADDA and braincode
+from enum import auto
 from numbers import Real
+from operator import invert
 import random
 import numpy as np
 import torch
@@ -686,6 +688,7 @@ INFO_TEST_NAMES =[
 ]
 
 AUGMENT_DICT = {fn.__name__: (fn, v1, v2) for fn, v1, v2 in TS_AUGMENT_LIST+ECG_AUGMENT_LIST+TS_ADD_LIST+TS_EXP_LIST+INFO_EXP_LIST}
+SELECTIVE_DICT = {}
 def get_augment(name):
     return AUGMENT_DICT[name]
 
@@ -710,6 +713,11 @@ def plot_line(t,x,title=None):
     if title:
         plt.title(title)
     plt.show()
+
+def lt(a,b):
+    return a < b
+def ge(a,b):
+    return a >= b
 
 class ToTensor:
     def __init__(self) -> None:
@@ -879,11 +887,11 @@ class InfoRAugment:
         return new_x.permute(0,2,1).detach().view(seq_len,channel) #back to (len,channel)
 
 class BeatAugment:
-    def __init__(self, names,m ,p=0.5,n=1,mode='a',sfreq=100,
-        pw_len=0.2,qw_len=0.1,tw_len=0.4,selective='cut',reverse=False,rd_seed=None):
+    def __init__(self, names,m ,p=0.5,n=1,mode='a',
+        sfreq=100,pw_len=0.2,qw_len=0.1,tw_len=0.4,
+        reverse=False,rd_seed=None):
         print(f'Using Fix transfroms {names}, m={m}, n={n}, p={p}, mode={mode}')
         assert mode in ['a','b','p','t'] #a: all, b: heart beat(-0.2,0.4), p: p-wave(-0.2,0), t: t-wave(0,0.4)
-        assert selective in ['cut', 'paste']
         self.detectors = Detectors(sfreq) #need input ecg: (seq_len)
         self.mode = mode
         self.sfreq = sfreq
@@ -952,6 +960,110 @@ class BeatAugment:
         new_x = torch.cat(seg_list,dim=2)
         assert new_x.shape[2]==seq_len
         return new_x.permute(0,2,1).detach().view(seq_len,channel) #back to (len,channel)
+
+class KeepAugment(object):
+    def __init__(self, mode, length,thres=0.6,transfrom=None, early=False, low = False, sfreq=100,pw_len=0.2,tw_len=0.4):
+        assert mode in ['auto','b','p','t'] #auto: all, b: heart beat(-0.2,0.4), p: p-wave(-0.2,0), t: t-wave(0,0.4)
+        if self.mode=='p':
+            self.start_s,self.end_s = -0.2*sfreq,0
+        elif self.mode=='b':
+            self.start_s,self.end_s = -0.2*sfreq,0.4*sfreq
+        elif self.mode=='t':
+            self.start_s,self.end_s = 0,0.4*sfreq
+        self.mode = mode
+        self.length = length
+        self.early = early
+        self.low = low
+        self.sfreq = sfreq
+        self.pw_len = pw_len
+        self.tw_len = tw_len
+        self.trans = transfrom
+        self.thres = thres
+        
+    #kwargs for apply_func, batch_inputs
+    def __call__(self, t_series, model=None, apply_func=None, **kwargs):
+        b,w,c = t_series.shape
+        t_series_ = t_series.clone().detach()
+        if apply_func!=None:
+            augment = apply_func
+            selective = kwargs['selective']
+        elif self.trans!=None:
+            augment = self.trans
+            selective = self.trans.selective #!!!not implement now
+        if self.mode=='auto':
+            t_series_.requires_grad = True
+            slc_ = self.get_importance(model,t_series_)
+        else:
+            slc_ = self.get_heartbeat(t_series)
+        #cut or paste
+        assert selective in ['cut','paste']
+        if selective=='cut':
+            info_aug = self.thres
+            compare_func = lt
+        else:
+            info_aug = 1.0 - self.thres
+            compare_func = ge
+        for i,(t_s, slc) in enumerate(zip(t_series_, slc_)):
+            #find region
+            #mask = np.ones((w), dtype=bool)
+            while(True):
+                x = np.random.randint(w)
+                x1 = np.clip(x - self.length // 2, 0, w)
+                x2 = np.clip(x + self.length // 2, 0, w)
+
+                if compare_func(slc[x1: x2].mean(),info_aug):
+                    #mask[x1: x2] = False
+                    info_region = t_s[x1: x2,:].clone().detach().cpu()
+                    break
+            #augment & paste back
+            if selective=='cut':
+                info_region = augment(info_region,kwargs) #some other augment if needed
+            else:
+                t_s = augment(t_s,kwargs) #some other augment if needed
+            #mask = torch.from_numpy(mask).cuda()
+            t_s[x1: x2, :] = info_region[x1: x2, :]
+            t_series[i] = t_s
+        #back
+        model.train()
+        for param in model.parameters():
+            param.requires_grad = True
+        return t_series.cuda()
+
+    def get_importance(self, model, x, **_kwargs):
+        for param in model.parameters():
+            param.requires_grad = False
+        model.eval()
+        b, seq_len , c = x.shape
+        if self.early:
+            preds = model(x,early=True)
+        else:
+            preds = model(x)
+
+        score, _ = torch.max(preds, 1) #predict class
+        score.mean().backward() #among batch mean
+        slc_, _ = torch.max(torch.abs(x.grad), dim=2) #max of channel
+        
+        b,w = slc_.shape #1d only
+        slc_ = slc_.view(slc_.size(0), -1)
+        slc_ -= slc_.min(1, keepdim=True)[0]
+        slc_ /= slc_.max(1, keepdim=True)[0]
+        slc_ = slc_.view(b, w)
+        return slc_
+    
+    def get_heartbeat(self,x):
+        seq_len , channel = x.shape
+        select_lead = 0 #!!!tmp
+        rpeaks_array = self.detectors.pan_tompkins_detector(x[:,select_lead])
+        imp_map = np.zeros((seq_len,), np.float32) #maybe need smooth!!!
+        for rpeak_point in rpeaks_array:
+            r1 = np.clip(rpeak_point - self.start_s, 0, seq_len)
+            r2 = np.clip(rpeak_point - self.end_s, 0, seq_len)
+            imp_map[r1:r2] += 1
+        #normalize to mean of all sequence=1
+        ratio = seq_len / np.sum(imp_map)
+        imp_map *= ratio
+        imp_map = torch.from_numpy(imp_map)
+        return imp_map
 
 if __name__ == '__main__':
     print('Test all operations')

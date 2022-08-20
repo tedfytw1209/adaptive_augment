@@ -25,7 +25,7 @@ class Projection(nn.Module):
         return self.projection(agg_x)
 
 class Projection_TSeries(nn.Module):
-    def __init__(self, in_features, n_layers, n_hidden=128,label_num=None,label_embed=None, augselect=''):
+    def __init__(self, in_features, n_layers, n_hidden=128,label_num=0,label_embed=0, augselect=''):
         super(Projection_TSeries, self).__init__()
         self.ops_names = TS_OPS_NAMES.copy()
         if 'tsadd' in augselect:
@@ -34,8 +34,9 @@ class Projection_TSeries(nn.Module):
             self.ops_names += ECG_OPS_NAMES.copy()
         self.ops_len = len(self.ops_names)
         print('Projection Using ',self.ops_names)
-        print('In_features: ',in_features)
-        if label_embed!=None:
+        print('In_features: ',in_features) #already add y_feature_len if needed
+        self.label_embed = None
+        if label_num>0 and label_embed>0:
             self.label_embed = nn.Linear(label_num, label_embed)
         self.n_layers = n_layers
         if self.n_layers > 0:
@@ -49,8 +50,11 @@ class Projection_TSeries(nn.Module):
         self.projection = nn.Sequential(*layers)
 
     def forward(self, x,y=None):
-        if torch.is_tensor(y):
-            agg_x = torch.cat([x,y], dim=1) #feature dim
-        else:
+        if not torch.is_tensor(y):
             agg_x = x
+        elif self.label_embed!=None:
+            y_tmp = self.label_embed(y)
+            agg_x = torch.cat([x,y_tmp], dim=1) #feature dim
+        else:
+            agg_x = torch.cat([x,y], dim=1) #feature dim
         return self.projection(agg_x)

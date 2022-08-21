@@ -40,7 +40,7 @@ def stop_gradient(trans_image, magnitude):
     images = images.detach() + adds
     return images
 
-def Normal_augment(t_series, model=None, apply_func=None, **kwargs):
+def Normal_augment(t_series, model=None,selective='paste', apply_func=None, **kwargs):
     return apply_func(t_series,kwargs)
 
 class AdaAug(nn.Module):
@@ -256,7 +256,7 @@ class AdaAug_TS(AdaAug):
         """
         magnitudes, weights = self.predict_aug_params(images, seq_len,'explore',y=y)
         #a_imgs, a_seq_len = self.get_aug_valid_imgs(images, seq_len, magnitudes)
-        a_imgs = self.Augment_wrapper(images, model=self.gf_model,apply_func=self.get_aug_valid_imgs,magnitudes=magnitudes)
+        a_imgs = self.Augment_wrapper(images, model=self.gf_model,apply_func=self.get_aug_valid_imgs,magnitudes=magnitudes,selective='paste')
         #a_features = self.gf_model.extract_features(a_imgs, a_seq_len)
         a_features = self.gf_model.extract_features(a_imgs)
         ba_features = a_features.reshape(len(images), self.n_ops, -1) # batch, n_ops, n_hidden
@@ -301,7 +301,7 @@ class AdaAug_TS(AdaAug):
         #resize_imgs = F.interpolate(images, size=self.search_d) if self.resize else images
         magnitudes, weights = self.predict_aug_params(resize_imgs, seq_len, 'exploit',y=y)
         #aug_imgs = self.get_training_aug_images(images, magnitudes, weights)
-        aug_imgs = self.Augment_wrapper(images, model=self.gf_model,apply_func=self.get_training_aug_images,magnitudes=magnitudes,weights=weights)
+        aug_imgs = self.Augment_wrapper(images, model=self.gf_model,apply_func=self.get_training_aug_images,magnitudes=magnitudes,weights=weights,selective='paste')
         return aug_imgs
 
     def forward(self, images, seq_len, mode, mix_feature=True,y=None):

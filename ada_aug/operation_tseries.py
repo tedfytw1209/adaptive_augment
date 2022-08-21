@@ -688,7 +688,28 @@ INFO_TEST_NAMES =[
 ]
 
 AUGMENT_DICT = {fn.__name__: (fn, v1, v2) for fn, v1, v2 in TS_AUGMENT_LIST+ECG_AUGMENT_LIST+TS_ADD_LIST+TS_EXP_LIST+INFO_EXP_LIST}
-SELECTIVE_DICT = {}
+selopt = ['cut','paste']
+SELECTIVE_DICT = {
+    'identity':selopt[1], #identity
+    'time_reverse':selopt[1], #!undefine
+    'fft_surrogate':selopt[1],
+    'channel_dropout':selopt[1],
+    'channel_shuffle':selopt[1],
+    'random_time_mask':selopt[0],
+    'add_gaussian_noise':selopt[1],
+    'random_bandstop':selopt[1],
+    'sign_flip':selopt[1],
+    'freq_shift':selopt[1],
+    'Window_Slicing':selopt[0],
+    'Window_Slicing_Circle':selopt[1],
+    'TS_Permutation':selopt[1], #!undefine
+    'Time_Warp':selopt[1],
+    'Scaling':selopt[1],
+    'Magnitude_Warp':selopt[1],
+    'Window_Warp':selopt[0], #!problems
+    'RR_permutation':selopt[1], #!undefine
+    'QRS_resample':selopt[1], #!undefine
+}
 def get_augment(name):
     return AUGMENT_DICT[name]
 
@@ -962,7 +983,7 @@ class BeatAugment:
         return new_x.permute(0,2,1).detach().view(seq_len,channel) #back to (len,channel)
 
 class KeepAugment(object):
-    def __init__(self, mode, length,thres=0.6,transfrom=None, early=False, low = False, sfreq=100,pw_len=0.2,tw_len=0.4,**_kwargs):
+    def __init__(self, mode, length,thres=0.6,transfrom=None,default_select=None, early=False, low = False, sfreq=100,pw_len=0.2,tw_len=0.4,**_kwargs):
         assert mode in ['auto','b','p','t'] #auto: all, b: heart beat(-0.2,0.4), p: p-wave(-0.2,0), t: t-wave(0,0.4)
         if self.mode=='p':
             self.start_s,self.end_s = -0.2*sfreq,0
@@ -978,19 +999,20 @@ class KeepAugment(object):
         self.pw_len = pw_len
         self.tw_len = tw_len
         self.trans = transfrom
+        self.default_select = default_select
         self.thres = thres
         print(f'Apply InfoKeep Augment: mode={self.mode}, threshold={self.thres}, transfrom={self.trans}')
         
     #kwargs for apply_func, batch_inputs
-    def __call__(self, t_series, model=None, apply_func=None, **kwargs):
+    def __call__(self, t_series, model=None,selective='paste', apply_func=None, **kwargs):
         b,w,c = t_series.shape
         t_series_ = t_series.clone().detach()
         if apply_func!=None:
             augment = apply_func
-            selective = kwargs['selective']
         elif self.trans!=None:
             augment = self.trans
-            selective = self.trans.selective #!!!not implement now
+            if self.default_select:
+                selective = self.default_select
         if self.mode=='auto':
             t_series_.requires_grad = True
             slc_ = self.get_importance(model,t_series_)

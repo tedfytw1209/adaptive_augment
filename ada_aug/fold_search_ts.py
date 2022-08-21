@@ -146,9 +146,15 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         self.gf_model = get_model_tseries(model_name=args.model_name, num_class=n_class,n_channel=n_channel,
             use_cuda=True, data_parallel=False,dataset=args.dataset)
         h_input = self.gf_model.fc.in_features
-        if args.class_adapt:
+        label_num, label_embed = 0,0
+        if args.class_adapt and args.class_embed:
+            label_num = n_class
+            label_embed = 32 #tmp use
+            h_input = h_input + label_embed
+        elif args.class_adapt:
             h_input =h_input + n_class
-        self.h_model = Projection_TSeries(in_features=h_input,
+        
+        self.h_model = Projection_TSeries(in_features=h_input,label_num=label_num,label_embed=label_embed,
             n_layers=args.n_proj_layer, n_hidden=128, augselect=args.augselect).cuda()
         #  training settings
         self.gf_optimizer = torch.optim.AdamW(self.gf_model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay) #follow ptbxl batchmark!!!

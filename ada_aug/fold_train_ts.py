@@ -84,6 +84,7 @@ parser.add_argument('--not_mix', action='store_true', default=False, help='use v
 parser.add_argument('--not_reweight', action='store_true', default=False, help='use valid select')
 parser.add_argument('--lambda_aug', type=float, default=1.0, help="augment sample weight")
 parser.add_argument('--class_adapt', action='store_true', default=False, help='class adaptive')
+parser.add_argument('--class_embed', action='store_true', default=False, help='class embed') #tmp use
 
 args = parser.parse_args()
 debug = True if args.save == "debug" else False
@@ -179,9 +180,14 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                             num_class=search_n_class,n_channel=n_channel,
                             use_cuda=True, data_parallel=False,dataset=args.dataset)
         h_input = self.gf_model.fc.in_features
-        if args.class_adapt:
-            h_input += n_class
+        if args.class_adapt and args.class_embed:
+            label_num = n_class
+            label_embed = 32 #tmp use
+            h_input = h_input + label_embed
+        elif args.class_adapt:
+            h_input =h_input + n_class
         self.h_model = Projection_TSeries(in_features=h_input,
+                            label_num=label_num,label_embed=label_embed,
                             n_layers=args.n_proj_layer,
                             n_hidden=args.n_proj_hidden,
                             augselect=args.augselect).cuda()

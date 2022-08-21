@@ -204,15 +204,34 @@ def infer(valid_queue, model, criterion, multilabel=False, n_class=10,mode='test
     
     return perfrom, objs.avg, perfrom2, objs.avg, out_dic
 
+def relative_loss(ori_loss, aug_loss, lambda_aug):
+    return lambda_aug * (ori_loss.detach() / aug_loss)
+def minus_loss(ori_loss, aug_loss, lambda_aug):
+    return -1 * lambda_aug * aug_loss
+def adv_loss(ori_loss, aug_loss, lambda_aug):
+    return lambda_aug * aug_loss
 
 def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, adaaug, criterion, gf_optimizer,scheduler,
             grad_clip, h_optimizer, epoch, search_freq, multilabel=False,n_class=10,
-            difficult_aug=False,reweight=True,mix_feature=True,lambda_aug = 1.0,relative_loss=False,
-            class_adaptive=False):
+            difficult_aug=False,reweight=True,mix_feature=True,lambda_aug = 1.0,loss_type='minus',
+            class_adaptive=False,adv_criterion=None):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
     top5 = utils.AvgrageMeter()
     confusion_matrix = torch.zeros(n_class,n_class)
+    if adv_criterion==None:
+        adv_criterion = criterion
+    if loss_type=='minus':
+        diff_loss_func = minus_loss
+    elif loss_type=='relative':
+        diff_loss_func = relative_loss
+    elif loss_type=='adv':
+        diff_loss_func = adv_loss
+    else:
+        print('Unknown loss type for policy training')
+        print(loss_type)
+        print(adv_criterion)
+        raise
     preds = []
     targets = []
     total = 0
@@ -304,10 +323,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 else:
                     aug_loss = criterion(aug_logits, target_trsearch.long())
                     ori_loss = criterion(origin_logits, target_trsearch.long())
-                if relative_loss:
-                    loss_prepolicy = lambda_aug * (ori_loss.detach() / aug_loss)
-                else:
-                    loss_prepolicy = -1 * lambda_aug * aug_loss
+                loss_prepolicy = diff_loss_func(ori_loss=ori_loss,aug_loss=aug_loss,lambda_aug=lambda_aug)
                 if reweight: #reweight part, a,b = ?
                     p_orig = origin_logits.softmax(dim=1)[torch.arange(batch_size), target_trsearch].detach()
                     p_aug = aug_logits.softmax(dim=1)[torch.arange(batch_size), target_trsearch].clone().detach()

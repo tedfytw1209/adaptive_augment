@@ -962,7 +962,7 @@ class BeatAugment:
         return new_x.permute(0,2,1).detach().view(seq_len,channel) #back to (len,channel)
 
 class KeepAugment(object):
-    def __init__(self, mode, length,thres=0.6,transfrom=None, early=False, low = False, sfreq=100,pw_len=0.2,tw_len=0.4):
+    def __init__(self, mode, length,thres=0.6,transfrom=None, early=False, low = False, sfreq=100,pw_len=0.2,tw_len=0.4,**_kwargs):
         assert mode in ['auto','b','p','t'] #auto: all, b: heart beat(-0.2,0.4), p: p-wave(-0.2,0), t: t-wave(0,0.4)
         if self.mode=='p':
             self.start_s,self.end_s = -0.2*sfreq,0
@@ -979,6 +979,7 @@ class KeepAugment(object):
         self.tw_len = tw_len
         self.trans = transfrom
         self.thres = thres
+        print(f'Apply InfoKeep Augment: mode={self.mode}, threshold={self.thres}, transfrom={self.trans}')
         
     #kwargs for apply_func, batch_inputs
     def __call__(self, t_series, model=None, apply_func=None, **kwargs):
@@ -1017,9 +1018,9 @@ class KeepAugment(object):
                     break
             #augment & paste back
             if selective=='cut':
-                info_region = augment(info_region,kwargs) #some other augment if needed
+                info_region = augment(info_region,**kwargs) #some other augment if needed
             else:
-                t_s = augment(t_s,kwargs) #some other augment if needed
+                t_s = augment(t_s,**kwargs) #some other augment if needed
             #mask = torch.from_numpy(mask).cuda()
             t_s[x1: x2, :] = info_region[x1: x2, :]
             t_series[i] = t_s
@@ -1034,7 +1035,7 @@ class KeepAugment(object):
             param.requires_grad = False
         model.eval()
         b, seq_len , c = x.shape
-        if self.early:
+        if self.early: #early not allow now
             preds = model(x,early=True)
         else:
             preds = model(x)

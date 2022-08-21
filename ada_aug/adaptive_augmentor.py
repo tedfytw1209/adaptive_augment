@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from torchvision import transforms
 
 
-from operation_tseries import apply_augment,TS_ADD_NAMES,ECG_OPS_NAMES
+from operation_tseries import apply_augment,TS_ADD_NAMES,ECG_OPS_NAMES,KeepAugment
 import operation
 from networks import get_model
 from utils import PolicyHistory
@@ -19,6 +19,7 @@ default_config = {'sampling': 'prob',
                     'temp': 1.0,
                     'search_d': 32,
                     'target_d': 32}
+defaultkeep_config = {'keep_aug':False,'mode':'auto','thres':0.6,'length':100} #tmp!!!
 
 def perturb_param(param, delta):
     if delta <= 0:
@@ -38,6 +39,9 @@ def stop_gradient(trans_image, magnitude):
     adds = adds + magnitude
     images = images.detach() + adds
     return images
+
+def Normal_augment(t_series, model=None, apply_func=None, **kwargs):
+    return apply_func(t_series,kwargs)
 
 class AdaAug(nn.Module):
     def __init__(self, after_transforms, n_class, gf_model, h_model, save_dir=None, 
@@ -168,7 +172,7 @@ class AdaAug(nn.Module):
 
 class AdaAug_TS(AdaAug):
     def __init__(self, after_transforms, n_class, gf_model, h_model, save_dir=None, 
-                    config=default_config, multilabel=False, augselect='',class_adaptive=False):
+                    config=default_config,keepaug_config=default_config, multilabel=False, augselect='',class_adaptive=False):
         super(AdaAug_TS, self).__init__(after_transforms, n_class, gf_model, h_model, save_dir, config)
         #other already define in AdaAug
         self.ops_names = TS_OPS_NAMES.copy()
@@ -180,6 +184,11 @@ class AdaAug_TS(AdaAug):
         self.n_ops = len(self.ops_names)
         self.history = PolicyHistory(self.ops_names, self.save_dir, self.n_class)
         self.config = config
+        self.use_keepaug = keepaug_config['keep_aug']
+        if self.use_keepaug:
+            self.Augment_wrapper = KeepAugment(**keepaug_config)
+        else:
+            self.Augment_wrapper = Normal_augment
         self.multilabel = multilabel
         self.class_adaptive = class_adaptive
 
@@ -214,7 +223,7 @@ class AdaAug_TS(AdaAug):
             std_p = weights[idxs].std(0).detach().cpu().tolist()
             self.history.add(k, mean_lambda, mean_p, std_lambda, std_p)
 
-    def get_aug_valid_imgs(self, images, seq_len, magnitudes):
+    def get_aug_valid_imgs(self, images, magnitudes):
         """Return the mixed latent feature
 
         Args:
@@ -223,30 +232,33 @@ class AdaAug_TS(AdaAug):
         Returns:
             [Tensor]: a set of augmented validation images
         """
-        trans_seqlen_list = []
+        #trans_seqlen_list = []
         trans_image_list = []
         for i, image in enumerate(images):
             pil_img = image.detach().cpu()
-            e_len = seq_len[i]
+            #e_len = seq_len[i]
             # Prepare transformed image for mixing
             for k, ops_name in enumerate(self.ops_names):
                 trans_image = apply_augment(pil_img, ops_name, magnitudes[i][k].detach().cpu().numpy())
                 trans_image = self.after_transforms(trans_image)
                 trans_image = stop_gradient(trans_image.cuda(), magnitudes[i][k])
                 trans_image_list.append(trans_image)
-                trans_seqlen_list.append(e_len)
-        return torch.stack(trans_image_list, dim=0), torch.stack(trans_seqlen_list, dim=0)
+                #trans_seqlen_list.append(e_len)
+        return torch.stack(trans_image_list, dim=0) #, torch.stack(trans_seqlen_list, dim=0)
 
     def explore(self, images, seq_len, mix_feature=True,y=None):
         """Return the mixed latent feature if mix_feature==True
+        !!!can't use for dynamic len now
         Args:
             images ([Tensor]): [description]
         Returns:
             [Tensor]: return a batch of mixed features
         """
         magnitudes, weights = self.predict_aug_params(images, seq_len,'explore',y=y)
-        a_imgs, a_seq_len = self.get_aug_valid_imgs(images, seq_len, magnitudes)
-        a_features = self.gf_model.extract_features(a_imgs, a_seq_len)
+        #a_imgs, a_seq_len = self.get_aug_valid_imgs(images, seq_len, magnitudes)
+        a_imgs = self.Augment_wrapper(images, model=self.gf_model,apply_func=self.get_aug_valid_imgs,magnitudes=magnitudes)
+        #a_features = self.gf_model.extract_features(a_imgs, a_seq_len)
+        a_features = self.gf_model.extract_features(a_imgs)
         ba_features = a_features.reshape(len(images), self.n_ops, -1) # batch, n_ops, n_hidden
         if mix_feature:
             mixed_features = [w.matmul(feat) for w, feat in zip(weights, ba_features)]
@@ -269,6 +281,7 @@ class AdaAug_TS(AdaAug):
                 for idx in idx_matrix[i]:
                     m_pi = perturb_param(magnitudes[i][idx], self.delta).detach().cpu().numpy()
                     pil_image = apply_augment(pil_image, self.ops_names[idx], m_pi)
+
                 trans_images.append(self.after_transforms(pil_image))
         else:
             trans_images = []
@@ -287,7 +300,8 @@ class AdaAug_TS(AdaAug):
             resize_imgs = images
         #resize_imgs = F.interpolate(images, size=self.search_d) if self.resize else images
         magnitudes, weights = self.predict_aug_params(resize_imgs, seq_len, 'exploit',y=y)
-        aug_imgs = self.get_training_aug_images(images, magnitudes, weights)
+        #aug_imgs = self.get_training_aug_images(images, magnitudes, weights)
+        aug_imgs = self.Augment_wrapper(images, model=self.gf_model,apply_func=self.get_training_aug_images,magnitudes=magnitudes,weights=weights)
         return aug_imgs
 
     def forward(self, images, seq_len, mode, mix_feature=True,y=None):

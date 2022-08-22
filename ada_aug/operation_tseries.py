@@ -1039,11 +1039,12 @@ class KeepAugment(object): #need fix
 
                 if compare_func(slc[x1: x2].mean(),info_aug):
                     #mask[x1: x2] = False
+                    t_s = t_s.detach().cpu()
                     info_region = t_s[x1: x2,:].clone().detach().cpu()
                     break
             #augment & paste back
             if selective=='cut':
-                info_region = augment(info_region,**kwargs) #some other augment if needed
+                info_region = augment(info_region,i=i,**kwargs) #some other augment if needed
             else:
                 t_s = augment(t_s,**kwargs) #some other augment if needed
             #mask = torch.from_numpy(mask).cuda()
@@ -1053,7 +1054,7 @@ class KeepAugment(object): #need fix
         model.train()
         for param in model.parameters():
             param.requires_grad = True
-        return t_series.cuda()
+        return t_series
 
     def get_importance(self, model, x, **_kwargs):
         for param in model.parameters():

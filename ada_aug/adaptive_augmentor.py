@@ -41,7 +41,13 @@ def stop_gradient(trans_image, magnitude):
     return images
 
 def Normal_augment(t_series, model=None,selective='paste', apply_func=None, **kwargs):
-    return apply_func(t_series,**kwargs)
+    trans_t_series=[]
+    for i, t_s in enumerate(t_series):
+        t_s = t_s.detach().cpu()
+        trans_t_s = apply_func(t_s,i=i,**kwargs)
+        trans_t_series.append(trans_t_s)
+    aug_t_s = torch.stack(trans_t_series, dim=0)
+    return aug_t_s
 
 class AdaAug(nn.Module):
     def __init__(self, after_transforms, n_class, gf_model, h_model, save_dir=None, 
@@ -266,7 +272,16 @@ class AdaAug_TS(AdaAug):
             return mixed_features
         else:
             return ba_features, weights
-
+    def get_training_aug_image(self, image, magnitudes, idx_matrix,i=None):
+        if i!=None:
+            idx_list = idx_matrix[i]
+            magnitude_i = magnitudes[i]
+        else:
+            idx_list,magnitude_i = idx_matrix,magnitudes
+        for idx in idx_list:
+            m_pi = perturb_param(magnitude_i[idx], self.delta).detach().cpu().numpy()
+            image = apply_augment(image, self.ops_names[idx], m_pi)
+        return self.after_transforms(image)
     def get_training_aug_images(self, images, magnitudes, weights):
         # visualization
         if self.k_ops > 0:
@@ -274,24 +289,26 @@ class AdaAug_TS(AdaAug):
             if self.sampling == 'prob':
                 idx_matrix = torch.multinomial(weights, self.k_ops)
             elif self.sampling == 'max':
-                idx_matrix = torch.topk(weights, self.k_ops, dim=1)[1]
+                idx_matrix = torch.topk(weights, self.k_ops, dim=1)[1] #where op index the highest weight
 
-            for i, image in enumerate(images):
+            '''for i, image in enumerate(images):
                 pil_image = image.detach().cpu()
                 for idx in idx_matrix[i]:
                     m_pi = perturb_param(magnitudes[i][idx], self.delta).detach().cpu().numpy()
                     pil_image = apply_augment(pil_image, self.ops_names[idx], m_pi)
 
-                trans_images.append(self.after_transforms(pil_image))
+                trans_images.append(self.after_transforms(pil_image))'''
+            aug_imgs = self.Augment_wrapper(images, model=self.gf_model,apply_func=self.get_training_aug_image,magnitudes=magnitudes,idx_matrix=idx_matrix,selective='paste')
         else:
             trans_images = []
             for i, image in enumerate(images):
                 pil_image = image.detach().cpu()
                 trans_image = self.after_transforms(pil_image)
                 trans_images.append(trans_image)
+            aug_imgs = torch.stack(trans_images, dim=0).cuda()
         
-        aug_imgs = torch.stack(trans_images, dim=0).cuda()
-        return aug_imgs #(b, seq, ch)
+        #aug_imgs = torch.stack(trans_images, dim=0).cuda()
+        return aug_imgs.cuda() #(b, seq, ch)
 
     def exploit(self, images, seq_len,y=None):
         if self.resize and 'lstm' not in self.config['gf_model_name']:
@@ -300,8 +317,7 @@ class AdaAug_TS(AdaAug):
             resize_imgs = images
         #resize_imgs = F.interpolate(images, size=self.search_d) if self.resize else images
         magnitudes, weights = self.predict_aug_params(resize_imgs, seq_len, 'exploit',y=y)
-        #aug_imgs = self.get_training_aug_images(images, magnitudes, weights)
-        aug_imgs = self.Augment_wrapper(images, model=self.gf_model,apply_func=self.get_training_aug_images,magnitudes=magnitudes,weights=weights,selective='paste')
+        aug_imgs = self.get_training_aug_images(images, magnitudes, weights)
         return aug_imgs
 
     def forward(self, images, seq_len, mode, mix_feature=True,y=None):

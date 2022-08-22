@@ -1055,6 +1055,57 @@ class KeepAugment(object): #need fix
         for param in model.parameters():
             param.requires_grad = True
         return t_series
+    def Augment_search(self, t_series, model=None,selective='paste', apply_func=None,ops_names=None, **kwargs):
+        b,w,c = t_series.shape
+        t_series_ = t_series.clone().detach()
+        if apply_func!=None:
+            augment = apply_func
+        elif self.trans!=None:
+            augment = self.trans
+            if self.default_select:
+                selective = self.default_select
+        if self.mode=='auto':
+            t_series_.requires_grad = True
+            slc_ = self.get_importance(model,t_series_)
+        else:
+            slc_ = self.get_heartbeat(t_series)
+        #cut or paste
+        assert selective in ['cut','paste']
+        if selective=='cut':
+            info_aug = self.thres
+            compare_func = lt
+        else:
+            info_aug = 1.0 - self.thres
+            compare_func = ge
+        #bug when using augment!!!
+        aug_t_s_list = []
+        for i,(t_s, slc) in enumerate(zip(t_series_, slc_)):
+            #find region
+            for k, ops_name in enumerate(ops_names):
+                t_s_tmp = t_s.clone().detach()
+                while(True):
+                    x = np.random.randint(w)
+                    x1 = np.clip(x - self.length // 2, 0, w)
+                    x2 = np.clip(x + self.length // 2, 0, w)
+                    if compare_func(slc[x1: x2].mean(),info_aug):
+                        #mask[x1: x2] = False
+                        t_s_tmp = t_s_tmp.detach().cpu()
+                        info_region = t_s_tmp[x1: x2,:].clone().detach().cpu()
+                        break
+                #augment & paste back
+                if selective=='cut':
+                    info_region = augment(info_region,i=i,k=k,ops_name=ops_name,**kwargs) #some other augment if needed
+                else:
+                    t_s_tmp = augment(t_s_tmp,**kwargs) #some other augment if needed
+                #mask = torch.from_numpy(mask).cuda()
+                t_s_tmp[x1: x2, :] = info_region[x1: x2, :]
+                aug_t_s_list.append(t_s_tmp)
+        #back
+        model.train()
+        for param in model.parameters():
+            param.requires_grad = True
+        
+        return torch.stack(aug_t_s_list, dim=0) #(b*ops,seq,ch)
 
     def get_importance(self, model, x, **_kwargs):
         for param in model.parameters():

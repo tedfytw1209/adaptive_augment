@@ -1,4 +1,5 @@
 import random
+from unicodedata import name
 from cv2 import magnitude
 import numpy as np
 import torch
@@ -48,6 +49,17 @@ def Normal_augment(t_series, model=None,selective='paste', apply_func=None, **kw
         trans_t_series.append(trans_t_s)
     aug_t_s = torch.stack(trans_t_series, dim=0)
     return aug_t_s
+def Normal_search(t_series, model=None,selective='paste', apply_func=None,ops_names=None, **kwargs):
+    trans_t_series=[]
+    for i, t_s in enumerate(t_series):
+        t_s = t_s.detach().cpu()
+        #e_len = seq_len[i]
+        # Prepare transformed image for mixing
+        for k, ops_name in enumerate(ops_names):
+            trans_t_s = apply_func(t_s,i=i,k=k,ops_name=ops_name,**kwargs)
+            trans_t_series.append(trans_t_s)
+            #trans_seqlen_list.append(e_len)
+        return torch.stack(trans_t_series, dim=0) #, torch.stack(trans_seqlen_list, dim=0) #(b*k_ops, seq, ch)
 
 class AdaAug(nn.Module):
     def __init__(self, after_transforms, n_class, gf_model, h_model, save_dir=None, 
@@ -193,8 +205,10 @@ class AdaAug_TS(AdaAug):
         self.use_keepaug = keepaug_config['keep_aug']
         if self.use_keepaug:
             self.Augment_wrapper = KeepAugment(**keepaug_config)
+            self.Search_wrapper = self.Augment_wrapper.Augment_search
         else:
             self.Augment_wrapper = Normal_augment
+            self.Search_wrapper = Normal_search
         self.multilabel = multilabel
         self.class_adaptive = class_adaptive
 
@@ -229,6 +243,11 @@ class AdaAug_TS(AdaAug):
             std_p = weights[idxs].std(0).detach().cpu().tolist()
             self.history.add(k, mean_lambda, mean_p, std_lambda, std_p)
 
+    def get_aug_valid_img(self, image, magnitudes,i=None,k=None,ops_name=None):
+        trans_image = apply_augment(image, ops_name, magnitudes[i][k].detach().cpu().numpy())
+        trans_image = self.after_transforms(trans_image)
+        trans_image = stop_gradient(trans_image.cuda(), magnitudes[i][k])
+        return trans_image
     def get_aug_valid_imgs(self, images, magnitudes):
         """Return the mixed latent feature
 
@@ -239,7 +258,7 @@ class AdaAug_TS(AdaAug):
             [Tensor]: a set of augmented validation images
         """
         #trans_seqlen_list = []
-        trans_image_list = []
+        '''trans_image_list = []
         for i, image in enumerate(images):
             pil_img = image.detach().cpu()
             #e_len = seq_len[i]
@@ -249,8 +268,10 @@ class AdaAug_TS(AdaAug):
                 trans_image = self.after_transforms(trans_image)
                 trans_image = stop_gradient(trans_image.cuda(), magnitudes[i][k])
                 trans_image_list.append(trans_image)
-                #trans_seqlen_list.append(e_len)
-        return torch.stack(trans_image_list, dim=0) #, torch.stack(trans_seqlen_list, dim=0) #(b*k_ops, seq, ch)
+                #trans_seqlen_list.append(e_len)'''
+        aug_imgs = self.Search_wrapper(images, model=self.gf_model,apply_func=self.get_aug_valid_img,magnitudes=magnitudes,ops_names=self.ops_names,selective='paste')
+        #return torch.stack(trans_image_list, dim=0) #, torch.stack(trans_seqlen_list, dim=0) #(b*k_ops, seq, ch)
+        return aug_imgs
 
     def explore(self, images, seq_len, mix_feature=True,y=None):
         """Return the mixed latent feature if mix_feature==True

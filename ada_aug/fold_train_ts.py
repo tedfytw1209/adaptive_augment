@@ -29,8 +29,10 @@ import ray
 import ray.tune as tune
 from ray.tune.integration.wandb import WandbTrainableMixin
 
+os.environ['WANDB_START_METHOD'] = 'thread'
 RAY_DIR = './ray_results'
 parser = argparse.ArgumentParser("ada_aug")
+parser.add_argument('--base_path', type=str, default='/mnt/data2/teddy/adaptive_augment/', help='base path of code')
 parser.add_argument('--dataroot', type=str, default='./', help='location of the data corpus')
 parser.add_argument('--dataset', type=str, default='cifar10', help='name of dataset')
 parser.add_argument('--labelgroup', default='')
@@ -121,11 +123,12 @@ fh = logging.FileHandler(os.path.join(args.save, 'log.txt'))
 fh.setFormatter(logging.Formatter(log_format))
 logging.getLogger().addHandler(fh)
 API_KEY = 'cb4c412d9f47cd551e38050ced659b0c58926986'
-BASE_PATH = '/mnt/data2/teddy/adaptive_augment/'
+
 #ray model
 class RayModel(WandbTrainableMixin, tune.Trainable):
     def setup(self, *_args): #use new setup replace _setup
         #self.trainer = TSeriesModelTrainer(self.config)
+        os.environ['WANDB_START_METHOD'] = 'thread'
         args = self.config['args']
         #  dataset settings for search
         n_channel = get_num_channel(args.dataset)
@@ -342,7 +345,7 @@ def main():
         'kfold': tune.grid_search([i for i in range(args.kfold)]),
         'save': args.save,
         'ray_name': args.ray_name,
-        'BASE_PATH': BASE_PATH,
+        'BASE_PATH': args.base_path,
         'gf_model_path': args.gf_model_path,
         'h_model_path': args.gf_model_path,
     }

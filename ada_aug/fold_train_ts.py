@@ -183,6 +183,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                             num_class=search_n_class,n_channel=n_channel,
                             use_cuda=True, data_parallel=False,dataset=args.dataset)
         h_input = self.gf_model.fc.in_features
+        label_num,label_embed =0,0
         if args.class_adapt and args.class_embed:
             label_num = n_class
             label_embed = 32 #tmp use

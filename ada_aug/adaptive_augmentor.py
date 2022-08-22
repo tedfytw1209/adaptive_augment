@@ -41,7 +41,7 @@ def stop_gradient(trans_image, magnitude):
     return images
 
 def Normal_augment(t_series, model=None,selective='paste', apply_func=None, **kwargs):
-    return apply_func(t_series,kwargs)
+    return apply_func(t_series,**kwargs)
 
 class AdaAug(nn.Module):
     def __init__(self, after_transforms, n_class, gf_model, h_model, save_dir=None, 

@@ -335,7 +335,6 @@ def main():
         'lambda_aug': args.lambda_aug,
         'class_adapt': args.class_adapt,
         'class_embed': args.class_embed,
-        'loss_type': args.loss_type,
         'keep_aug': args.keep_aug,
         'keep_mode': args.keep_mode,
         'keep_thres': args.keep_thres,

@@ -244,7 +244,7 @@ class AdaAug_TS(AdaAug):
                 trans_image = stop_gradient(trans_image.cuda(), magnitudes[i][k])
                 trans_image_list.append(trans_image)
                 #trans_seqlen_list.append(e_len)
-        return torch.stack(trans_image_list, dim=0) #, torch.stack(trans_seqlen_list, dim=0)
+        return torch.stack(trans_image_list, dim=0) #, torch.stack(trans_seqlen_list, dim=0) #(b*k_ops, seq, ch)
 
     def explore(self, images, seq_len, mix_feature=True,y=None):
         """Return the mixed latent feature if mix_feature==True
@@ -291,7 +291,7 @@ class AdaAug_TS(AdaAug):
                 trans_images.append(trans_image)
         
         aug_imgs = torch.stack(trans_images, dim=0).cuda()
-        return aug_imgs
+        return aug_imgs #(b, seq, ch)
 
     def exploit(self, images, seq_len,y=None):
         if self.resize and 'lstm' not in self.config['gf_model_name']:

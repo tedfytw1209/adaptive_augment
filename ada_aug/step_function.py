@@ -237,7 +237,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     total = 0
     difficult_loss, adaptive_loss, search_total = 0, 0, 0
     for step, (input, seq_len, target) in enumerate(train_queue):
-        input = input.float().cuda()
+        input = input.float().cuda() #(batch,sed_len,channel)
         target = target.cuda()
         if class_adaptive: #target to onehot
             policy_y = nn.functional.one_hot(target, num_classes=n_class).cuda().float()

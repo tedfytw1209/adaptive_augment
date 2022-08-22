@@ -670,11 +670,13 @@ TS_EXP_LIST = [
     (exp_time_mask, 0, 100),
     (exp_bandstop, 0, 48), #sample freq=100, bandstop=48 because of notch
     (exp_freq_shift, 0, 10), #sample freq=100
+    (add_gaussian_noise, 0, 1),  # noise up to std
 ]
 EXP_TEST_NAMES =[
     'exp_time_mask',
     'exp_bandstop',
     'exp_freq_shift',
+    'add_gaussian_noise',
 ]
 INFO_EXP_LIST = [
     (info_time_mask, 0, 100),
@@ -788,8 +790,8 @@ class TransfromAugment:
         self.rng = check_random_state(rd_seed)
     def __call__(self, img):
         #print(img.shape)
-        seq_len , channel = img.shape
-        img = img.permute(1,0).view(1,channel,seq_len)
+        seq_len , channel = img.shape #(channel, seq_len)
+        img = img.permute(1,0).view(1,channel,seq_len) #(seq,ch)
         select_names = self.rng.choice(self.names, size=self.n)
         for name in select_names:
             augment = get_augment(name)
@@ -982,7 +984,7 @@ class BeatAugment:
         assert new_x.shape[2]==seq_len
         return new_x.permute(0,2,1).detach().view(seq_len,channel) #back to (len,channel)
 
-class KeepAugment(object):
+class KeepAugment(object): #need fix
     def __init__(self, mode, length,thres=0.6,transfrom=None,default_select=None, early=False, low = False, sfreq=100,pw_len=0.2,tw_len=0.4,**_kwargs):
         assert mode in ['auto','b','p','t'] #auto: all, b: heart beat(-0.2,0.4), p: p-wave(-0.2,0), t: t-wave(0,0.4)
         if self.mode=='p':
@@ -1026,6 +1028,7 @@ class KeepAugment(object):
         else:
             info_aug = 1.0 - self.thres
             compare_func = ge
+        #bug when using augment!!!
         for i,(t_s, slc) in enumerate(zip(t_series_, slc_)):
             #find region
             #mask = np.ones((w), dtype=bool)
@@ -1079,8 +1082,8 @@ class KeepAugment(object):
         rpeaks_array = self.detectors.pan_tompkins_detector(x[:,select_lead])
         imp_map = np.zeros((seq_len,), np.float32) #maybe need smooth!!!
         for rpeak_point in rpeaks_array:
-            r1 = np.clip(rpeak_point - self.start_s, 0, seq_len)
-            r2 = np.clip(rpeak_point - self.end_s, 0, seq_len)
+            r1 = np.clip(rpeak_point + self.start_s, 0, seq_len)
+            r2 = np.clip(rpeak_point + self.end_s, 0, seq_len)
             imp_map[r1:r2] += 1
         #normalize to mean of all sequence=1
         ratio = seq_len / np.sum(imp_map)

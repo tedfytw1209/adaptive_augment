@@ -39,3 +39,8 @@ function run_reduced_cifar10 {
 python ada_aug/train_ts.py --temperature 3 --delta 0.3 --search_dataset ptbxl --gf_model_path  --h_model_path  --gf_model_name resnet_wang --k_ops 3 \
  --report_freq 10 --num_workers 4 --epochs 50 --batch_size 128 --learning_rate 0.01 --dataset ptbxl --model_name resnet_wang --labelgroup subdiagnostic \
  --save ptbxl_resnet_train --gpu 3 --weight_decay 0.01 --train_portion 1 --dataroot /mnt/data2/teddy/ptbxl-dataset --default_split --valselect
+
+CUDA_VISIBLE_DEVICES=1,4 python ada_aug/fold_train_ts.py --temperature 3 --delta 0.3 --search_dataset ptbxl --gf_model_path --h_model_path \
+ --gf_model_name resnet_wang --k_ops 1 --report_freq 10 --num_workers 4 --epochs 50 --batch_size 128 --learning_rate 0.01 --dataset ptbxl \
+ --model_name resnet_wang --labelgroup superdiagnostic  --save ptbxl_resnet_kfold_diffnw --ray_name ptbsup_resnet_kfold_diffnw_train \
+ --gpu 0.25 --cpu 2 --weight_decay 0.01 --train_portion 1 --dataroot /mnt/data2/teddy/ptbxl-dataset --kfold 10 --valselect --diff_aug --not_reweight

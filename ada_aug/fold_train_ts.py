@@ -334,6 +334,11 @@ def main():
         'diff_aug': args.diff_aug, #!!!class-wise search not finish yet
         'lambda_aug': args.lambda_aug,
         'class_adapt': args.class_adapt,
+        'class_embed': args.class_embed,
+        'loss_type': args.loss_type,
+        'keep_aug': args.keep_aug,
+        'keep_mode': args.keep_mode,
+        'keep_thres': args.keep_thres,
         'kfold': tune.grid_search([i for i in range(args.kfold)]),
         'save': args.save,
         'ray_name': args.ray_name,

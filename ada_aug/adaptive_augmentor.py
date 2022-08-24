@@ -299,6 +299,8 @@ class AdaAug_TS(AdaAug):
             magnitude_i = magnitudes[i]
         else:
             idx_list,magnitude_i = idx_matrix,magnitudes
+        print(idx_list)
+        print(magnitude_i)
         for idx in idx_list:
             m_pi = perturb_param(magnitude_i[idx], self.delta).detach().cpu().numpy()
             image = apply_augment(image, self.ops_names[idx], m_pi)

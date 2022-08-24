@@ -987,13 +987,13 @@ class BeatAugment:
 class KeepAugment(object): #need fix
     def __init__(self, mode, length,thres=0.6,transfrom=None,default_select=None, early=False, low = False, sfreq=100,pw_len=0.2,tw_len=0.4,**_kwargs):
         assert mode in ['auto','b','p','t'] #auto: all, b: heart beat(-0.2,0.4), p: p-wave(-0.2,0), t: t-wave(0,0.4)
+        self.mode = mode
         if self.mode=='p':
             self.start_s,self.end_s = -0.2*sfreq,0
         elif self.mode=='b':
             self.start_s,self.end_s = -0.2*sfreq,0.4*sfreq
         elif self.mode=='t':
             self.start_s,self.end_s = 0,0.4*sfreq
-        self.mode = mode
         self.length = length
         self.early = early
         self.low = low
@@ -1028,7 +1028,8 @@ class KeepAugment(object): #need fix
         else:
             info_aug = 1.0 - self.thres
             compare_func = ge
-        #bug when using augment!!!
+        print(slc_)
+        #bug when using augment
         for i,(t_s, slc) in enumerate(zip(t_series_, slc_)):
             #find region
             #mask = np.ones((w), dtype=bool)
@@ -1037,7 +1038,7 @@ class KeepAugment(object): #need fix
                 x1 = np.clip(x - self.length // 2, 0, w)
                 x2 = np.clip(x + self.length // 2, 0, w)
 
-                if compare_func(slc[x1: x2].mean(),info_aug):
+                if compare_func(slc[x1: x2].max(),info_aug): #mean will cause infinite running!!!
                     #mask[x1: x2] = False
                     t_s = t_s.detach().cpu()
                     info_region = t_s[x1: x2,:].clone().detach().cpu()

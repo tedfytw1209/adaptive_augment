@@ -1003,6 +1003,7 @@ class KeepAugment(object): #need fix
         self.trans = transfrom
         self.default_select = default_select
         self.thres = thres
+        self.m_pool = torch.nn.AvgPool1d(kernel_size=self.length, stride=1, padding=0) #for winodow sum
         print(f'Apply InfoKeep Augment: mode={self.mode}, threshold={self.thres}, transfrom={self.trans}')
         
     #kwargs for apply_func, batch_inputs
@@ -1020,6 +1021,7 @@ class KeepAugment(object): #need fix
             slc_ = self.get_importance(model,t_series_)
         else:
             slc_ = self.get_heartbeat(t_series)
+        #(b,seq)
         #cut or paste
         assert selective in ['cut','paste']
         if selective=='cut':
@@ -1028,9 +1030,13 @@ class KeepAugment(object): #need fix
         else:
             info_aug = 1.0 - self.thres
             compare_func = ge
+        windowed_slc = self.m_pool(slc_.view(b,1,w)).view(b,w)
+        quant_scores = torch.quantile(windowed_slc,info_aug,dim=1) #quant for each batch
         print(slc_)
-        #bug when using augment
-        for i,(t_s, slc) in enumerate(zip(t_series_, slc_)):
+        print(windowed_slc)
+        print(quant_scores)
+        #can be further improve
+        for i,(t_s, slc, quant_score) in enumerate(zip(t_series_, slc_, quant_scores)):
             #find region
             #mask = np.ones((w), dtype=bool)
             while(True):
@@ -1038,7 +1044,7 @@ class KeepAugment(object): #need fix
                 x1 = np.clip(x - self.length // 2, 0, w)
                 x2 = np.clip(x + self.length // 2, 0, w)
                 print('search info region',end='\r')
-                if compare_func(slc[x1: x2].max(),info_aug): #mean will cause infinite running!!!
+                if compare_func(slc[x1: x2].mean(),quant_score): #mean will cause infinite running!!!
                     #mask[x1: x2] = False
                     t_s = t_s.detach().cpu()
                     info_region = t_s[x1: x2,:].clone().detach().cpu()
@@ -1079,9 +1085,14 @@ class KeepAugment(object): #need fix
         else:
             info_aug = 1.0 - self.thres
             compare_func = ge
+        windowed_slc = self.m_pool(slc_.view(b,1,w)).view(b,w)
+        quant_scores = torch.quantile(windowed_slc,info_aug,dim=1) #quant for each batch
+        print(slc_)
+        print(windowed_slc)
+        print(quant_scores)
         #bug when using augment!!!
         aug_t_s_list = []
-        for i,(t_s, slc) in enumerate(zip(t_series_, slc_)):
+        for i,(t_s, slc, quant_score) in enumerate(zip(t_series_, slc_, quant_scores)):
             #find region
             for k, ops_name in enumerate(ops_names):
                 t_s_tmp = t_s.clone().detach()
@@ -1089,7 +1100,7 @@ class KeepAugment(object): #need fix
                     x = np.random.randint(w)
                     x1 = np.clip(x - self.length // 2, 0, w)
                     x2 = np.clip(x + self.length // 2, 0, w)
-                    if compare_func(slc[x1: x2].max(),info_aug):
+                    if compare_func(slc[x1: x2].mean(),quant_score):
                         #mask[x1: x2] = False
                         t_s_tmp = t_s_tmp.detach().cpu()
                         info_region = t_s_tmp[x1: x2,:].clone().detach().cpu()

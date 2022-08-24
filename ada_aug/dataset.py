@@ -368,15 +368,19 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
     print(samples[0].shape)
     print(samples[1])
     print(samples[2])
-    #make search validation set
+    #make search validation set by StratifiedShuffleSplit
     total = len(search_trainset)
-    random.seed(0) #!!!
     rd_idxs = [i for i in range(total)]
-    random.shuffle(rd_idxs)
     if search_size > 0:
-        search_dataset = Subset(search_trainset,rd_idxs[:int(total*(search_size))])
-        tot_train_idx = rd_idxs[int(total*(search_size)):]
+        sss = StratifiedShuffleSplit(n_splits=5, test_size=1-split, random_state=0)
+        sss = sss.split(list(rd_idxs), search_trainset.label)
+        tot_train_idx, search_idx = next(sss)
+        search_labels = np.array([search_trainset.label[idx] for idx in search_idx])
+        search_dataset = Subset(search_trainset,search_idx)
+        search_dataset.label = search_labels
+        train_labels = np.array([search_trainset.label[idx] for idx in tot_train_idx])
         total_trainset = Subset(search_trainset,tot_train_idx)
+        total_trainset.label = train_labels
     else:
         search_dataset = None
         total_trainset = search_trainset

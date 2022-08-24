@@ -190,6 +190,7 @@ def main():
         multilabel=multilabel,
         augselect=args.augselect,
         class_adaptive=args.class_adapt)
+    
     #for valid data select
     best_val_acc,best_gf,best_h = 0,None,None
     #  Start training

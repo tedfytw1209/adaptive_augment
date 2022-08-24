@@ -372,9 +372,10 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
     total = len(search_trainset)
     rd_idxs = [i for i in range(total)]
     if search_size > 0:
-        sss = StratifiedShuffleSplit(n_splits=5, test_size=1-split, random_state=0)
+        sss = StratifiedShuffleSplit(n_splits=5, test_size=search_size, random_state=0)
         sss = sss.split(list(rd_idxs), search_trainset.label)
         tot_train_idx, search_idx = next(sss)
+        print(f'Train len: {len(tot_train_idx)},Search len: {len(search_idx)}')
         search_labels = np.array([search_trainset.label[idx] for idx in search_idx])
         search_dataset = Subset(search_trainset,search_idx)
         search_dataset.label = search_labels

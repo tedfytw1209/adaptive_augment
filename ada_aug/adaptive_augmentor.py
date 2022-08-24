@@ -282,8 +282,8 @@ class AdaAug_TS(AdaAug):
             [Tensor]: return a batch of mixed features
         """
         magnitudes, weights = self.predict_aug_params(images, seq_len,'explore',y=y)
-        #a_imgs, a_seq_len = self.get_aug_valid_imgs(images, seq_len, magnitudes)
-        a_imgs = self.Augment_wrapper(images, model=self.gf_model,apply_func=self.get_aug_valid_imgs,magnitudes=magnitudes,selective='paste')
+        a_imgs = self.get_aug_valid_imgs(images, magnitudes)
+        #a_imgs = self.Augment_wrapper(images, model=self.gf_model,apply_func=self.get_aug_valid_imgs,magnitudes=magnitudes,selective='paste')
         #a_features = self.gf_model.extract_features(a_imgs, a_seq_len)
         a_features = self.gf_model.extract_features(a_imgs)
         ba_features = a_features.reshape(len(images), self.n_ops, -1) # batch, n_ops, n_hidden
@@ -299,9 +299,6 @@ class AdaAug_TS(AdaAug):
             magnitude_i = magnitudes[i]
         else:
             idx_list,magnitude_i = idx_matrix,magnitudes
-        print('id_list&matrix_i')
-        print(idx_list)
-        print(magnitude_i)
         for idx in idx_list:
             m_pi = perturb_param(magnitude_i[idx], self.delta).detach().cpu().numpy()
             image = apply_augment(image, self.ops_names[idx], m_pi)

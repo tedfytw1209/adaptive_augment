@@ -1037,7 +1037,7 @@ class KeepAugment(object): #need fix
                 x = np.random.randint(w)
                 x1 = np.clip(x - self.length // 2, 0, w)
                 x2 = np.clip(x + self.length // 2, 0, w)
-
+                print('search info region',end='\r')
                 if compare_func(slc[x1: x2].max(),info_aug): #mean will cause infinite running!!!
                     #mask[x1: x2] = False
                     t_s = t_s.detach().cpu()
@@ -1047,9 +1047,10 @@ class KeepAugment(object): #need fix
             if selective=='cut':
                 info_region = augment(info_region,i=i,**kwargs) #some other augment if needed
             else:
-                t_s = augment(t_s,**kwargs) #some other augment if needed
+                t_s = augment(t_s,i=i,**kwargs) #some other augment if needed
             #mask = torch.from_numpy(mask).cuda()
-            t_s[x1: x2, :] = info_region[x1: x2, :]
+            #print('Size compare: ',t_s[x1: x2, :].shape,info_region.shape)
+            t_s[x1: x2, :] = info_region
             t_series[i] = t_s
         #back
         model.train()
@@ -1088,7 +1089,7 @@ class KeepAugment(object): #need fix
                     x = np.random.randint(w)
                     x1 = np.clip(x - self.length // 2, 0, w)
                     x2 = np.clip(x + self.length // 2, 0, w)
-                    if compare_func(slc[x1: x2].mean(),info_aug):
+                    if compare_func(slc[x1: x2].max(),info_aug):
                         #mask[x1: x2] = False
                         t_s_tmp = t_s_tmp.detach().cpu()
                         info_region = t_s_tmp[x1: x2,:].clone().detach().cpu()
@@ -1097,9 +1098,10 @@ class KeepAugment(object): #need fix
                 if selective=='cut':
                     info_region = augment(info_region,i=i,k=k,ops_name=ops_name,**kwargs) #some other augment if needed
                 else:
-                    t_s_tmp = augment(t_s_tmp,**kwargs) #some other augment if needed
+                    t_s_tmp = augment(t_s_tmp,i=i,k=k,ops_name=ops_name,**kwargs) #some other augment if needed
                 #mask = torch.from_numpy(mask).cuda()
-                t_s_tmp[x1: x2, :] = info_region[x1: x2, :]
+                #print('Size compare: ',t_s[x1: x2, :].shape,info_region.shape)
+                t_s_tmp[x1: x2, :] = info_region
                 aug_t_s_list.append(t_s_tmp)
         #back
         model.train()

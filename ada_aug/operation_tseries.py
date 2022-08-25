@@ -788,7 +788,7 @@ class TransfromAugment:
         self.n = n
         self.names = names
         self.rng = check_random_state(rd_seed)
-    def __call__(self, img):
+    def __call__(self, img, **_kwargs): #ignore other args
         #print(img.shape)
         seq_len , channel = img.shape #(channel, seq_len)
         img = img.permute(1,0).view(1,channel,seq_len) #(seq,ch)

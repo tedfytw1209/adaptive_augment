@@ -189,6 +189,7 @@ def main():
         gf_model=gf_model,
         h_model=h_model,
         save_dir=args.save,
+        visualize=True, #for tmp debug
         config=adaaug_config,
         keepaug_config=keepaug_config,
         multilabel=multilabel,

@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import transforms
 
-
+import matplotlib.pyplot as plt
 from operation_tseries import apply_augment,TS_ADD_NAMES,ECG_OPS_NAMES,KeepAugment
 import operation
 from networks import get_model
@@ -189,7 +189,7 @@ class AdaAug(nn.Module):
             return images
 
 class AdaAug_TS(AdaAug):
-    def __init__(self, after_transforms, n_class, gf_model, h_model, save_dir=None, 
+    def __init__(self, after_transforms, n_class, gf_model, h_model, save_dir=None, visualize=False,
                     config=default_config,keepaug_config=default_config, multilabel=False, augselect='',class_adaptive=False):
         super(AdaAug_TS, self).__init__(after_transforms, n_class, gf_model, h_model, save_dir, config)
         #other already define in AdaAug
@@ -211,6 +211,7 @@ class AdaAug_TS(AdaAug):
             self.Search_wrapper = Normal_search
         self.multilabel = multilabel
         self.class_adaptive = class_adaptive
+        self.visualize = visualize
 
     def predict_aug_params(self, X, seq_len, mode,y=None):
         self.gf_model.eval()
@@ -339,6 +340,11 @@ class AdaAug_TS(AdaAug):
         #resize_imgs = F.interpolate(images, size=self.search_d) if self.resize else images
         magnitudes, weights = self.predict_aug_params(resize_imgs, seq_len, 'exploit',y=y)
         aug_imgs = self.get_training_aug_images(images, magnitudes, weights)
+        if self.visualize:
+            print('Visualize for Debug')
+            self.print_imgs(imgs=images,title='id')
+            self.print_imgs(imgs=aug_imgs,title='aug')
+            exit()
         return aug_imgs
 
     def forward(self, images, seq_len, mode, mix_feature=True,y=None):
@@ -350,3 +356,14 @@ class AdaAug_TS(AdaAug):
             return self.exploit(images,seq_len,y=y)
         elif mode == 'inference':
             return images
+    
+    def print_imgs(self,imgs,title):
+        t = np.linspace(0, 10, 1000)
+        for idx,img in enumerate(imgs):
+            plt.clf()
+            channel_num = img.shape[-1]
+            for i in  range(channel_num):
+                plt.plot(t, img[:,i])
+            if title:
+                plt.title(title)
+            plt.savefig(f'{self.save_dir}/img{idx}_{title}.png')

@@ -183,12 +183,15 @@ def main():
                     'search_d': get_dataset_dimension(args.dataset),
                     'target_d': get_dataset_dimension(args.dataset),
                     'gf_model_name': args.model_name}
-    keepaug_config = {'keep_aug':args.keep_aug,'mode':args.keep_mode,'thres':args.keep_thres,'length':100} #tmp!!!
+
+    keepaug_config = {'keep_aug':args.keep_aug,'mode':args.keep_mode,'thres':args.keep_thres,'length':200} #tmp!!!
+
     adaaug = AdaAug_TS(after_transforms=after_transforms,
         n_class=n_class,
         gf_model=gf_model,
         h_model=h_model,
         save_dir=args.save,
+        #visualize=True, #for tmp debug
         config=adaaug_config,
         keepaug_config=keepaug_config,
         multilabel=multilabel,

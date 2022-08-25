@@ -253,7 +253,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         step_dic.update(valid_dic)
         wandb.log(step_dic)
         #if last epoch
-        if self._iteration==self.config['num_epochs']-1:
+        if self._iteration==self.config['epochs']-1:
             step_dic.update(self.result_valid_dic)
             step_dic.update(self.result_test_dic)
             #save&log
@@ -343,6 +343,7 @@ def main():
     }
     hparams["log_config"]= False
     hparams['wandb'] = wandb_config
+    hparams['BASE_PATH'] = args.base_path
 
     # if FLAGS.restore:
     #     train_spec["restore"] = FLAGS.restore
@@ -363,7 +364,7 @@ def main():
         checkpoint_score_attr="valid_acc",
         #checkpoint_freq=FLAGS.checkpoint_freq,
         resources_per_trial={"gpu": args.gpu, "cpu": args.cpu},
-        stop={"training_iteration": hparams['num_epochs']},
+        stop={"training_iteration": hparams['epochs']},
         config=hparams,
         local_dir=args.ray_dir,
         num_samples=1, #grid search no need

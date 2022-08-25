@@ -1032,9 +1032,9 @@ class KeepAugment(object): #need fix
             compare_func = ge
         windowed_slc = self.m_pool(slc_.view(b,1,w)).view(b,-1)
         quant_scores = torch.quantile(windowed_slc,info_aug,dim=1) #quant for each batch
-        print(slc_)
-        print(windowed_slc)
-        print(quant_scores)
+        #print(slc_)
+        #print(windowed_slc)
+        #print(quant_scores)
         #can be further improve
         aug_t_s_list = []
         for i,(t_s, slc, quant_score) in enumerate(zip(t_series_, slc_, quant_scores)):
@@ -1088,9 +1088,9 @@ class KeepAugment(object): #need fix
             compare_func = ge
         windowed_slc = self.m_pool(slc_.view(b,1,w)).view(b,-1)
         quant_scores = torch.quantile(windowed_slc,info_aug,dim=1) #quant for each batch
-        print(slc_)
-        print(windowed_slc)
-        print(quant_scores)
+        #print(slc_)
+        #print(windowed_slc)
+        #print(quant_scores)
         #bug when using augment!!!
         aug_t_s_list = []
         for i,(t_s, slc, quant_score) in enumerate(zip(t_series_, slc_, quant_scores)):

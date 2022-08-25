@@ -81,6 +81,7 @@ parser.add_argument('--loss_type', type=str, default='minus', help="loss type fo
 parser.add_argument('--keep_aug', action='store_true', default=False, help='info keep augment')
 parser.add_argument('--keep_mode', type=str, default='auto', help='info keep mode',choices=['auto','b','p','t'])
 parser.add_argument('--keep_thres', type=float, default=0.6, help="augment sample weight")
+parser.add_argument('--keep_len', type=int, default=100, help="info keep seq len")
 
 args = parser.parse_args()
 debug = True if args.save == "debug" else False
@@ -188,7 +189,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                     'search_d': get_dataset_dimension(args.dataset),
                     'target_d': get_dataset_dimension(args.dataset),
                     'gf_model_name': args.model_name}
-        keepaug_config = {'keep_aug':args.keep_aug,'mode':args.keep_mode,'thres':args.keep_thres,'length':100} #tmp!!!
+        keepaug_config = {'keep_aug':args.keep_aug,'mode':args.keep_mode,'thres':args.keep_thres,'length':args.keep_len}
         self.adaaug = AdaAug_TS(after_transforms=after_transforms,
             n_class=n_class,
             gf_model=self.gf_model,
@@ -294,6 +295,8 @@ def main():
                   job_type="DataAugment",
                   reinit=True)'''
     #hparams
+    hparams = dict(vars(args)) #copy args
+    '''
     hparams = {
         'args':args,
         'dataset':args.dataset, 'batch_size':args.batch_size, 'num_epochs':args.epochs,
@@ -321,7 +324,8 @@ def main():
         'save': args.save,
         'ray_name': args.ray_name,
         'BASE_PATH': args.base_path,
-    }
+    }'''
+    hparams['args'] = args
     if args.kfold==10:
         hparams['kfold'] = tune.grid_search([i for i in range(args.kfold)])
     else:

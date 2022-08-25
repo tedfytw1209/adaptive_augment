@@ -1030,12 +1030,13 @@ class KeepAugment(object): #need fix
         else:
             info_aug = 1.0 - self.thres
             compare_func = ge
-        windowed_slc = self.m_pool(slc_.view(b,1,w)).view(b,w)
+        windowed_slc = self.m_pool(slc_.view(b,1,w)).view(b,-1)
         quant_scores = torch.quantile(windowed_slc,info_aug,dim=1) #quant for each batch
         print(slc_)
         print(windowed_slc)
         print(quant_scores)
         #can be further improve
+        aug_t_s_list = []
         for i,(t_s, slc, quant_score) in enumerate(zip(t_series_, slc_, quant_scores)):
             #find region
             #mask = np.ones((w), dtype=bool)
@@ -1057,12 +1058,12 @@ class KeepAugment(object): #need fix
             #mask = torch.from_numpy(mask).cuda()
             #print('Size compare: ',t_s[x1: x2, :].shape,info_region.shape)
             t_s[x1: x2, :] = info_region
-            t_series[i] = t_s
+            aug_t_s_list.append(t_s)
         #back
         model.train()
         for param in model.parameters():
             param.requires_grad = True
-        return t_series
+        return torch.stack(aug_t_s_list, dim=0) #(b,seq,ch)
     def Augment_search(self, t_series, model=None,selective='paste', apply_func=None,ops_names=None, **kwargs):
         b,w,c = t_series.shape
         t_series_ = t_series.clone().detach()
@@ -1085,7 +1086,7 @@ class KeepAugment(object): #need fix
         else:
             info_aug = 1.0 - self.thres
             compare_func = ge
-        windowed_slc = self.m_pool(slc_.view(b,1,w)).view(b,w)
+        windowed_slc = self.m_pool(slc_.view(b,1,w)).view(b,-1)
         quant_scores = torch.quantile(windowed_slc,info_aug,dim=1) #quant for each batch
         print(slc_)
         print(windowed_slc)

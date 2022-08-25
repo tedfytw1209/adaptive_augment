@@ -358,6 +358,7 @@ class AdaAug_TS(AdaAug):
             return images
     
     def print_imgs(self,imgs,title):
+        imgs = imgs.cpu().detach().numpy()
         t = np.linspace(0, 10, 1000)
         for idx,img in enumerate(imgs):
             plt.clf()

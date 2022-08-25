@@ -1044,7 +1044,6 @@ class KeepAugment(object): #need fix
                 x = np.random.randint(w)
                 x1 = np.clip(x - self.length // 2, 0, w)
                 x2 = np.clip(x + self.length // 2, 0, w)
-                print('search info region',end='\r')
                 if compare_func(slc[x1: x2].mean(),quant_score): #mean will cause infinite running!!!
                     #mask[x1: x2] = False
                     t_s = t_s.detach().cpu()

@@ -56,7 +56,7 @@ parser.add_argument('--grad_clip', type=float, default=5, help='gradient clippin
 parser.add_argument('--multilabel', action='store_true', default=False, help='using multilabel default False')
 parser.add_argument('--train_portion', type=float, default=1, help='portion of training data')
 parser.add_argument('--default_split', action='store_true', help='use dataset deault split')
-parser.add_argument('--kfold', type=int, default=0, help='use kfold cross validation')
+parser.add_argument('--kfold', type=int, default=-1, help='use kfold cross validation')
 parser.add_argument('--proj_learning_rate', type=float, default=1e-2, help='learning rate for h')
 parser.add_argument('--proj_weight_decay', type=float, default=1e-3, help='weight decay for h]')
 parser.add_argument('--cutout', action='store_true', default=False, help='use cutout')
@@ -68,6 +68,7 @@ parser.add_argument('--num_workers', type=int, default=0, help="num_workers")
 parser.add_argument('--k_ops', type=int, default=1, help="number of augmentation applied during training")
 parser.add_argument('--temperature', type=float, default=1.0, help="temperature")
 parser.add_argument('--search_freq', type=float, default=1, help='exploration frequency')
+parser.add_argument('--search_round', type=int, default=1, help='exploration frequency') #search_round
 parser.add_argument('--n_proj_layer', type=int, default=0, help="number of hidden layer in augmentation policy projection")
 parser.add_argument('--valselect', action='store_true', default=False, help='use valid select')
 parser.add_argument('--augselect', type=str, default='', help="augmentation selection")
@@ -134,16 +135,22 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         diff_mix = not args.not_mix
         diff_reweight = not args.not_reweight
         test_fold_idx = self.config['kfold']
-        train_val_test_folds = [[],[],[]] #train,valid,test
-        for i in range(10):
-            curr_fold = (i+test_fold_idx)%10 +1 #fold is 1~10
-            if i==0:
-                train_val_test_folds[2].append(curr_fold)
-            elif i==9:
-                train_val_test_folds[1].append(curr_fold)
-            else:
-                train_val_test_folds[0].append(curr_fold)
-        print('Train/Valid/Test fold split ',train_val_test_folds)
+        train_val_test_folds = []
+        if test_fold_idx>=0 and test_fold_idx<=9:
+            train_val_test_folds = [[],[],[]] #train,valid,test
+            for i in range(10):
+                curr_fold = (i+test_fold_idx)%10 +1 #fold is 1~10
+                if i==0:
+                    train_val_test_folds[2].append(curr_fold)
+                elif i==9:
+                    train_val_test_folds[1].append(curr_fold)
+                else:
+                    train_val_test_folds[0].append(curr_fold)
+            print('Train/Valid/Test fold split ',train_val_test_folds)
+        elif args.default_split:
+            print('Default Train 1~8 /Valid 9/Test 10 fold split')
+        else:
+            print('Warning: Random splitting train/test')
         self.train_queue, self.valid_queue, self.search_queue, self.test_queue, self.tr_search_queue = get_ts_dataloaders(
             args.dataset, args.batch_size, args.num_workers,
             args.dataroot, args.cutout, args.cutout_length,
@@ -226,7 +233,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         # searching
         train_acc, train_obj, train_dic = search_train(args,self.train_queue, self.search_queue, self.tr_search_queue, self.gf_model, self.adaaug,
             self.criterion, self.gf_optimizer,self.scheduler, args.grad_clip, self.h_optimizer, self._iteration, args.search_freq, 
-            multilabel=self.multilabel,n_class=self.n_class, **diff_dic)
+            search_round=args.search_round,multilabel=self.multilabel,n_class=self.n_class, **diff_dic)
 
         # validation
         valid_acc, valid_obj,valid_dic = search_infer(self.valid_queue, self.gf_model, self.criterion, multilabel=self.multilabel,n_class=self.n_class,mode='valid')
@@ -245,9 +252,14 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         elif not args.valselect:
             self.best_gf = self.gf_model
             self.best_h = self.h_model
-
-        utils.save_model(self.best_gf, os.path.join(self.base_path,self.config['save'],f'fold{self.test_fold_idx}', 'gf_weights.pt'))
-        utils.save_model(self.best_h, os.path.join(self.base_path,self.config['save'],f'fold{self.test_fold_idx}', 'h_weights.pt'))
+        if self.test_fold_idx>=0:
+            gf_path = os.path.join(f'fold{self.test_fold_idx}', 'gf_weights.pt')
+            h_path = os.path.join(f'fold{self.test_fold_idx}', 'h_weights.pt')
+        else:
+            gf_path = 'gf_weights.pt'
+            h_path = 'h_weights.pt'
+        utils.save_model(self.best_gf, os.path.join(self.base_path,self.config['save'],gf_path))
+        utils.save_model(self.best_h, os.path.join(self.base_path,self.config['save'],h_path))
         
         step_dic.update(test_dic)
         step_dic.update(train_dic)

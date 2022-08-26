@@ -349,9 +349,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                     policy_y = nn.functional.one_hot(target_search, num_classes=n_class).cuda().float()
                 else:
                     policy_y = None
-                print(f'input search: {input_search.shape}')
                 mixed_features = adaaug(input_search, seq_len, mode='explore',y=policy_y)
-                print(f'mix feature: {mixed_features.shape}')
                 logits_search = gf_model.classify(mixed_features)
                 if multilabel:
                     loss = criterion(logits_search, target_search.float())

@@ -174,6 +174,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             lr=args.proj_learning_rate,
             betas=(0.9, 0.999),
             weight_decay=args.proj_weight_decay)
+        
         if not multilabel:
             self.criterion = nn.CrossEntropyLoss()
         else:
@@ -284,7 +285,7 @@ def main():
     #torch.cuda.set_device(args.gpu)
     utils.reproducibility(args.seed)
     #logging.info('gpu device = %d' % args.gpu)
-    #logging.info("args = %s", args)
+    logging.info("args = %s", args)
     #wandb
     experiment_name = f'{Aug_type}{description}lamda{args.lambda_aug}_search{args.augselect}_vselect_{args.dataset}{args.labelgroup}_{args.model_name}_e{args.epochs}_lr{args.learning_rate}'
     '''run_log = wandb.init(config=args, 
@@ -326,6 +327,7 @@ def main():
         'BASE_PATH': args.base_path,
     }'''
     hparams['args'] = args
+    hparams['BASE_PATH'] = args.base_path
     if args.kfold==10:
         hparams['kfold'] = tune.grid_search([i for i in range(args.kfold)])
     else:
@@ -343,7 +345,6 @@ def main():
     }
     hparams["log_config"]= False
     hparams['wandb'] = wandb_config
-    hparams['BASE_PATH'] = args.base_path
 
     # if FLAGS.restore:
     #     train_spec["restore"] = FLAGS.restore

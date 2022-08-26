@@ -344,10 +344,14 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
         testset = dataset_func(dataroot,mode=fold_assign[2],multilabel=multilabel,**kwargs)
         #preprocess
         ss = StandardScaler()
+        print(f'Before dataset {search_trainset.input_data.shape} sample 0:')
+        print(search_trainset[0][0])
         ss = search_trainset.fit_preprocess(ss)
         ss = search_trainset.trans_preprocess(ss)
         ss = validset.trans_preprocess(ss)
         ss = testset.trans_preprocess(ss)
+        print(f'After dataset {search_trainset.input_data.shape} sample 0:')
+        print(search_trainset[0][0])
     else:
         if dataset_name == 'edfx': #edfx have special split method
             dataset = dataset_func(dataroot,multilabel=multilabel,**kwargs)

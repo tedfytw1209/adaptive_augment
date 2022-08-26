@@ -68,6 +68,7 @@ parser.add_argument('--loss_type', type=str, default='minus', help="loss type fo
 parser.add_argument('--keep_aug', action='store_true', default=False, help='info keep augment')
 parser.add_argument('--keep_mode', type=str, default='auto', help='info keep mode',choices=['auto','b','p','t'])
 parser.add_argument('--keep_thres', type=float, default=0.6, help="augment sample weight")
+parser.add_argument('--keep_len', type=int, default=100, help="info keep seq len")
 
 args = parser.parse_args()
 debug = True if args.save == "debug" else False
@@ -85,6 +86,8 @@ else:
     description += ''
 if args.diff_aug and not args.not_reweight:
     description+='rew'
+if args.keep_aug:
+    description+=f'keep{args.keep_mode}'
 now_str = time.strftime("%Y%m%d-%H%M%S")
 args.save = '{}-{}-{}{}'.format(now_str, args.save,Aug_type,description)
 if debug:
@@ -146,9 +149,14 @@ def main():
         use_cuda=True, data_parallel=False,dataset=args.dataset)
     logging.info("param size = %fMB", utils.count_parameters_in_MB(gf_model))
     h_input = gf_model.fc.in_features
-    if args.class_adapt:
+    label_num, label_embed = 0,0
+    if args.class_adapt and args.class_embed:
+            label_num = n_class
+            label_embed = 32 #tmp use
+            h_input = h_input + label_embed
+    elif args.class_adapt:
         h_input =h_input + n_class
-    h_model = Projection_TSeries(in_features=h_input,
+    h_model = Projection_TSeries(in_features=h_input,label_num=label_num,label_embed=label_embed,
         n_layers=args.n_proj_layer, n_hidden=128, augselect=args.augselect).cuda()
 
     #  training settings
@@ -160,7 +168,8 @@ def main():
     gf_optimizer = torch.optim.AdamW(gf_model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay) #follow ptbxl batchmark!!!
     '''scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(gf_optimizer,
         float(args.epochs), eta_min=args.learning_rate_min)'''
-    scheduler = torch.optim.lr_scheduler.OneCycleLR(gf_optimizer, max_lr=args.learning_rate, epochs = args.epochs, steps_per_epoch = len(train_queue)) #follow ptbxl batchmark!!!
+    scheduler = torch.optim.lr_scheduler.OneCycleLR(gf_optimizer, max_lr=args.learning_rate, 
+        epochs = args.epochs, steps_per_epoch = len(train_queue)) #follow ptbxl batchmark!!!
 
     h_optimizer = torch.optim.Adam(
         h_model.parameters(),
@@ -185,7 +194,6 @@ def main():
                     'gf_model_name': args.model_name}
 
     keepaug_config = {'keep_aug':args.keep_aug,'mode':args.keep_mode,'thres':args.keep_thres,'length':200} #tmp!!!
-
     adaaug = AdaAug_TS(after_transforms=after_transforms,
         n_class=n_class,
         gf_model=gf_model,

@@ -59,7 +59,7 @@ def Normal_search(t_series, model=None,selective='paste', apply_func=None,ops_na
             trans_t_s = apply_func(t_s,i=i,k=k,ops_name=ops_name,**kwargs)
             trans_t_series.append(trans_t_s)
             #trans_seqlen_list.append(e_len)
-        return torch.stack(trans_t_series, dim=0) #, torch.stack(trans_seqlen_list, dim=0) #(b*k_ops, seq, ch)
+    return torch.stack(trans_t_series, dim=0) #, torch.stack(trans_seqlen_list, dim=0) #(b*k_ops, seq, ch)
 
 class AdaAug(nn.Module):
     def __init__(self, after_transforms, n_class, gf_model, h_model, save_dir=None, 

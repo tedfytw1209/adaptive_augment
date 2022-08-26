@@ -55,6 +55,7 @@ parser.add_argument('--num_workers', type=int, default=0, help="num_workers")
 parser.add_argument('--k_ops', type=int, default=1, help="number of augmentation applied during training")
 parser.add_argument('--temperature', type=float, default=1.0, help="temperature")
 parser.add_argument('--search_freq', type=float, default=1, help='exploration frequency')
+parser.add_argument('--search_round', type=int, default=1, help='exploration frequency') #search_round
 parser.add_argument('--n_proj_layer', type=int, default=0, help="number of hidden layer in augmentation policy projection")
 parser.add_argument('--valselect', action='store_true', default=False, help='use valid select')
 parser.add_argument('--augselect', type=str, default='', help="augmentation selection")

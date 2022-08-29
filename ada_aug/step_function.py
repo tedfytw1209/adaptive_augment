@@ -219,8 +219,12 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     top1 = utils.AvgrageMeter()
     top5 = utils.AvgrageMeter()
     confusion_matrix = torch.zeros(n_class,n_class)
+    
+    print(loss_type)
+    print(adv_criterion)
     if adv_criterion==None:
         adv_criterion = criterion
+    
     if loss_type=='minus':
         diff_loss_func = minus_loss
     elif loss_type=='relative':

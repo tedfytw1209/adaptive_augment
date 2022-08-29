@@ -295,7 +295,7 @@ def main():
     #logging.info('gpu device = %d' % args.gpu)
     logging.info("args = %s", args)
     #wandb
-    experiment_name = f'{Aug_type}{description}lamda{args.lambda_aug}_search{args.augselect}_vselect_{args.dataset}{args.labelgroup}_{args.model_name}_e{args.epochs}_lr{args.learning_rate}'
+    experiment_name = f'{Aug_type}{description}_search{args.augselect}_vselect_{args.dataset}{args.labelgroup}_{args.model_name}_e{args.epochs}_lr{args.learning_rate}'
     '''run_log = wandb.init(config=args, 
                   project='AdaAug',
                   group=experiment_name,

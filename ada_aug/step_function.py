@@ -317,6 +317,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
             #difficult, train input, target
             gf_optimizer.zero_grad()
             h_optimizer.zero_grad()
+            input_search_list,seq_len_list,target_search_list,policy_y_list = [],[],[],[]
             for r in range(search_round): #grad accumulation
                 if difficult_aug:
                     input_trsearch, seq_len, target_trsearch = next(iter(tr_search_queue))
@@ -359,8 +360,10 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 target_search = target_search.cuda()
                 if class_adaptive: #target to onehot
                     policy_y = nn.functional.one_hot(target_search, num_classes=n_class).cuda().float()
+                    policy_y_list.append(policy_y)
                 else:
                     policy_y = None
+                    policy_y_list = None
                 mixed_features = adaaug(input_search, seq_len, mode='explore',y=policy_y)
                 logits_search = gf_model.classify(mixed_features)
                 origin_logits = gf_model(input_search, seq_len)
@@ -374,13 +377,21 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 loss.backward()
                 adaptive_loss += loss.detach().item()
                 search_total += 1
+                input_search_list.append(input_search.detach())
+                seq_len_list.append(seq_len.detach())
+                target_search_list.append(target_search.detach())
                 torch.cuda.empty_cache()
             #accumulation update
             h_optimizer.step()
             #  log policy
             gf_optimizer.zero_grad()
             h_optimizer.zero_grad()
-            adaaug.add_history(input_search, seq_len, target_search,y=policy_y)
+            input_search_list = torch.cat(input_search_list,dim=0)
+            seq_len_list = torch.cat(seq_len_list,dim=0)
+            target_search_list = torch.cat(target_search_list,dim=0)
+            if class_adaptive:
+                policy_y_list = torch.cat(policy_y_list,dim=0)
+            adaaug.add_history(input_search_list, seq_len_list, target_search_list,y=policy_y_list)
         exploration_time = time.time() - timer
         torch.cuda.empty_cache()
         #log

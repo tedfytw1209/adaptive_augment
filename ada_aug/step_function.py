@@ -212,6 +212,11 @@ def minus_loss(ori_loss, aug_loss, lambda_aug):
 def adv_loss(ori_loss, aug_loss, lambda_aug):
     return lambda_aug * aug_loss
 
+def ab_loss(ori_loss, aug_loss):
+    return aug_loss
+def rel_loss(ori_loss, aug_loss):
+    return aug_loss / ori_loss.detach()
+
 def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, adaaug, criterion, gf_optimizer,scheduler,
             grad_clip, h_optimizer, epoch, search_freq,search_round=1, multilabel=False,n_class=10,
             difficult_aug=False,reweight=True,mix_feature=True,lambda_aug = 1.0,loss_type='minus',
@@ -226,10 +231,12 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     if adv_criterion==None:
         adv_criterion = criterion
     
+    sim_loss_func = ab_loss
     if loss_type=='minus':
         diff_loss_func = minus_loss
     elif loss_type=='relative':
         diff_loss_func = relative_loss
+        sim_loss_func = rel_loss
     elif loss_type=='adv':
         diff_loss_func = adv_loss
     else:
@@ -356,10 +363,14 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                     policy_y = None
                 mixed_features = adaaug(input_search, seq_len, mode='explore',y=policy_y)
                 logits_search = gf_model.classify(mixed_features)
+                origin_logits = gf_model(input_search, seq_len)
                 if multilabel:
                     loss = criterion(logits_search, target_search.float())
+                    ori_loss = criterion(origin_logits, target_search.float())
                 else:
                     loss = criterion(logits_search, target_search.long())
+                    ori_loss = criterion(origin_logits, target_search.long())
+                loss = sim_loss_func(ori_loss,loss)
                 loss.backward()
                 adaptive_loss += loss.detach().item()
                 search_total += 1

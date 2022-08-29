@@ -5,6 +5,7 @@ from operator import invert
 import random
 import numpy as np
 import torch
+import torch.nn as nn
 from scipy.interpolate import Rbf
 from scipy.spatial.transform import Rotation
 from sklearn.utils import check_random_state
@@ -984,6 +985,16 @@ class BeatAugment:
         assert new_x.shape[2]==seq_len
         return new_x.permute(0,2,1).detach().view(seq_len,channel) #back to (len,channel)
 
+def stop_bn_track_running_stats(model):
+        for m in model.modules():
+            if isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d)):
+                m.track_running_stats = False
+
+def activate_bn_track_running_stats(model):
+    for m in model.modules():
+        if isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d)):
+            m.track_running_stats = True
+
 class KeepAugment(object): #need fix
     def __init__(self, mode, length,thres=0.6,transfrom=None,default_select=None, early=False, low = False, sfreq=100,pw_len=0.2,tw_len=0.4,**_kwargs):
         assert mode in ['auto','b','p','t'] #auto: all, b: heart beat(-0.2,0.4), p: p-wave(-0.2,0), t: t-wave(0,0.4)
@@ -1124,7 +1135,11 @@ class KeepAugment(object): #need fix
     def get_importance(self, model, x, **_kwargs):
         for param in model.parameters():
             param.requires_grad = False
-        model.eval()
+        if hasattr(model, 'lstm'):
+            model.lstm.train()
+            stop_bn_track_running_stats(model)
+        else:
+            model.eval()
         b, seq_len , c = x.shape
         if self.early: #early not allow now
             preds = model(x,early=True)
@@ -1140,6 +1155,8 @@ class KeepAugment(object): #need fix
         slc_ -= slc_.min(1, keepdim=True)[0]
         slc_ /= slc_.max(1, keepdim=True)[0]
         slc_ = slc_.view(b, w)
+        if hasattr(model, 'lstm'):
+            activate_bn_track_running_stats(model)
         return slc_
     
     def get_heartbeat(self,x):

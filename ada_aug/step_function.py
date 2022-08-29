@@ -344,7 +344,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                     loss_policy.backward()
                     #h_optimizer.step() wait till validation set
                     difficult_loss += loss_policy.detach().item()
-                    #torch.cuda.empty_cache()
+                    torch.cuda.empty_cache()
                 #similar
                 input_search, seq_len, target_search = next(iter(search_queue))
                 input_search = input_search.float().cuda()
@@ -362,6 +362,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 loss.backward()
                 adaptive_loss += loss.detach().item()
                 search_total += 1
+                torch.cuda.empty_cache()
             #accumulation update
             h_optimizer.step()
             #  log policy

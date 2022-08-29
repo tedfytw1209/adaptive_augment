@@ -93,6 +93,7 @@ else:
     Aug_type = 'NOAUG'
 if args.diff_aug:
     description = 'diff2'
+    description += args.loss_type
 else:
     description = ''
 if args.class_adapt:

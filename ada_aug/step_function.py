@@ -70,6 +70,7 @@ def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_
         nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
         optimizer.step()
         scheduler.step()
+        torch.cuda.empty_cache()
         n = input.size(0)
         objs.update(loss.detach().item(), n)
         if not multilabel:

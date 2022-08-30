@@ -375,6 +375,11 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                     sim_model = teacher_model
                 logits_search = sim_model.classify(mixed_features)
                 origin_logits = sim_model(input_search, seq_len)
+                #tmp
+                logits_tmp = gf_model.classify(mixed_features)
+                print(logits_search)
+                print(logits_tmp)
+                #calculate loss
                 if multilabel:
                     loss = criterion(logits_search, target_search.float())
                     ori_loss = criterion(origin_logits, target_search.float())
@@ -391,6 +396,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 target_search_list.append(target_search.detach())
                 torch.cuda.empty_cache()
             #accumulation update
+            nn.utils.clip_grad_norm_(adaaug.h_model.parameters(), grad_clip)
             h_optimizer.step()
             #  log policy
             gf_optimizer.zero_grad()

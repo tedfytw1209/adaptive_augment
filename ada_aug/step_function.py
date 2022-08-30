@@ -382,6 +382,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 target_search_list.append(target_search.detach())
                 torch.cuda.empty_cache()
             #accumulation update
+            nn.utils.clip_grad_norm_(adaaug.h_model.parameters(), grad_clip)
             h_optimizer.step()
             #  log policy
             gf_optimizer.zero_grad()

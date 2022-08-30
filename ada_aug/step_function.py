@@ -220,7 +220,7 @@ def rel_loss(ori_loss, aug_loss):
 def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, adaaug, criterion, gf_optimizer,scheduler,
             grad_clip, h_optimizer, epoch, search_freq,search_round=1, multilabel=False,n_class=10,
             difficult_aug=False,reweight=True,mix_feature=True,lambda_aug = 1.0,loss_type='minus',
-            class_adaptive=False,adv_criterion=None,teacher_model=None):
+            class_adaptive=False,adv_criterion=None,sim_criterion=None,teacher_model=None):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
     top5 = utils.AvgrageMeter()
@@ -230,6 +230,8 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     print(adv_criterion)
     if adv_criterion==None:
         adv_criterion = criterion
+    if sim_criterion==None:
+        sim_criterion = criterion
     
     sim_loss_func = ab_loss
     if loss_type=='minus':
@@ -335,11 +337,11 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                     mixed_features = adaaug(input_trsearch, seq_len, mode='explore',mix_feature=mix_feature,y=policy_y)
                     aug_logits = gf_model.classify(mixed_features) 
                     if multilabel:
-                        aug_loss = criterion(aug_logits, target_trsearch.float())
-                        ori_loss = criterion(origin_logits, target_trsearch.float())
+                        aug_loss = adv_criterion(aug_logits, target_trsearch.float())
+                        ori_loss = adv_criterion(origin_logits, target_trsearch.float())
                     else:
-                        aug_loss = criterion(aug_logits, target_trsearch.long())
-                        ori_loss = criterion(origin_logits, target_trsearch.long())
+                        aug_loss = adv_criterion(aug_logits, target_trsearch.long())
+                        ori_loss = adv_criterion(origin_logits, target_trsearch.long())
                     loss_prepolicy = diff_loss_func(ori_loss=ori_loss,aug_loss=aug_loss,lambda_aug=lambda_aug)
                     if reweight: #reweight part, a,b = ?
                         p_orig = origin_logits.softmax(dim=1)[torch.arange(batch_size), target_trsearch].detach()
@@ -377,11 +379,11 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 origin_logits = sim_model(input_search, seq_len)
                 #calculate loss
                 if multilabel:
-                    loss = criterion(logits_search, target_search.float())
-                    ori_loss = criterion(origin_logits, target_search.float())
+                    loss = sim_criterion(logits_search, target_search.float())
+                    ori_loss = sim_criterion(origin_logits, target_search.float())
                 else:
-                    loss = criterion(logits_search, target_search.long())
-                    ori_loss = criterion(origin_logits, target_search.long())
+                    loss = sim_criterion(logits_search, target_search.long())
+                    ori_loss = sim_criterion(origin_logits, target_search.long())
                 loss = sim_loss_func(ori_loss,loss)
                 loss.backward()
 

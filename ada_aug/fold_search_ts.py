@@ -13,6 +13,7 @@ import numpy as np
 from sklearn.metrics import average_precision_score,roc_auc_score
 import torch.nn as nn
 import torch.utils
+import torch.optim as optim
 
 from adaptive_augmentor import AdaAug_TS
 from networks import get_model_tseries
@@ -84,6 +85,8 @@ parser.add_argument('--keep_aug', action='store_true', default=False, help='info
 parser.add_argument('--keep_mode', type=str, default='auto', help='info keep mode',choices=['auto','b','p','t'])
 parser.add_argument('--keep_thres', type=float, default=0.6, help="augment sample weight")
 parser.add_argument('--keep_len', type=int, default=100, help="info keep seq len")
+parser.add_argument('--teach_aug', action='store_true', default=False, help='teacher augment')
+parser.add_argument('--ema_rate', type=float, default=0.999, help="teacher ema rate")
 
 args = parser.parse_args()
 debug = True if args.save == "debug" else False
@@ -104,6 +107,8 @@ if args.diff_aug and not args.not_reweight:
     description+='rew'
 if args.keep_aug:
     description+=f'keep{args.keep_mode}'
+if args.teach_aug:
+    description+=f'teach{args.ema_rate}'
 now_str = time.strftime("%Y%m%d-%H%M%S")
 args.save = '{}-{}-{}{}'.format(now_str, args.save,Aug_type,description)
 if debug:
@@ -164,6 +169,17 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         #  model settings
         self.gf_model = get_model_tseries(model_name=args.model_name, num_class=n_class,n_channel=n_channel,
             use_cuda=True, data_parallel=False,dataset=args.dataset)
+        #EMA if needed
+        self.ema_model = None
+        if args.teach_aug:
+            print('Using EMA teacher model')
+            avg_fn = lambda averaged_model_parameter, model_parameter, num_averaged: \
+                args.ema_rate * averaged_model_parameter + (1 - args.ema_rate) * model_parameter
+            self.ema_model = optim.swa_utils.AveragedModel(self.gf_model, avg_fn=avg_fn)
+            for ema_p in self.ema_model.parameters():
+                ema_p.requires_grad_(False)
+            self.ema_model.train()
+        #h model
         h_input = self.gf_model.fc.in_features
         label_num, label_embed = 0,0
         if args.class_adapt and args.class_embed:
@@ -172,7 +188,6 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             h_input = h_input + label_embed
         elif args.class_adapt:
             h_input =h_input + n_class
-        
         self.h_model = Projection_TSeries(in_features=h_input,label_num=label_num,label_embed=label_embed,
             n_layers=args.n_proj_layer, n_hidden=128, augselect=args.augselect).cuda()
         #  training settings
@@ -235,7 +250,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         lr = self.scheduler.get_last_lr()[0]
         step_dic={'epoch':self._iteration}
         diff_dic = {'difficult_aug':self.diff_augment,'reweight':self.diff_reweight,'lambda_aug':args.lambda_aug, 'class_adaptive':args.class_adapt,
-                'loss_type':args.loss_type, 'adv_criterion': self.adv_criterion}
+                'loss_type':args.loss_type, 'adv_criterion': self.adv_criterion, 'teacher_model':self.ema_model}
         # searching
         train_acc, train_obj, train_dic = search_train(args,self.train_queue, self.search_queue, self.tr_search_queue, self.gf_model, self.adaaug,
             self.criterion, self.gf_optimizer,self.scheduler, args.grad_clip, self.h_optimizer, self._iteration, args.search_freq, 

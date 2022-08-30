@@ -220,7 +220,7 @@ def rel_loss(ori_loss, aug_loss):
 def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, adaaug, criterion, gf_optimizer,scheduler,
             grad_clip, h_optimizer, epoch, search_freq,search_round=1, multilabel=False,n_class=10,
             difficult_aug=False,reweight=True,mix_feature=True,lambda_aug = 1.0,loss_type='minus',
-            class_adaptive=False,adv_criterion=None):
+            class_adaptive=False,adv_criterion=None,teacher_model=None):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
     top5 = utils.AvgrageMeter()
@@ -292,6 +292,9 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
         gf_optimizer.step()
         scheduler.step() #8/03 add!!!
         gf_optimizer.zero_grad()
+        #ema teacher
+        if teacher_model:
+            teacher_model.update_parameters(gf_model)
         #  stats
         n = target.size(0)
         objs.update(loss.detach().item(), n)
@@ -365,8 +368,14 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                     policy_y = None
                     policy_y_list = None
                 mixed_features = adaaug(input_search, seq_len, mode='explore',y=policy_y)
-                logits_search = gf_model.classify(mixed_features)
-                origin_logits = gf_model(input_search, seq_len)
+                #tea
+                if teacher_model==None:
+                    sim_model = gf_model
+                else:
+                    sim_model = teacher_model.module
+                logits_search = sim_model.classify(mixed_features)
+                origin_logits = sim_model(input_search, seq_len)
+                #calculate loss
                 if multilabel:
                     loss = criterion(logits_search, target_search.float())
                     ori_loss = criterion(origin_logits, target_search.float())
@@ -375,6 +384,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                     ori_loss = criterion(origin_logits, target_search.long())
                 loss = sim_loss_func(ori_loss,loss)
                 loss.backward()
+
                 adaptive_loss += loss.detach().item()
                 search_total += 1
                 input_search_list.append(input_search.detach())

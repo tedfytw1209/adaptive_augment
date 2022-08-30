@@ -52,7 +52,7 @@ parser.add_argument('--gpu', type=float, default=0.12, help='Allocated by Ray')
 parser.add_argument('--epochs', type=int, default=20, help='number of training epochs')
 parser.add_argument('--model_path', type=str, default='saved_models', help='path to save the model')
 parser.add_argument('--save', type=str, default='EXP', help='experiment name')
-parser.add_argument('--seed', type=int, default=2, help='seed')
+parser.add_argument('--seed', type=int, default=42, help='seed')
 parser.add_argument('--grad_clip', type=float, default=5, help='gradient clipping')
 parser.add_argument('--multilabel', action='store_true', default=False, help='using multilabel default False')
 parser.add_argument('--train_portion', type=float, default=1, help='portion of training data')
@@ -127,6 +127,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         #self.trainer = TSeriesModelTrainer(self.config)
         os.environ['WANDB_START_METHOD'] = 'thread'
         args = self.config['args']
+        utils.reproducibility(args.seed) #for reproduce
         #  dataset settings for search
         n_channel = get_num_channel(args.dataset)
         n_class = get_num_class(args.dataset,args.labelgroup)

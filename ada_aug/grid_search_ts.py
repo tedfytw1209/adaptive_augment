@@ -254,8 +254,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         else:
             gf_path = 'gf_weights.pt'
             h_path = 'h_weights.pt'
-        utils.save_model(self.best_gf, os.path.join(self.base_path,self.config['save'],gf_path))
-        utils.save_model(self.best_h, os.path.join(self.base_path,self.config['save'],h_path))
+        #utils.save_model(self.best_gf, os.path.join(self.base_path,self.config['save'],gf_path))
+        #utils.save_model(self.best_h, os.path.join(self.base_path,self.config['save'],h_path))
         
         step_dic.update(test_dic)
         step_dic.update(train_dic)
@@ -266,8 +266,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             step_dic.update(self.result_valid_dic)
             step_dic.update(self.result_test_dic)
             #save&log
-            self.adaaug.save_history(self.class2label)
-            figure = self.adaaug.plot_history()
+            #self.adaaug.save_history(self.class2label)
+            #figure = self.adaaug.plot_history()
             wandb.log(step_dic)
         call_back_dic = {'train_acc': train_acc, 'valid_acc': valid_acc, 'test_acc': test_acc}
         return call_back_dic

@@ -372,13 +372,9 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 if teacher_model==None:
                     sim_model = gf_model
                 else:
-                    sim_model = teacher_model
+                    sim_model = teacher_model.module
                 logits_search = sim_model.classify(mixed_features)
                 origin_logits = sim_model(input_search, seq_len)
-                #tmp
-                logits_tmp = gf_model.classify(mixed_features)
-                print(logits_search)
-                print(logits_tmp)
                 #calculate loss
                 if multilabel:
                     loss = criterion(logits_search, target_search.float())

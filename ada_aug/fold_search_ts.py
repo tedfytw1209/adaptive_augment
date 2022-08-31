@@ -3,6 +3,7 @@ from __future__ import absolute_import
 from multiprocessing import reduction
 
 import os
+from re import search
 import sys
 import time
 import torch
@@ -23,6 +24,7 @@ from dataset import get_ts_dataloaders, get_num_class, get_label_name, get_datas
 from operation_tseries import TS_OPS_NAMES,ECG_OPS_NAMES,TS_ADD_NAMES,MAG_TEST_NAMES,NOMAG_TEST_NAMES
 from step_function import train,infer,search_train,search_infer
 from non_saturating_loss import NonSaturatingLoss
+from class_balanced_loss import ClassBalLoss
 import wandb
 
 import ray
@@ -208,6 +210,14 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         self.adv_criterion = None
         if args.loss_type=='adv':
             self.adv_criterion = NonSaturatingLoss(epsilon=0.1)
+        self.sim_criterion = None
+        if args.policy_loss=='classbal':
+            search_labels = self.search_queue.dataset.dataset.label
+            search_labels_count = np.sum(search_labels,axis=0)
+            sim_type = 'softmax'
+            if multilabel:
+                sim_type = 'focal'
+            self.sim_criterion = ClassBalLoss(search_labels_count,len(search_labels_count),loss_type=sim_type)
 
         #  AdaAug settings for search
         after_transforms = self.train_queue.dataset.after_transforms
@@ -250,7 +260,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         lr = self.scheduler.get_last_lr()[0]
         step_dic={'epoch':self._iteration}
         diff_dic = {'difficult_aug':self.diff_augment,'reweight':self.diff_reweight,'lambda_aug':args.lambda_aug, 'class_adaptive':args.class_adapt,
-                'loss_type':args.loss_type, 'adv_criterion': self.adv_criterion, 'teacher_model':self.ema_model}
+                'loss_type':args.loss_type, 'adv_criterion': self.adv_criterion, 'teacher_model':self.ema_model, 'sim_criterion':self.sim_criterion}
         # searching
         train_acc, train_obj, train_dic = search_train(args,self.train_queue, self.search_queue, self.tr_search_queue, self.gf_model, self.adaaug,
             self.criterion, self.gf_optimizer,self.scheduler, args.grad_clip, self.h_optimizer, self._iteration, args.search_freq, 

@@ -51,9 +51,9 @@ def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_
         if difficult_aug:
             origin_logits = model(input, seq_len)
             if multilabel:
-                ori_loss = criterion(origin_logits, target.float())
+                ori_loss = criterion(origin_logits, target.float()) / 2
             else:
-                ori_loss = criterion(origin_logits, target.long())
+                ori_loss = criterion(origin_logits, target.long()) / 2
             if reweight: #reweight part, a,b = ?
                 p_orig = origin_logits.softmax(dim=1)[torch.arange(batch_size), target].detach()
                 p_aug = logits.softmax(dim=1)[torch.arange(batch_size), target].clone().detach()
@@ -62,9 +62,9 @@ def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_
                     w_aug /= (w_aug.mean().detach() + 1e-6)
                 else:
                     w_aug = 1
-                aug_loss = (w_aug * lambda_aug * aug_loss).mean()
+                aug_loss = (w_aug * lambda_aug * aug_loss).mean() / 2
             else:
-                aug_loss = (lambda_aug * aug_loss).mean()
+                aug_loss = (lambda_aug * aug_loss).mean() / 2
         loss = ori_loss + aug_loss
         loss.backward()
         nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
@@ -219,7 +219,7 @@ def rel_loss(ori_loss, aug_loss):
 
 def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, adaaug, criterion, gf_optimizer,scheduler,
             grad_clip, h_optimizer, epoch, search_freq,search_round=1, multilabel=False,n_class=10,
-            difficult_aug=False,reweight=True,mix_feature=True,lambda_aug = 1.0,loss_type='minus',
+            difficult_aug=False,same_train=False,reweight=True,mix_feature=True,lambda_aug = 1.0,loss_type='minus',
             class_adaptive=False,adv_criterion=None,sim_criterion=None,teacher_model=None):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
@@ -271,12 +271,12 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
         #difficult aug
         ori_loss = 0
         batch_size = target.shape[0]
-        if difficult_aug:
+        if not same_train and difficult_aug:
             origin_logits = gf_model(input, seq_len)
             if multilabel:
-                ori_loss = criterion(origin_logits, target.float())
+                ori_loss = criterion(origin_logits, target.float()) / 2
             else:
-                ori_loss = criterion(origin_logits, target.long())
+                ori_loss = criterion(origin_logits, target.long()) / 2
             if reweight: #reweight part, a,b = ?
                 p_orig = origin_logits.softmax(dim=1)[torch.arange(batch_size), target].detach()
                 p_aug = logits.softmax(dim=1)[torch.arange(batch_size), target].clone().detach()
@@ -285,9 +285,9 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                     w_aug /= (w_aug.mean().detach() + 1e-6)
                 else:
                     w_aug = 1
-                aug_loss = (w_aug * lambda_aug * aug_loss).mean()
+                aug_loss = (w_aug * lambda_aug * aug_loss).mean() / 2
             else:
-                aug_loss = (lambda_aug * aug_loss).mean()
+                aug_loss = (lambda_aug * aug_loss).mean() / 2
         loss = ori_loss + aug_loss
         loss.backward()
         nn.utils.clip_grad_norm_(gf_model.parameters(), grad_clip)

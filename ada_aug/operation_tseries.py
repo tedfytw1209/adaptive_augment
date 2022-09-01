@@ -1054,7 +1054,11 @@ class KeepAugment(object): #need fix
         info_len = int(self.length/seg_number)
         windowed_slc = torch.nn.functional.avg_pool1d(slc_.view(b,1,w),kernel_size=info_len, stride=1, padding=0).view(b,-1)
         windowed_len = int(windowed_slc.shape[0] / seg_number)
-        quant_scores = torch.quantile(windowed_slc,info_aug,dim=1) #quant for each batch
+        #quant_scores = torch.quantile(windowed_slc,info_aug,dim=1) #quant for each batch
+        seg_accum = [i*seg_len for i in range(seg_number)]
+        seg_accum.append(w)
+        windowed_accum = [i*windowed_len for i in range(seg_number)]
+        windowed_accum.append(windowed_slc.shape[0])
         #print(slc_)
         #print(windowed_slc)
         #print(quant_scores)
@@ -1062,9 +1066,9 @@ class KeepAugment(object): #need fix
         for i,(t_s, slc, windowed_slc_each) in enumerate(zip(t_series_, slc_, windowed_slc)):
             #find region for each segment
             for seg_idx in range(seg_number):
-                start = seg_idx*seg_len
-                end = (seg_idx+1)*seg_len
-                quant_score = torch.quantile(windowed_slc_each[seg_idx*windowed_len:(seg_idx+1)*windowed_len],info_aug)
+                start = seg_accum[seg_idx]
+                end = seg_accum[seg_idx+1]
+                quant_score = torch.quantile(windowed_slc_each[windowed_accum[seg_idx]:windowed_accum[seg_idx+1]],info_aug)
                 while(True):
                     x = np.random.randint(start,end)
                     x1 = np.clip(x - info_len // 2, 0, w)
@@ -1111,34 +1115,47 @@ class KeepAugment(object): #need fix
             info_aug = 1.0 - self.thres
             compare_func = ge
         #windowed_slc = self.m_pool(slc_.view(b,1,w)).view(b,-1)
-        windowed_slc = torch.nn.functional.avg_pool1d(slc_.view(b,1,w),kernel_size=self.length, stride=1, padding=0).view(b,-1)
-        quant_scores = torch.quantile(windowed_slc,info_aug,dim=1) #quant for each batch
+        #select a segment number
+        seg_number = np.random.choice(self.possible_segment)
+        seg_len = int(w / seg_number)
+        info_len = int(self.length/seg_number)
+        windowed_slc = torch.nn.functional.avg_pool1d(slc_.view(b,1,w),kernel_size=info_len, stride=1, padding=0).view(b,-1)
+        windowed_len = int(windowed_slc.shape[0] / seg_number)
+        #quant_scores = torch.quantile(windowed_slc,info_aug,dim=1) #quant for each batch
+        seg_accum = [i*seg_len for i in range(seg_number)]
+        seg_accum.append(w)
+        windowed_accum = [i*windowed_len for i in range(seg_number)]
+        windowed_accum.append(windowed_slc.shape[0])
         #print(slc_)
         #print(windowed_slc)
         #print(quant_scores)
         #bug when using augment!!!
         aug_t_s_list = []
-        for i,(t_s, slc, quant_score) in enumerate(zip(t_series_, slc_, quant_scores)):
+        for i,(t_s, slc, windowed_slc_each) in enumerate(zip(t_series_, slc_, windowed_slc)):
             #find region
             for k, ops_name in enumerate(ops_names):
                 t_s_tmp = t_s.clone().detach()
-                while(True):
-                    x = np.random.randint(w)
-                    x1 = np.clip(x - self.length // 2, 0, w)
-                    x2 = np.clip(x + self.length // 2, 0, w)
-                    if compare_func(slc[x1: x2].mean(),quant_score):
-                        #mask[x1: x2] = False
-                        t_s_tmp = t_s_tmp.detach().cpu()
-                        info_region = t_s_tmp[x1: x2,:].clone().detach().cpu()
-                        break
-                #augment & paste back
-                if selective=='cut':
-                    info_region = augment(info_region,i=i,k=k,ops_name=ops_name,**kwargs) #some other augment if needed
-                else:
-                    t_s_tmp = augment(t_s_tmp,i=i,k=k,ops_name=ops_name,**kwargs) #some other augment if needed
-                #mask = torch.from_numpy(mask).cuda()
-                #print('Size compare: ',t_s[x1: x2, :].shape,info_region.shape)
-                t_s_tmp[x1: x2, :] = info_region
+                for seg_idx in range(seg_number):
+                    start = seg_accum[seg_idx]
+                    end = seg_accum[seg_idx+1]
+                    quant_score = torch.quantile(windowed_slc_each[windowed_accum[seg_idx]:windowed_accum[seg_idx+1]],info_aug)
+                    while(True):
+                        x = np.random.randint(start,end)
+                        x1 = np.clip(x - info_len // 2, 0, w)
+                        x2 = np.clip(x + info_len // 2, 0, w)
+                        if compare_func(slc[x1: x2].mean(),quant_score):
+                            #mask[x1: x2] = False
+                            t_s_tmp = t_s_tmp.detach().cpu()
+                            info_region = t_s_tmp[x1: x2,:].clone().detach().cpu()
+                            break
+                    #augment & paste back
+                    if selective=='cut':
+                        info_region = augment(info_region,i=i,k=k,ops_name=ops_name,**kwargs) #some other augment if needed
+                    else:
+                        t_s_tmp = augment(t_s_tmp,i=i,k=k,ops_name=ops_name,**kwargs) #some other augment if needed
+                    #mask = torch.from_numpy(mask).cuda()
+                    #print('Size compare: ',t_s[x1: x2, :].shape,info_region.shape)
+                    t_s_tmp[x1: x2, :] = info_region
                 aug_t_s_list.append(t_s_tmp)
         #back
         model.train()

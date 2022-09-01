@@ -996,7 +996,9 @@ def activate_bn_track_running_stats(model):
             m.track_running_stats = True
 
 class KeepAugment(object): #need fix
-    def __init__(self, mode, length,thres=0.6,transfrom=None,default_select=None, early=False, low = False, sfreq=100,pw_len=0.2,tw_len=0.4,**_kwargs):
+    def __init__(self, mode, length,thres=0.6,transfrom=None,default_select=None, early=False, low = False,
+        possible_segment=[1],grid_region=False,
+        sfreq=100,pw_len=0.2,tw_len=0.4,**_kwargs):
         assert mode in ['auto','b','p','t'] #auto: all, b: heart beat(-0.2,0.4), p: p-wave(-0.2,0), t: t-wave(0,0.4)
         self.mode = mode
         if self.mode=='p':
@@ -1014,7 +1016,10 @@ class KeepAugment(object): #need fix
         self.trans = transfrom
         self.default_select = default_select
         self.thres = thres
-        self.m_pool = torch.nn.AvgPool1d(kernel_size=self.length, stride=1, padding=0) #for winodow sum
+        self.possible_segment = possible_segment
+        self.grid_region = grid_region
+        #'torch.nn.functional.avg_pool1d' use this for segment
+        ##self.m_pool = torch.nn.AvgPool1d(kernel_size=self.length, stride=1, padding=0) #for winodow sum
         print(f'Apply InfoKeep Augment: mode={self.mode}, threshold={self.thres}, transfrom={self.trans}')
         
     #kwargs for apply_func, batch_inputs
@@ -1032,6 +1037,7 @@ class KeepAugment(object): #need fix
             slc_ = self.get_importance(model,t_series_)
         else:
             slc_ = self.get_heartbeat(t_series)
+        t_series_.requires_grad = False #no need gradient now
         #(b,seq)
         #cut or paste
         assert selective in ['cut','paste']
@@ -1041,33 +1047,41 @@ class KeepAugment(object): #need fix
         else:
             info_aug = 1.0 - self.thres
             compare_func = ge
-        windowed_slc = self.m_pool(slc_.view(b,1,w)).view(b,-1)
+        #windowed_slc = self.m_pool(slc_.view(b,1,w)).view(b,-1)
+        #select a segment number
+        seg_number = np.random.choice(self.possible_segment)
+        seg_len = int(w / seg_number)
+        info_len = int(self.length/seg_number)
+        windowed_slc = torch.nn.functional.avg_pool1d(slc_.view(b,1,w),kernel_size=info_len, stride=1, padding=0).view(b,-1)
+        windowed_len = int(windowed_slc.shape[0] / seg_number)
         quant_scores = torch.quantile(windowed_slc,info_aug,dim=1) #quant for each batch
         #print(slc_)
         #print(windowed_slc)
         #print(quant_scores)
-        #can be further improve
         aug_t_s_list = []
-        for i,(t_s, slc, quant_score) in enumerate(zip(t_series_, slc_, quant_scores)):
-            #find region
-            #mask = np.ones((w), dtype=bool)
-            while(True):
-                x = np.random.randint(w)
-                x1 = np.clip(x - self.length // 2, 0, w)
-                x2 = np.clip(x + self.length // 2, 0, w)
-                if compare_func(slc[x1: x2].mean(),quant_score): #mean will cause infinite running!!!
-                    #mask[x1: x2] = False
-                    t_s = t_s.detach().cpu()
-                    info_region = t_s[x1: x2,:].clone().detach().cpu()
-                    break
-            #augment & paste back
-            if selective=='cut':
-                info_region = augment(info_region,i=i,**kwargs) #some other augment if needed
-            else:
-                t_s = augment(t_s,i=i,**kwargs) #some other augment if needed
-            #mask = torch.from_numpy(mask).cuda()
-            #print('Size compare: ',t_s[x1: x2, :].shape,info_region.shape)
-            t_s[x1: x2, :] = info_region
+        for i,(t_s, slc, windowed_slc_each) in enumerate(zip(t_series_, slc_, windowed_slc)):
+            #find region for each segment
+            for seg_idx in range(seg_number):
+                start = seg_idx*seg_len
+                end = (seg_idx+1)*seg_len
+                quant_score = torch.quantile(windowed_slc_each[seg_idx*windowed_len:(seg_idx+1)*windowed_len],info_aug)
+                while(True):
+                    x = np.random.randint(start,end)
+                    x1 = np.clip(x - info_len // 2, 0, w)
+                    x2 = np.clip(x + info_len // 2, 0, w)
+                    if compare_func(slc[x1: x2].mean(),quant_score): #mean will cause infinite running!!!
+                        #mask[x1: x2] = False
+                        t_s = t_s.detach().cpu()
+                        info_region = t_s[x1: x2,:].clone().detach().cpu()
+                        break
+                #augment & paste back
+                if selective=='cut':
+                    info_region = augment(info_region,i=i,**kwargs) #some other augment if needed
+                else:
+                    t_s = augment(t_s,i=i,**kwargs) #some other augment if needed
+                #mask = torch.from_numpy(mask).cuda()
+                #print('Size compare: ',t_s[x1: x2, :].shape,info_region.shape)
+                t_s[x1: x2, :] = info_region
             aug_t_s_list.append(t_s)
         #back
         model.train()
@@ -1096,7 +1110,8 @@ class KeepAugment(object): #need fix
         else:
             info_aug = 1.0 - self.thres
             compare_func = ge
-        windowed_slc = self.m_pool(slc_.view(b,1,w)).view(b,-1)
+        #windowed_slc = self.m_pool(slc_.view(b,1,w)).view(b,-1)
+        windowed_slc = torch.nn.functional.avg_pool1d(slc_.view(b,1,w),kernel_size=self.length, stride=1, padding=0).view(b,-1)
         quant_scores = torch.quantile(windowed_slc,info_aug,dim=1) #quant for each batch
         #print(slc_)
         #print(windowed_slc)

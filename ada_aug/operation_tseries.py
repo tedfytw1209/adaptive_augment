@@ -1101,7 +1101,7 @@ class KeepAugment(object): #need fix
         #print(slc_)
         #print(windowed_slc)
         #print(quant_scores)
-        #bug when using augment!!!
+        t_series_ = t_series_.detach().cpu()
         aug_t_s_list = []
         for i,(t_s, slc, quant_score) in enumerate(zip(t_series_, slc_, quant_scores)):
             #find region

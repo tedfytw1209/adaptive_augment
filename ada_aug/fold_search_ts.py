@@ -215,7 +215,10 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         self.sim_criterion = None
         if args.policy_loss=='classbal':
             search_labels = self.search_queue.dataset.dataset.label
-            search_labels_count = np.sum(search_labels,axis=0)
+            if not multilabel:
+                search_labels_count = [np.count_nonzero(search_labels == i) for i in range(n_class)] #formulticlass
+            else:
+                search_labels_count = np.sum(search_labels,axis=0)
             sim_type = 'softmax'
             if multilabel:
                 sim_type = 'focal'

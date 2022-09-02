@@ -1046,7 +1046,7 @@ class KeepAugment(object): #need fix
         #print(slc_)
         #print(windowed_slc)
         #print(quant_scores)
-        #can be further improve
+        t_series_ = t_series_.detach().cpu()
         aug_t_s_list = []
         for i,(t_s, slc, quant_score) in enumerate(zip(t_series_, slc_, quant_scores)):
             #find region
@@ -1056,10 +1056,8 @@ class KeepAugment(object): #need fix
                 x1 = np.clip(x - self.length // 2, 0, w)
                 x2 = np.clip(x + self.length // 2, 0, w)
                 if compare_func(slc[x1: x2].mean(),quant_score): #mean will cause infinite running!!!
-                    #mask[x1: x2] = False
-                    t_s = t_s.detach().cpu()
-                    info_region = t_s[x1: x2,:].clone().detach().cpu()
                     break
+            info_region = t_s[x1: x2,:].clone().detach().cpu()
             #augment & paste back
             if selective=='cut':
                 info_region = augment(info_region,i=i,**kwargs) #some other augment if needed
@@ -1105,17 +1103,16 @@ class KeepAugment(object): #need fix
         aug_t_s_list = []
         for i,(t_s, slc, quant_score) in enumerate(zip(t_series_, slc_, quant_scores)):
             #find region
+            while(True):
+                x = np.random.randint(w)
+                x1 = np.clip(x - self.length // 2, 0, w)
+                x2 = np.clip(x + self.length // 2, 0, w)
+                if compare_func(slc[x1: x2].mean(),quant_score):
+                    break
+            #augment
             for k, ops_name in enumerate(ops_names):
                 t_s_tmp = t_s.clone().detach()
-                while(True):
-                    x = np.random.randint(w)
-                    x1 = np.clip(x - self.length // 2, 0, w)
-                    x2 = np.clip(x + self.length // 2, 0, w)
-                    if compare_func(slc[x1: x2].mean(),quant_score):
-                        #mask[x1: x2] = False
-                        t_s_tmp = t_s_tmp.detach().cpu()
-                        info_region = t_s_tmp[x1: x2,:].clone().detach().cpu()
-                        break
+                info_region = t_s_tmp[x1: x2,:].clone().detach().cpu()
                 #augment & paste back
                 if selective=='cut':
                     info_region = augment(info_region,i=i,k=k,ops_name=ops_name,**kwargs) #some other augment if needed

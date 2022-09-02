@@ -263,8 +263,12 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             self.best_val_acc = valid_acc
             self.result_valid_dic = {f'result_{k}': valid_dic[k] for k in valid_dic.keys()}
             self.result_test_dic = {f'result_{k}': test_dic[k] for k in test_dic.keys()}
-            valid_dic['best_valid_acc_avg'] = valid_acc
-            test_dic['best_test_acc_avg'] = test_acc
+            if self.multilabel:
+                ptype = 'auroc'
+            else:
+                ptype = 'acc'
+            valid_dic[f'best_valid_{ptype}_avg'] = valid_acc
+            test_dic[f'best_test_{ptype}_avg'] = test_acc
             self.best_task = self.task_model
         elif not args.valselect:
             self.best_task = self.task_model
@@ -324,35 +328,6 @@ def main():
                   reinit=True)'''
     #hparams
     hparams = dict(vars(args)) #copy args
-    '''hparams = {
-        'args':args,
-        'dataset':args.dataset, 'batch_size':args.batch_size, 'num_epochs':args.epochs,
-        'multilabel': args.multilabel,
-        'gradient_clipping_by_global_norm': args.grad_clip,
-        'lr': args.learning_rate,
-        'wd': args.weight_decay,
-        'momentum': args.momentum,
-        'delta': args.delta,
-        'temperature': args.temperature,
-        'k_ops': args.k_ops,
-        'train_portion': args.train_portion, ## for text data controlling ratio of training data
-        'default_split': args.default_split,
-        'labelgroup': args.labelgroup,
-        'augselect': args.augselect,
-        'diff_aug': args.diff_aug, #!!!class-wise search not finish yet
-        'lambda_aug': args.lambda_aug,
-        'class_adapt': args.class_adapt,
-        'class_embed': args.class_embed,
-        'keep_aug': args.keep_aug,
-        'keep_mode': args.keep_mode,
-        'keep_thres': args.keep_thres,
-        'kfold': tune.grid_search([i for i in range(args.kfold)]),
-        'save': args.save,
-        'ray_name': args.ray_name,
-        'BASE_PATH': args.base_path,
-        'gf_model_path': args.gf_model_path,
-        'h_model_path': args.gf_model_path,
-    }'''
     hparams['args'] = args
     hparams['kfold'] = tune.grid_search([i for i in range(args.kfold)])
     #wandb

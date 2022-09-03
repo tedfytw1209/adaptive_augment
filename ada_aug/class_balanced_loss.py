@@ -68,7 +68,7 @@ def CB_loss(labels, logits, samples_per_cls, no_of_classes, loss_type, beta, gam
     Returns:
       cb_loss: A float tensor representing class balanced loss
     """
-    effective_num = 1.0 - np.power(beta, samples_per_cls)
+    effective_num = 1.0 - np.power(beta, np.clip(samples_per_cls,1.0))
     weights = (1.0 - beta) / np.array(effective_num)
     weights = weights / np.sum(weights) * no_of_classes
 

@@ -1081,8 +1081,8 @@ class KeepAugment(object): #need fix
                     x1 = np.clip(x - info_len // 2, 0, w)
                     x2 = np.clip(x + info_len // 2, 0, w)
                     if compare_func(slc[x1: x2].mean(),quant_score): #mean will cause infinite running!!!
-                        info_region = t_s[x1: x2,:].clone().detach().cpu()
                         break
+                info_region = t_s[x1: x2,:].clone().detach().cpu()
                 #augment & paste back
                 if selective=='cut':
                     info_region = augment(info_region,i=i,**kwargs) #some other augment if needed
@@ -1131,9 +1131,8 @@ class KeepAugment(object): #need fix
                         x1 = np.clip(x - info_len // 2, 0, w)
                         x2 = np.clip(x + info_len // 2, 0, w)
                         if compare_func(slc[x1: x2].mean(),quant_score):
-                            #mask[x1: x2] = False
-                            info_region = t_s_tmp[x1: x2,:].clone().detach().cpu()
                             break
+                    info_region = t_s_tmp[x1: x2,:].clone().detach().cpu()
                     #augment & paste back
                     if selective=='cut':
                         info_region = augment(info_region,i=i,k=k,ops_name=ops_name,**kwargs) #some other augment if needed

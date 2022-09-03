@@ -97,7 +97,7 @@ class AugmentDataset_TS(torch.utils.data.Dataset):
         if self.search:
             raw_image,seq_len, target = self.dataset.__getitem__(index)
             raw_image = self.pre_transforms(raw_image)
-            image = raw_image #!!!
+            image = raw_image
             return image, seq_len, target
         else:
             img,seq_len, target = self.dataset.__getitem__(index)
@@ -188,7 +188,7 @@ def get_dataloaders(dataset, batch, num_workers, dataroot, cutout,
         total_trainset = torchvision.datasets.CIFAR10(root=dataroot, train=True, download=True, transform=None)
         search_dataset = None
         testset = torchvision.datasets.CIFAR10(root=dataroot, train=False, download=True, transform=None)
-    elif dataset == 'reduced_cifar10': #!!!paper can use reduced search dataset for search (update policy network gradient)!!!
+    elif dataset == 'reduced_cifar10': #!!!paper can use reduced search dataset for search (update policy network gradient)
         search_dataset = torchvision.datasets.CIFAR10(root=dataroot, train=True, download=True, transform=None)
         sss = StratifiedShuffleSplit(n_splits=1, test_size=45744, random_state=0)
         sss = sss.split(list(range(len(search_dataset))), search_dataset.targets)
@@ -331,7 +331,7 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
     if (not default_split or dataset_name=='chapman') and len(fold_assign)==0: #chapman didn't have default split now!!!
         dataset = dataset_func(dataroot,multilabel=multilabel,**kwargs)
         total = len(dataset)
-        random.seed(0) #!!!
+        #random.seed(0) #seed already set
         rd_idxs = [i for i in range(total)]
         random.shuffle(rd_idxs)
         testset = Subset(dataset,rd_idxs[:int(total*test_size)])

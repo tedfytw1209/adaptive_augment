@@ -24,7 +24,7 @@ from dataset import get_ts_dataloaders, get_num_class, get_label_name, get_datas
 from operation_tseries import TS_OPS_NAMES,ECG_OPS_NAMES,TS_ADD_NAMES,MAG_TEST_NAMES,NOMAG_TEST_NAMES
 from step_function import train,infer,search_train,search_infer
 from non_saturating_loss import NonSaturatingLoss
-from class_balanced_loss import ClassBalLoss
+from class_balanced_loss import ClassBalLoss,ClassDiffLoss
 import wandb
 
 import ray
@@ -195,9 +195,9 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         self.h_model = Projection_TSeries(in_features=h_input,label_num=label_num,label_embed=label_embed,
             n_layers=args.n_proj_layer, n_hidden=128, augselect=args.augselect).cuda()
         #  training settings
-        self.gf_optimizer = torch.optim.AdamW(self.gf_model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay) #follow ptbxl batchmark!!!
+        self.gf_optimizer = torch.optim.AdamW(self.gf_model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay) #follow ptbxl batchmark
         self.scheduler = torch.optim.lr_scheduler.OneCycleLR(self.gf_optimizer, max_lr=args.learning_rate, 
-            epochs = args.epochs, steps_per_epoch = len(self.train_queue)) #follow ptbxl batchmark!!!
+            epochs = args.epochs, steps_per_epoch = len(self.train_queue)) #follow ptbxl batchmark
         self.h_optimizer = torch.optim.Adam(
             self.h_model.parameters(),
             lr=args.proj_learning_rate,
@@ -223,6 +223,9 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             if multilabel:
                 sim_type = 'focal'
             self.sim_criterion = ClassBalLoss(search_labels_count,len(search_labels_count),loss_type=sim_type)
+        elif args.policy_loss=='classdiff':
+            self.class_difficulty = np.ones(n_class)
+            self.sim_criterion = ClassDiffLoss(class_difficulty=self.class_difficulty) #default now
 
         #  AdaAug settings for search
         after_transforms = self.train_queue.dataset.after_transforms
@@ -273,6 +276,10 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
 
         # validation
         valid_acc, valid_obj,valid_dic = search_infer(self.valid_queue, self.gf_model, self.criterion, multilabel=self.multilabel,n_class=self.n_class,mode='valid')
+        if args.policy_loss=='classdiff':
+            class_acc = []
+            self.class_difficulty = 1 - np.array(class_acc)
+            self.sim_criterion.update_weight(self.class_difficulty)
         #scheduler.step()
         #test
         test_acc, test_obj, test_dic  = search_infer(self.test_queue, self.gf_model, self.criterion, multilabel=self.multilabel,n_class=self.n_class,mode='test')

@@ -220,7 +220,7 @@ class AdaAug_TS(AdaAug):
             T = self.temp
         elif mode == 'explore':
             if hasattr(self.gf_model, 'lstm'):
-                self.gf_model.lstm.train() #!!!tmp fix
+                self.gf_model.lstm.train() #!!!maybe for bn is better
             self.h_model.train()
             T = 1.0
         a_params = self.h_model(self.gf_model.extract_features(X.cuda(),seq_len),y=y)

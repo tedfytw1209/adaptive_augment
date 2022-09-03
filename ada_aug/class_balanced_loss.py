@@ -7,13 +7,68 @@
                Serge J. Belongie
    https://arxiv.org/abs/1901.05555, CVPR'19.
 """
-
-
 import numpy as np
 import torch
 import torch.nn.functional as F
 
+"""Copyright (c) Hitachi, Ltd. and its affiliates.
+All rights reserved.
+This source code is licensed under the license found in the
+LICENSE file in the root directory of this source tree.
+"""
+import numpy as np
+import sys
+import torch.nn as nn
 
+def sigmoid(x):
+    return 1/(1 + np.exp(-x))
+
+"""
+Copyright (c) Hitachi, Ltd. and its affiliates.
+All rights reserved.
+This source code is licensed under the license found in the
+LICENSE file in the root directory of this source tree.
+""" 
+from torch.autograd import Variable
+
+class FocalLoss(nn.Module):
+    def __init__(self, gamma=0, alpha=None, reduction=None):
+        super(FocalLoss, self).__init__()
+        self.gamma = gamma
+        self.alpha = alpha
+        if isinstance(alpha,(float,int)): self.alpha = torch.Tensor([alpha,1-alpha])
+        if isinstance(alpha,list): self.alpha = torch.Tensor(alpha)
+        self.reduction = reduction
+
+    def forward(self, input, target):
+        if input.dim()>2:
+            input = input.view(input.size(0),input.size(1),-1)  # N,C,H,W => N,C,H*W
+            input = input.transpose(1,2)    # N,C,H*W => N,H*W,C
+            input = input.contiguous().view(-1,input.size(2))   # N,H*W,C => N*H*W,C
+        target = target.view(-1,1)
+        ones = - torch.ones(input.shape).cuda()
+        for i in range(input.shape[0]):
+            ones[i, target[i,0].item()] = 1 
+        input = input * ones
+        #logpt = F.log_softmax(input)
+        logpt = F.logsigmoid(input)
+        #logpt = logpt.gather(1,target)
+        #logpt = logpt.view(-1)
+        pt = Variable(logpt.data.exp())
+        #print(pt)
+        loss = -1 * (1-pt)**self.gamma * logpt
+        loss = loss.sum(1)
+        if self.alpha is not None:
+            if self.alpha.type()!=input.data.type():
+                self.alpha = self.alpha.type_as(input.data)
+            at = self.alpha.gather(0,target.data.view(-1))
+            #logpt = logpt * Variable(at)
+            loss = loss * Variable(at)
+
+        #loss = -1 * (1-pt)**self.gamma * logpt
+        if self.reduction == 'mean': return loss.mean()
+        elif self.reduction == 'sum': return loss.sum()
+        else: return loss
 
 def focal_loss(labels, logits, alpha, gamma):
     """Compute the focal loss between `logits` and the ground truth `labels`.
@@ -101,6 +156,61 @@ class ClassBalLoss(torch.nn.Module):
 
     def forward(self, logits, targets):
         return CB_loss(targets, logits, self.samples_per_cls, self.no_of_classes, self.loss_type, self.beta, self.gamma)
+
+'''def create_diff_loss(class_difficulty=None, loss_params=('dynamic', None, True)):
+    print('Using CDB Softmax Loss')
+    tau, focal_gamma, normalize = loss_params
+    
+    if class_difficulty is not None:
+        epsilon = 0.01
+        if tau == 'dynamic':
+            bias = (1 - np.min(class_difficulty))/ (1 - np.max(class_difficulty) + epsilon) - 1
+            tau = 2 * sigmoid(bias)
+        else:
+            tau = float(tau)
+        
+        cdb_weights = class_difficulty ** tau
+        if normalize:
+           cdb_weights = (cdb_weights / cdb_weights.sum()) * len(cdb_weights)      
+        if focal_gamma is not None:
+             return FocalLoss(gamma=float(focal_gamma), alpha=torch.FloatTensor(cdb_weights))
+        else:
+             return nn.CrossEntropyLoss(weight=torch.FloatTensor(cdb_weights),)
+    else:
+        sys.exit('Class Difficulty can not be None')'''
+
+class ClassDiffLoss(torch.nn.Module):
+    def __init__(self, class_difficulty=None, tau='dynamic', focal_gamma=None, normalize=True):
+        super().__init__()
+        self.class_difficulty = class_difficulty
+        self.tau = tau
+        self.focal_gamma = focal_gamma
+        self.normalize = normalize
+        self.loss_func = None
+        if class_difficulty!=None:
+            self.update_weight(class_difficulty)
+        else:
+            if self.focal_gamma is not None:
+                self.loss_func = FocalLoss()
+            else:
+                self.loss_func = nn.CrossEntropyLoss()
+
+    def update_weight(self,class_difficulty):
+        if self.tau == 'dynamic':
+            bias = (1 - np.min(class_difficulty))/ (1 - np.max(class_difficulty) + self.epsilon) - 1
+            tau = 2 * sigmoid(bias)
+        else:
+            tau = float(self.tau)
+        cdb_weights = class_difficulty ** tau
+        if self.normalize:
+            cdb_weights = (cdb_weights / cdb_weights.sum()) * len(cdb_weights)      
+        if self.focal_gamma is not None:
+            self.loss_func = FocalLoss(gamma=float(self.focal_gamma), alpha=torch.FloatTensor(cdb_weights))
+        else:
+            self.loss_func = nn.CrossEntropyLoss(weight=torch.FloatTensor(cdb_weights),)
+        self.class_difficulty = class_difficulty
+    def forward(self, logits, targets):
+        return self.loss_func(logits, targets)
 
 if __name__ == '__main__':
     no_of_classes = 5

@@ -292,7 +292,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
         loss.backward()
         nn.utils.clip_grad_norm_(gf_model.parameters(), grad_clip)
         gf_optimizer.step()
-        scheduler.step() #8/03 add!!!
+        scheduler.step() #8/03 add
         gf_optimizer.zero_grad()
         #ema teacher
         if teacher_model:

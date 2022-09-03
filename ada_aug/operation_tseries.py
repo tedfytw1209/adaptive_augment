@@ -20,7 +20,7 @@ from ecgdetectors import Detectors
 from scipy.interpolate import CubicSpline
 
 #for model: (len, channel)
-#for this file (channel, len) !!!
+#for this file (channel, len)!
 def identity(x, *args, **kwargs):
     return x
 def time_reverse(X, *args, **kwargs):
@@ -1080,7 +1080,7 @@ class KeepAugment(object): #need fix
                     x = np.random.randint(start,end)
                     x1 = np.clip(x - info_len // 2, 0, w)
                     x2 = np.clip(x + info_len // 2, 0, w)
-                    if compare_func(slc[x1: x2].mean(),quant_score): #mean will cause infinite running!!!
+                    if compare_func(slc[x1: x2].mean(),quant_score):
                         break
                 info_region = t_s[x1: x2,:].clone().detach().cpu()
                 #augment & paste back

@@ -123,7 +123,7 @@ def CB_loss(labels, logits, samples_per_cls, no_of_classes, loss_type, beta, gam
     Returns:
       cb_loss: A float tensor representing class balanced loss
     """
-    effective_num = 1.0 - np.power(beta, np.clip(samples_per_cls,1.0))
+    effective_num = 1.0 - np.power(beta, np.maximum(samples_per_cls,1.0))
     weights = (1.0 - beta) / np.array(effective_num)
     weights = weights / np.sum(weights) * no_of_classes
 
@@ -180,20 +180,21 @@ class ClassBalLoss(torch.nn.Module):
         sys.exit('Class Difficulty can not be None')'''
 
 class ClassDiffLoss(torch.nn.Module):
-    def __init__(self, class_difficulty=None, tau='dynamic', focal_gamma=None, normalize=True):
+    def __init__(self, class_difficulty=np.array([]), tau='dynamic', focal_gamma=None, normalize=True, epsilon=0.01):
         super().__init__()
         self.class_difficulty = class_difficulty
         self.tau = tau
         self.focal_gamma = focal_gamma
         self.normalize = normalize
         self.loss_func = None
-        if class_difficulty!=None:
+        self.epsilon = epsilon
+        if len(class_difficulty)>0:
             self.update_weight(class_difficulty)
         else:
             if self.focal_gamma is not None:
-                self.loss_func = FocalLoss()
+                self.loss_func = FocalLoss().cuda()
             else:
-                self.loss_func = nn.CrossEntropyLoss()
+                self.loss_func = nn.CrossEntropyLoss().cuda()
 
     def update_weight(self,class_difficulty):
         if self.tau == 'dynamic':
@@ -203,11 +204,12 @@ class ClassDiffLoss(torch.nn.Module):
             tau = float(self.tau)
         cdb_weights = class_difficulty ** tau
         if self.normalize:
-            cdb_weights = (cdb_weights / cdb_weights.sum()) * len(cdb_weights)      
+            cdb_weights = (cdb_weights / cdb_weights.sum()) * len(cdb_weights)
+        
         if self.focal_gamma is not None:
-            self.loss_func = FocalLoss(gamma=float(self.focal_gamma), alpha=torch.FloatTensor(cdb_weights))
+            self.loss_func = FocalLoss(gamma=float(self.focal_gamma), alpha=torch.FloatTensor(cdb_weights)).cuda()
         else:
-            self.loss_func = nn.CrossEntropyLoss(weight=torch.FloatTensor(cdb_weights),)
+            self.loss_func = nn.CrossEntropyLoss(weight=torch.FloatTensor(cdb_weights),).cuda()
         self.class_difficulty = class_difficulty
     def forward(self, logits, targets):
         return self.loss_func(logits, targets)

@@ -211,7 +211,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         self.criterion = self.criterion.cuda()
         self.adv_criterion = None
         if args.loss_type=='adv':
-            self.adv_criterion = NonSaturatingLoss(epsilon=0.1)
+            self.adv_criterion = NonSaturatingLoss(epsilon=0.1).cuda()
         self.sim_criterion = None
         if args.policy_loss=='classbal':
             search_labels = self.search_queue.dataset.dataset.label
@@ -222,10 +222,10 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             sim_type = 'softmax'
             if multilabel:
                 sim_type = 'focal'
-            self.sim_criterion = ClassBalLoss(search_labels_count,len(search_labels_count),loss_type=sim_type)
+            self.sim_criterion = ClassBalLoss(search_labels_count,len(search_labels_count),loss_type=sim_type).cuda()
         elif args.policy_loss=='classdiff':
             self.class_difficulty = np.ones(n_class)
-            self.sim_criterion = ClassDiffLoss(class_difficulty=self.class_difficulty) #default now
+            self.sim_criterion = ClassDiffLoss(class_difficulty=self.class_difficulty).cuda() #default now
 
         #  AdaAug settings for search
         after_transforms = self.train_queue.dataset.after_transforms
@@ -281,7 +281,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         # validation
         valid_acc, valid_obj,valid_dic = search_infer(self.valid_queue, self.gf_model, self.criterion, multilabel=self.multilabel,n_class=self.n_class,mode='valid')
         if args.policy_loss=='classdiff':
-            class_acc = [valid_dic[f'valid_{ptype}_c{i}'] for i in range(self.n_class)]
+            class_acc = [valid_dic[f'valid_{ptype}_c{i}'] / 100.0 for i in range(self.n_class)]
             print(class_acc)
             self.class_difficulty = 1 - np.array(class_acc)
             self.sim_criterion.update_weight(self.class_difficulty)

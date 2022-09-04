@@ -323,9 +323,10 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             step_dic.update(self.result_valid_dic)
             step_dic.update(self.result_test_dic)
             #save&log
+            wandb.log(step_dic)
             self.adaaug.save_history(self.class2label)
             figure = self.adaaug.plot_history()
-            wandb.log(step_dic)
+            
         call_back_dic = {'train_acc': train_acc, 'valid_acc': valid_acc, 'test_acc': test_acc}
         return call_back_dic
 

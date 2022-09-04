@@ -104,13 +104,13 @@ if args.diff_aug:
 else:
     description = ''
 if args.class_adapt:
-    description += 'cada'
+    description += f'cada{args.policy_loss}'
 else:
     description += ''
 if args.diff_aug and not args.not_reweight:
     description+='rew'
 if args.keep_aug:
-    description+=f'keepF{args.keep_mode}'
+    description+=f'keep{args.keep_mode}'
 if args.teach_aug:
     description+=f'teach{args.ema_rate}'
 now_str = time.strftime("%Y%m%d-%H%M%S")
@@ -263,6 +263,10 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
     def step(self):#use step replace _train
         if self._iteration==0:
             wandb.config.update(self.config)
+        if self.multilabel:
+            ptype = 'auroc'
+        else:
+            ptype = 'acc'
         print(f'Starting Ray ID {self.trial_id} Iteration: {self._iteration}')
         args = self.config['args']
         lr = self.scheduler.get_last_lr()[0]
@@ -277,7 +281,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         # validation
         valid_acc, valid_obj,valid_dic = search_infer(self.valid_queue, self.gf_model, self.criterion, multilabel=self.multilabel,n_class=self.n_class,mode='valid')
         if args.policy_loss=='classdiff':
-            class_acc = []
+            class_acc = [valid_dic[f'valid_{ptype}_c{i}'] for i in range(self.n_class)]
+            print(class_acc)
             self.class_difficulty = 1 - np.array(class_acc)
             self.sim_criterion.update_weight(self.class_difficulty)
         #scheduler.step()
@@ -288,10 +293,6 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             self.best_val_acc = valid_acc
             self.result_valid_dic = {f'result_{k}': valid_dic[k] for k in valid_dic.keys()}
             self.result_test_dic = {f'result_{k}': test_dic[k] for k in test_dic.keys()}
-            if self.multilabel:
-                ptype = 'auroc'
-            else:
-                ptype = 'acc'
             valid_dic[f'best_valid_{ptype}_avg'] = valid_acc
             test_dic[f'best_test_{ptype}_avg'] = test_acc
             self.best_gf = self.gf_model

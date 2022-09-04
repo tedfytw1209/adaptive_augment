@@ -3,6 +3,7 @@ from __future__ import absolute_import
 from multiprocessing import reduction
 
 import os
+from re import search
 import sys
 import time
 import torch
@@ -13,6 +14,7 @@ import numpy as np
 from sklearn.metrics import average_precision_score,roc_auc_score
 import torch.nn as nn
 import torch.utils
+import torch.optim as optim
 
 from adaptive_augmentor import AdaAug_TS
 from networks import get_model_tseries
@@ -22,6 +24,8 @@ from dataset import get_ts_dataloaders, get_num_class, get_label_name, get_datas
 from operation_tseries import TS_OPS_NAMES,ECG_OPS_NAMES,TS_ADD_NAMES,MAG_TEST_NAMES,NOMAG_TEST_NAMES
 from step_function import train,infer,search_train,search_infer
 from non_saturating_loss import NonSaturatingLoss
+from class_balanced_loss import ClassBalLoss,ClassDiffLoss
+from ray.tune.search.bayesopt import BayesOptSearch
 import wandb
 
 import ray
@@ -52,7 +56,7 @@ parser.add_argument('--gpu', type=float, default=0.12, help='Allocated by Ray')
 parser.add_argument('--epochs', type=int, default=20, help='number of training epochs')
 parser.add_argument('--model_path', type=str, default='saved_models', help='path to save the model')
 parser.add_argument('--save', type=str, default='EXP', help='experiment name')
-parser.add_argument('--seed', type=int, default=2, help='seed')
+parser.add_argument('--seed', type=int, default=42, help='seed')
 parser.add_argument('--grad_clip', type=float, default=5, help='gradient clipping')
 parser.add_argument('--multilabel', action='store_true', default=False, help='using multilabel default False')
 parser.add_argument('--train_portion', type=float, default=1, help='portion of training data')
@@ -74,16 +78,23 @@ parser.add_argument('--n_proj_layer', type=int, default=0, help="number of hidde
 parser.add_argument('--valselect', action='store_true', default=False, help='use valid select')
 parser.add_argument('--augselect', type=str, default='', help="augmentation selection")
 parser.add_argument('--diff_aug', action='store_true', default=False, help='use valid select')
+parser.add_argument('--same_train', action='store_true', default=False, help='use valid select')
 parser.add_argument('--not_mix', action='store_true', default=False, help='use valid select')
 parser.add_argument('--not_reweight', action='store_true', default=False, help='use valid select')
-parser.add_argument('--lambda_aug', type=float, nargs='+', default=1.0, help="augment sample weight")
+parser.add_argument('--lambda_aug', type=float, default=1.0, help="augment sample weight")
 parser.add_argument('--class_adapt', action='store_true', default=False, help='class adaptive')
 parser.add_argument('--class_embed', action='store_true', default=False, help='class embed') #tmp use
-parser.add_argument('--loss_type', type=str, default='minus', nargs='+', help="loss type for difficult policy training", choices=['minus','relative','adv'])
+parser.add_argument('--loss_type', type=str, default='minus', help="loss type for difficult policy training", choices=['minus','relative','adv'])
+parser.add_argument('--policy_loss', type=str, default='', help="loss type for simular policy training")
 parser.add_argument('--keep_aug', action='store_true', default=False, help='info keep augment')
 parser.add_argument('--keep_mode', type=str, default='auto', help='info keep mode',choices=['auto','b','p','t'])
-parser.add_argument('--keep_thres', type=float, nargs='+', default=[0.6], help="augment sample weight")
-parser.add_argument('--keep_len', type=int, nargs='+', default=[100], help="info keep seq len")
+parser.add_argument('--keep_seg', type=int, nargs='+', default=[1], help='info keep segment mode')
+parser.add_argument('--keep_grid', action='store_true', default=False, help='info keep augment grid')
+parser.add_argument('--keep_thres', type=float, default=0.6, help="augment sample weight")
+parser.add_argument('--keep_len', type=int, default=100, help="info keep seq len")
+parser.add_argument('--teach_aug', action='store_true', default=False, help='teacher augment')
+parser.add_argument('--ema_rate', type=float, default=0.999, help="teacher ema rate")
+parser.add_argument('--visualize', action='store_true', default=False, help='visualize')
 
 args = parser.parse_args()
 debug = True if args.save == "debug" else False
@@ -182,7 +193,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         self.criterion = self.criterion.cuda()
         self.adv_criterion = None
         if self.config['loss_type']=='adv':
-            self.adv_criterion = NonSaturatingLoss(epsilon=0.1)
+            self.adv_criterion = NonSaturatingLoss(epsilon=0.1).cuda()
 
         #  AdaAug settings for search
         after_transforms = self.train_queue.dataset.after_transforms
@@ -193,12 +204,14 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                     'search_d': get_dataset_dimension(self.config['dataset']),
                     'target_d': get_dataset_dimension(self.config['dataset']),
                     'gf_model_name': self.config['model_name']}
-        keepaug_config = {'keep_aug':self.config['keep_aug'],'mode':self.config['keep_mode'],'thres':self.config['keep_thres'],'length':self.config['keep_len']}
+        keepaug_config = {'keep_aug':args.keep_aug,'mode':args.keep_mode,'thres':args.keep_thres,'length':args.keep_len,
+            'grid_region':args.keep_grid, 'possible_segment': args.keep_seg}
         self.adaaug = AdaAug_TS(after_transforms=after_transforms,
             n_class=n_class,
             gf_model=self.gf_model,
             h_model=self.h_model,
             save_dir=os.path.join(self.config['BASE_PATH'],self.config['save'],f'fold{test_fold_idx}'),
+            visualize=args.visualize,
             config=adaaug_config,
             keepaug_config=keepaug_config,
             multilabel=multilabel,
@@ -220,12 +233,16 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
     def step(self):#use step replace _train
         if self._iteration==0:
             wandb.config.update(self.config)
+        if self.multilabel:
+            ptype = 'auroc'
+        else:
+            ptype = 'acc'
         print(f'Starting Ray ID {self.trial_id} Iteration: {self._iteration}')
         args = argparse.Namespace(**self.config)
         lr = self.scheduler.get_last_lr()[0]
         step_dic={'epoch':self._iteration}
-        diff_dic = {'difficult_aug':self.diff_augment,'reweight':self.diff_reweight,'lambda_aug':self.config['lambda_aug'], 'class_adaptive':self.config['class_adapt'],
-                'loss_type':self.config['loss_type'], 'adv_criterion': self.adv_criterion}
+        diff_dic = {'difficult_aug':self.diff_augment,'same_train':args.same_train,'reweight':self.diff_reweight,'lambda_aug':args.lambda_aug, 'class_adaptive':args.class_adapt,
+                'loss_type':args.loss_type, 'adv_criterion': self.adv_criterion, 'teacher_model':self.ema_model, 'sim_criterion':self.sim_criterion}
         # searching
         train_acc, train_obj, train_dic = search_train(args,self.train_queue, self.search_queue, self.tr_search_queue, self.gf_model, self.adaaug,
             self.criterion, self.gf_optimizer,self.scheduler, self.config['grad_clip'], self.h_optimizer, self._iteration, self.config['search_freq'], 
@@ -233,6 +250,11 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
 
         # validation
         valid_acc, valid_obj,valid_dic = search_infer(self.valid_queue, self.gf_model, self.criterion, multilabel=self.multilabel,n_class=self.n_class,mode='valid')
+        if args.policy_loss=='classdiff':
+            class_acc = [valid_dic[f'valid_{ptype}_c{i}'] / 100.0 for i in range(self.n_class)]
+            print(class_acc)
+            self.class_difficulty = 1 - np.array(class_acc)
+            self.sim_criterion.update_weight(self.class_difficulty)
         #scheduler.step()
         #test
         test_acc, test_obj, test_dic  = search_infer(self.test_queue, self.gf_model, self.criterion, multilabel=self.multilabel,n_class=self.n_class,mode='test')
@@ -241,8 +263,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             self.best_val_acc = valid_acc
             self.result_valid_dic = {f'result_{k}': valid_dic[k] for k in valid_dic.keys()}
             self.result_test_dic = {f'result_{k}': test_dic[k] for k in test_dic.keys()}
-            valid_dic['best_valid_acc_avg'] = valid_acc
-            test_dic['best_test_acc_avg'] = test_acc
+            valid_dic[f'best_valid_{ptype}_avg'] = valid_acc
+            test_dic[f'best_test_{ptype}_avg'] = test_acc
             self.best_gf = self.gf_model
             self.best_h = self.h_model
         elif not self.config['valselect']:
@@ -305,47 +327,18 @@ def main():
                   reinit=True)'''
     #hparams
     hparams = dict(vars(args)) #copy args
-    '''
-    hparams = {
-        'args':args,
-        'dataset':args.dataset, 'batch_size':args.batch_size, 'num_epochs':args.epochs,
-        'multilabel': args.multilabel,
-        'gradient_clipping_by_global_norm': args.grad_clip,
-        'lr': args.learning_rate,
-        'wd': args.weight_decay,
-        'momentum': args.momentum,
-        'temperature': args.temperature,
-        'k_ops': args.k_ops,
-        'train_portion': args.train_portion, ## for text data controlling ratio of training data
-        'default_split': args.default_split,
-        'labelgroup': args.labelgroup,
-        'augselect': args.augselect,
-        'diff_aug': args.diff_aug,
-        'not_reweight': args.not_reweight,
-        'lambda_aug': args.lambda_aug,
-        'class_adapt': args.class_adapt,
-        'class_embed': args.class_embed,
-        'loss_type': args.loss_type,
-        'keep_aug': args.keep_aug,
-        'keep_mode': args.keep_mode,
-        'keep_thres': args.keep_thres,
-        #'kfold': tune.grid_search([i for i in range(args.kfold)]),
-        'save': args.save,
-        'ray_name': args.ray_name,
-        'BASE_PATH': args.base_path,
-    }'''
     hparams['args'] = args
     hparams['BASE_PATH'] = args.base_path
     if args.kfold==10:
         hparams['kfold'] = tune.grid_search([i for i in range(args.kfold)])
     else:
-        hparams['kfold'] = tune.grid_search([args.kfold]) #for some fold
+        hparams['kfold'] = args.kfold #for some fold
     #for grid search
     print(hparams)
     hparams['search_freq'] = tune.grid_search(hparams['search_freq'])
     hparams['search_round'] = tune.grid_search(hparams['search_round'])
-    hparams['loss_type'] = tune.grid_search(hparams['loss_type'])
-    hparams['lambda_aug'] = tune.grid_search(hparams['lambda_aug'])
+    hparams['loss_type'] = tune.loguniform(hparams['loss_type'][0],hparams['loss_type'][1],2)
+    hparams['lambda_aug'] = tune.loguniform(hparams['lambda_aug'][0],hparams['lambda_aug'][1],2)
     hparams['keep_thres'] = tune.grid_search(hparams['keep_thres'])
     hparams['keep_len'] = tune.grid_search(hparams['keep_len'])
     if args.not_reweight:
@@ -373,27 +366,25 @@ def main():
     print(f'Run {args.kfold} folds experiment')
     #tune_scheduler = ASHAScheduler(metric="valid_acc", mode="max",max_t=hparams['num_epochs'],grace_period=10,
     #    reduction_factor=3,brackets=1)1
+    bayesopt = BayesOptSearch(metric="valid_acc", mode="max",random_state=args.seed)
     tune_scheduler = None
     analysis = tune.run(
         RayModel,
         name=hparams['ray_name'],
         scheduler=tune_scheduler,
         #reuse_actors=True,
+        search_alg = bayesopt,
         verbose=True,
-        metric="valid_acc",
-        mode='max',
-        checkpoint_score_attr="valid_acc",
+        #metric="valid_acc",
+        #mode='max',
+        #checkpoint_score_attr="valid_acc",
         #checkpoint_freq=FLAGS.checkpoint_freq,
         resources_per_trial={"gpu": args.gpu, "cpu": args.cpu},
         stop={"training_iteration": hparams['epochs']},
         config=hparams,
         local_dir=args.ray_dir,
-        num_samples=1, #grid search no need
+        num_samples=20, #grid search no need
     )
-    
-    print("Best hyperparameters found were: ")
-    print(analysis.best_config)
-    print(analysis.best_trial)
     
     wandb.finish()
     

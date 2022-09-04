@@ -252,7 +252,7 @@ def random_bandstop(X, bandwidth, max_freq=50, sfreq=100, random_state=None, *ar
     # using torch convolution might be necessary...
     for c, (sample, notched_freq) in enumerate(
             zip(transformed_X, notched_freqs)):
-        sample = sample.cpu().numpy().astype(np.float64)
+        sample = sample.detach().cpu().numpy().astype(np.float64)
         transformed_X[c] = torch.as_tensor(notch_filter(
             sample,
             Fs=sfreq,
@@ -1083,6 +1083,7 @@ class KeepAugment(object): #need fix
         win_start, win_end = 0,windowed_w
         for i,(t_s, slc, windowed_slc_each) in enumerate(zip(t_series_, slc_, windowed_slc)):
             #find region for each segment
+            region_list,inforegion_list = [],[]
             for seg_idx in range(seg_number):
                 if self.grid_region:
                     start, end = seg_accum[seg_idx], seg_accum[seg_idx+1]
@@ -1093,15 +1094,20 @@ class KeepAugment(object): #need fix
                     x1 = np.clip(x - info_len // 2, 0, w)
                     x2 = np.clip(x + info_len // 2, 0, w)
                     if compare_func(slc[x1: x2].mean(),quant_score):
+                        region_list.append([x1,x2])
                         break
                 info_region = t_s[x1: x2,:].clone().detach().cpu()
-                #augment & paste back
-                if selective=='cut':
+                inforegion_list.append(info_region)
+            #augment & paste back
+            if selective=='cut':
+                for info_region in inforegion_list:
                     info_region = augment(info_region,i=i,**kwargs) #some other augment if needed
-                else:
-                    t_s = augment(t_s,i=i,**kwargs) #some other augment if needed
-                #print('Size compare: ',t_s[x1: x2, :].shape,info_region.shape)
-                t_s[x1: x2, :] = info_region
+            else:
+                t_s = augment(t_s,i=i,**kwargs) #some other augment if needed
+                
+            for reg_i in range(len(inforegion_list)):
+                x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
+                t_s[x1: x2, :] = inforegion_list[reg_i]
             aug_t_s_list.append(t_s)
         #back
         if self.mode=='auto':
@@ -1134,7 +1140,8 @@ class KeepAugment(object): #need fix
         for i,(t_s, slc, windowed_slc_each) in enumerate(zip(t_series_, slc_, windowed_slc)):
             #find region
             for k, ops_name in enumerate(ops_names):
-                t_s_tmp = t_s.clone().detach()
+                t_s_tmp = t_s.clone().detach().cpu()
+                region_list,inforegion_list = [],[]
                 for seg_idx in range(seg_number):
                     if self.grid_region:
                         start, end = seg_accum[seg_idx], seg_accum[seg_idx+1]
@@ -1145,15 +1152,20 @@ class KeepAugment(object): #need fix
                         x1 = np.clip(x - info_len // 2, 0, w)
                         x2 = np.clip(x + info_len // 2, 0, w)
                         if compare_func(slc[x1: x2].mean(),quant_score):
+                            region_list.append([x1,x2])
                             break
                     info_region = t_s_tmp[x1: x2,:].clone().detach().cpu()
-                    #augment & paste back
-                    if selective=='cut':
-                        info_region = augment(info_region,i=i,k=k,ops_name=ops_name,**kwargs) #some other augment if needed
-                    else:
-                        t_s_tmp = augment(t_s_tmp,i=i,k=k,ops_name=ops_name,**kwargs) #some other augment if needed
+                    inforegion_list.append(info_region)
+                #augment & paste back
+                if selective=='cut':
+                    for info_region in inforegion_list:
+                        info_region = augment(info_region,i=i,k=k,ops_name=ops_name,**kwargs) #!!! some error
+                else:
+                    t_s_tmp = augment(t_s_tmp,i=i,k=k,ops_name=ops_name,**kwargs) #some other augment if needed
                     #print('Size compare: ',t_s[x1: x2, :].shape,info_region.shape)
-                    t_s_tmp[x1: x2, :] = info_region
+                for reg_i in range(len(inforegion_list)):
+                    x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
+                    t_s_tmp[x1: x2, :] = inforegion_list[reg_i]
                 aug_t_s_list.append(t_s_tmp)
         #back
         if self.mode=='auto':

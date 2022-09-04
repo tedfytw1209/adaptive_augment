@@ -93,6 +93,7 @@ parser.add_argument('--keep_seg', type=int, nargs='+', default=[1], help='info k
 parser.add_argument('--keep_grid', action='store_true', default=False, help='info keep augment grid')
 parser.add_argument('--keep_thres', type=float, default=0.6, help="augment sample weight")
 parser.add_argument('--keep_len', type=int, default=100, help="info keep seq len")
+parser.add_argument('--visualize', action='store_true', default=False, help='visualize')
 
 args = parser.parse_args()
 debug = True if args.save == "debug" else False

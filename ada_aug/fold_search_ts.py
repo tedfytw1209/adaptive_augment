@@ -93,6 +93,7 @@ parser.add_argument('--keep_thres', type=float, default=0.6, help="augment sampl
 parser.add_argument('--keep_len', type=int, default=100, help="info keep seq len")
 parser.add_argument('--teach_aug', action='store_true', default=False, help='teacher augment')
 parser.add_argument('--ema_rate', type=float, default=0.999, help="teacher ema rate")
+parser.add_argument('--visualize', action='store_true', default=False, help='visualize')
 
 args = parser.parse_args()
 debug = True if args.save == "debug" else False
@@ -245,6 +246,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             gf_model=self.gf_model,
             h_model=self.h_model,
             save_dir=os.path.join(self.config['BASE_PATH'],self.config['save'],f'fold{test_fold_idx}'),
+            visualize=args.visualize,
             config=adaaug_config,
             keepaug_config=keepaug_config,
             multilabel=multilabel,

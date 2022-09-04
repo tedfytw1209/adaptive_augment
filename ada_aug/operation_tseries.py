@@ -1050,6 +1050,16 @@ class KeepAugment(object): #need fix
             slc_ = self.get_heartbeat(t_series)
         t_series_.requires_grad = False #no need gradient now
         return slc_, t_series_
+    def get_seg(self,seg_number,seg_len,w,window_w,windowed_len):
+        if self.grid_region:
+            seg_accum = [i*seg_len for i in range(seg_number)]
+            seg_accum.append(w)
+            windowed_accum = [i*windowed_len for i in range(seg_number)]
+            windowed_accum.append(window_w)
+        else:
+            seg_accum = [w for i in range(seg_number+1)]
+            windowed_accum = [window_w for i in range(seg_number+1)]
+        return seg_accum,windowed_accum
     #kwargs for apply_func, batch_inputs
     def __call__(self, t_series, model=None,selective='paste', apply_func=None, **kwargs):
         b,w,c = t_series.shape
@@ -1062,20 +1072,22 @@ class KeepAugment(object): #need fix
         seg_len = int(w / seg_number)
         info_len = int(self.length/seg_number)
         windowed_slc = torch.nn.functional.avg_pool1d(slc_.view(b,1,w),kernel_size=info_len, stride=1, padding=0).view(b,-1)
-        windowed_len = int(windowed_slc.shape[0] / seg_number)
+        windowed_w = windowed_slc.shape[1]
+        windowed_len = int(windowed_w / seg_number)
         #quant_scores = torch.quantile(windowed_slc,info_aug,dim=1) #quant for each batch
-        seg_accum = [i*seg_len for i in range(seg_number)]
-        seg_accum.append(w)
-        windowed_accum = [i*windowed_len for i in range(seg_number)]
-        windowed_accum.append(windowed_slc.shape[0])
+        seg_accum, windowed_accum = self.get_seg(seg_number,seg_len,w,windowed_w,windowed_len)
         #print(slc_)
         t_series_ = t_series_.detach().cpu()
         aug_t_s_list = []
+        start, end = 0,w
+        win_start, win_end = 0,windowed_w
         for i,(t_s, slc, windowed_slc_each) in enumerate(zip(t_series_, slc_, windowed_slc)):
             #find region for each segment
             for seg_idx in range(seg_number):
-                start, end = seg_accum[seg_idx], seg_accum[seg_idx+1]
-                quant_score = torch.quantile(windowed_slc_each[windowed_accum[seg_idx]:windowed_accum[seg_idx+1]],info_aug)
+                if self.grid_region:
+                    start, end = seg_accum[seg_idx], seg_accum[seg_idx+1]
+                    win_start, win_end = windowed_accum[seg_idx], windowed_accum[seg_idx+1]
+                quant_score = torch.quantile(windowed_slc_each[win_start:win_end],info_aug)
                 while(True):
                     x = np.random.randint(start,end)
                     x1 = np.clip(x - info_len // 2, 0, w)
@@ -1108,24 +1120,26 @@ class KeepAugment(object): #need fix
         seg_len = int(w / seg_number)
         info_len = int(self.length/seg_number)
         windowed_slc = torch.nn.functional.avg_pool1d(slc_.view(b,1,w),kernel_size=info_len, stride=1, padding=0).view(b,-1)
-        windowed_len = int(windowed_slc.shape[0] / seg_number)
+        windowed_w = windowed_slc.shape[1]
+        windowed_len = int(windowed_w / seg_number)
         #quant_scores = torch.quantile(windowed_slc,info_aug,dim=1) #quant for each batch
-        seg_accum = [i*seg_len for i in range(seg_number)]
-        seg_accum.append(w)
-        windowed_accum = [i*windowed_len for i in range(seg_number)]
-        windowed_accum.append(windowed_slc.shape[0])
+        seg_accum, windowed_accum = self.get_seg(seg_number,seg_len,w,windowed_w,windowed_len)
         #print(slc_)
         #print(windowed_slc)
         #print(quant_scores)
         t_series_ = t_series_.detach().cpu()
         aug_t_s_list = []
+        start, end = 0,w
+        win_start, win_end = 0,windowed_w
         for i,(t_s, slc, windowed_slc_each) in enumerate(zip(t_series_, slc_, windowed_slc)):
             #find region
             for k, ops_name in enumerate(ops_names):
                 t_s_tmp = t_s.clone().detach()
                 for seg_idx in range(seg_number):
-                    start, end = seg_accum[seg_idx], seg_accum[seg_idx+1]
-                    quant_score = torch.quantile(windowed_slc_each[windowed_accum[seg_idx]:windowed_accum[seg_idx+1]],info_aug)
+                    if self.grid_region:
+                        start, end = seg_accum[seg_idx], seg_accum[seg_idx+1]
+                        win_start, win_end = windowed_accum[seg_idx], windowed_accum[seg_idx+1]
+                    quant_score = torch.quantile(windowed_slc_each[win_start: win_end],info_aug)
                     while(True):
                         x = np.random.randint(start,end)
                         x1 = np.clip(x - info_len // 2, 0, w)

@@ -89,6 +89,8 @@ parser.add_argument('--class_adapt', action='store_true', default=False, help='c
 parser.add_argument('--class_embed', action='store_true', default=False, help='class embed') #tmp use
 parser.add_argument('--keep_aug', action='store_true', default=False, help='info keep augment')
 parser.add_argument('--keep_mode', type=str, default='auto', help='info keep mode',choices=['auto','b','p','t'])
+parser.add_argument('--keep_seg', type=int, nargs='+', default=[1], help='info keep segment mode')
+parser.add_argument('--keep_grid', action='store_true', default=False, help='info keep augment grid')
 parser.add_argument('--keep_thres', type=float, default=0.6, help="augment sample weight")
 parser.add_argument('--keep_len', type=int, default=100, help="info keep seq len")
 
@@ -216,7 +218,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                     'search_d': get_dataset_dimension(args.search_dataset),
                     'target_d': get_dataset_dimension(args.dataset),
                     'gf_model_name': args.gf_model_name}
-        keepaug_config = {'keep_aug':args.keep_aug,'mode':args.keep_mode,'thres':args.keep_thres,'length':args.keep_len}
+        keepaug_config = {'keep_aug':args.keep_aug,'mode':args.keep_mode,'thres':args.keep_thres,'length':args.keep_len,
+            'grid_region':args.keep_grid, 'possible_segment': args.keep_seg}
         self.adaaug = AdaAug_TS(after_transforms=after_transforms,
                     n_class=search_n_class,
                     gf_model=self.gf_model,

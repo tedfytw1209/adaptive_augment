@@ -87,6 +87,8 @@ parser.add_argument('--loss_type', type=str, default='minus', help="loss type fo
 parser.add_argument('--policy_loss', type=str, default='', help="loss type for simular policy training")
 parser.add_argument('--keep_aug', action='store_true', default=False, help='info keep augment')
 parser.add_argument('--keep_mode', type=str, default='auto', help='info keep mode',choices=['auto','b','p','t'])
+parser.add_argument('--keep_seg', type=int, nargs='+', default=[1], help='info keep segment mode')
+parser.add_argument('--keep_grid', action='store_true', default=False, help='info keep augment grid')
 parser.add_argument('--keep_thres', type=float, default=0.6, help="augment sample weight")
 parser.add_argument('--keep_len', type=int, default=100, help="info keep seq len")
 parser.add_argument('--teach_aug', action='store_true', default=False, help='teacher augment')
@@ -110,7 +112,7 @@ else:
 if args.diff_aug and not args.not_reweight:
     description+='rew'
 if args.keep_aug:
-    description+=f'keep{args.keep_mode}'
+    description+=f'keep{args.keep_mode}{args.keep_seg}'
 if args.teach_aug:
     description+=f'teach{args.ema_rate}'
 now_str = time.strftime("%Y%m%d-%H%M%S")
@@ -236,7 +238,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                     'search_d': get_dataset_dimension(args.dataset),
                     'target_d': get_dataset_dimension(args.dataset),
                     'gf_model_name': args.model_name}
-        keepaug_config = {'keep_aug':args.keep_aug,'mode':args.keep_mode,'thres':args.keep_thres,'length':args.keep_len}
+        keepaug_config = {'keep_aug':args.keep_aug,'mode':args.keep_mode,'thres':args.keep_thres,'length':args.keep_len,
+            'grid_region':args.keep_grid, 'possible_segment': args.keep_seg}
         self.adaaug = AdaAug_TS(after_transforms=after_transforms,
             n_class=n_class,
             gf_model=self.gf_model,

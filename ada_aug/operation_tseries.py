@@ -1,4 +1,5 @@
 # code is adapted from CADDA and braincode
+from audioop import reverse
 from enum import auto
 from numbers import Real
 from operator import invert
@@ -997,7 +998,7 @@ def activate_bn_track_running_stats(model):
 
 class KeepAugment(object): #need fix
     def __init__(self, mode, length,thres=0.6,transfrom=None,default_select=None, early=False, low = False,
-        possible_segment=[1],grid_region=False,
+        possible_segment=[1],grid_region=False, reverse=False,
         sfreq=100,pw_len=0.2,tw_len=0.4,**_kwargs):
         assert mode in ['auto','b','p','t'] #auto: all, b: heart beat(-0.2,0.4), p: p-wave(-0.2,0), t: t-wave(0,0.4)
         self.mode = mode
@@ -1018,6 +1019,7 @@ class KeepAugment(object): #need fix
         self.thres = thres
         self.possible_segment = possible_segment
         self.grid_region = grid_region
+        self.reverse = reverse
         self.detectors = Detectors(sfreq) #need input ecg: (seq_len)
         #'torch.nn.functional.avg_pool1d' use this for segment
         ##self.m_pool = torch.nn.AvgPool1d(kernel_size=self.length, stride=1, padding=0) #for winodow sum
@@ -1036,10 +1038,16 @@ class KeepAugment(object): #need fix
         assert selective in ['cut','paste']
         if selective=='cut':
             info_aug = self.thres
-            compare_func = lt
+            if self.reverse:
+                compare_func = ge
+            else:
+                compare_func = lt
         else:
             info_aug = 1.0 - self.thres
-            compare_func = ge
+            if self.reverse:
+                compare_func = lt
+            else:
+                compare_func = ge
         return info_aug, compare_func
     def get_slc(self,t_series,model):
         t_series_ = t_series.clone().detach()

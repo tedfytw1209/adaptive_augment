@@ -91,7 +91,7 @@ parser.add_argument('--keep_aug', action='store_true', default=False, help='info
 parser.add_argument('--keep_mode', type=str, default='auto', help='info keep mode',choices=['auto','b','p','t'])
 parser.add_argument('--keep_seg', type=int, nargs='+', default=[1], help='info keep segment mode')
 parser.add_argument('--keep_grid', action='store_true', default=False, help='info keep augment grid')
-parser.add_argument('--keep_thres', type=float, default=0.6, help="augment sample weight")
+parser.add_argument('--keep_thres', type=float, default=0.6, help="keep augment weight (lower protect more)")
 parser.add_argument('--keep_len', type=int, default=100, help="info keep seq len")
 parser.add_argument('--visualize', action='store_true', default=False, help='visualize')
 
@@ -120,7 +120,7 @@ if debug:
 else:
     args.save = os.path.join('search', args.dataset, args.save)
 utils.create_exp_dir(args.save)
-for i in range(args.kfold):
+for i in range(10):
     utils.create_exp_dir(os.path.join(args.save,f'fold{i}'))
 log_format = '%(asctime)s %(message)s'
 logging.basicConfig(stream=sys.stdout, level=logging.INFO,

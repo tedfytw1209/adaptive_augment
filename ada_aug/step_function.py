@@ -219,7 +219,7 @@ def rel_loss(ori_loss, aug_loss):
 
 def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, adaaug, criterion, gf_optimizer,scheduler,
             grad_clip, h_optimizer, epoch, search_freq,search_round=1, multilabel=False,n_class=10,
-            difficult_aug=False,same_train=False,reweight=True,mix_feature=True,lambda_aug = 1.0,loss_type='minus',
+            difficult_aug=False,same_train=False,reweight=True,mix_feature=True,lambda_sim = 1.0,lambda_aug = 1.0,loss_type='minus',
             class_adaptive=False,adv_criterion=None,sim_criterion=None,teacher_model=None):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
@@ -384,7 +384,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 else:
                     loss = sim_criterion(logits_search, target_search.long())
                     ori_loss = sim_criterion(origin_logits, target_search.long())
-                loss = sim_loss_func(ori_loss,loss)
+                loss = sim_loss_func(ori_loss,loss) * lambda_sim
                 loss.backward()
 
                 adaptive_loss += loss.detach().item()

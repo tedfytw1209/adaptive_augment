@@ -82,6 +82,7 @@ parser.add_argument('--same_train', action='store_true', default=False, help='us
 parser.add_argument('--not_mix', action='store_true', default=False, help='use valid select')
 parser.add_argument('--not_reweight', action='store_true', default=False, help='use valid select')
 parser.add_argument('--lambda_aug', type=float, default=1.0, help="augment sample weight")
+parser.add_argument('--lambda_sim', type=float, default=1.0, help="augment sample weight (simular)")
 parser.add_argument('--class_adapt', action='store_true', default=False, help='class adaptive')
 parser.add_argument('--class_embed', action='store_true', default=False, help='class embed') #tmp use
 parser.add_argument('--loss_type', type=str, default='minus', help="loss type for difficult policy training", choices=['minus','relative','adv'])
@@ -90,7 +91,7 @@ parser.add_argument('--keep_aug', action='store_true', default=False, help='info
 parser.add_argument('--keep_mode', type=str, default='auto', help='info keep mode',choices=['auto','b','p','t'])
 parser.add_argument('--keep_seg', type=int, nargs='+', default=[1], help='info keep segment mode')
 parser.add_argument('--keep_grid', action='store_true', default=False, help='info keep augment grid')
-parser.add_argument('--keep_thres', type=float, default=0.6, help="augment sample weight")
+parser.add_argument('--keep_thres', type=float, default=0.6, help="keep augment weight (lower protect more)")
 parser.add_argument('--keep_len', type=int, default=100, help="info keep seq len")
 parser.add_argument('--teach_aug', action='store_true', default=False, help='teacher augment')
 parser.add_argument('--ema_rate', type=float, default=0.999, help="teacher ema rate")

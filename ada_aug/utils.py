@@ -104,8 +104,11 @@ class PolicyHistory(object):
 
     def plot(self):
         PATH = self.save_dir
+        print('Path: ',PATH)
         mag_file_list = glob.glob(f'{PATH}/policy/*_magnitude.csv')
         weights_file_list = glob.glob(f'{PATH}/policy/*_weights.csv')
+        print(mag_file_list)
+        print(weights_file_list)
         n_class = len(mag_file_list)
 
         f, axes = plt.subplots(n_class, 2, figsize=(15, 5*n_class))

@@ -334,7 +334,10 @@ def main():
     #hparams
     hparams = dict(vars(args)) #copy args
     hparams['args'] = args
-    hparams['kfold'] = tune.grid_search([i for i in range(args.kfold)])
+    if args.kfold==10:
+        hparams['kfold'] = tune.grid_search([i for i in range(args.kfold)])
+    else:
+        hparams['kfold'] = tune.grid_search([args.kfold]) #for some fold
     #wandb
     wandb_config = {
         #'config':FLAGS, 

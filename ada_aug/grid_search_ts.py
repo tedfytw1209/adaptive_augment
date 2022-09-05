@@ -166,6 +166,16 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         #  model settings
         self.gf_model = get_model_tseries(model_name=self.config['model_name'], num_class=n_class,n_channel=n_channel,
             use_cuda=True, data_parallel=False,dataset=self.config['dataset'])
+        #EMA if needed
+        self.ema_model = None
+        if args.teach_aug:
+            print('Using EMA teacher model')
+            avg_fn = lambda averaged_model_parameter, model_parameter, num_averaged: \
+                args.ema_rate * averaged_model_parameter + (1 - args.ema_rate) * model_parameter
+            self.ema_model = optim.swa_utils.AveragedModel(self.gf_model, avg_fn=avg_fn)
+            for ema_p in self.ema_model.parameters():
+                ema_p.requires_grad_(False)
+            self.ema_model.train()
         h_input = self.gf_model.fc.in_features
         label_num, label_embed = 0,0
         if self.config['class_adapt'] and self.config['class_embed']:
@@ -193,8 +203,22 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             self.criterion = nn.BCEWithLogitsLoss(reduction='mean')
         self.criterion = self.criterion.cuda()
         self.adv_criterion = None
-        if self.config['loss_type']=='adv':
+        if args.loss_type=='adv':
             self.adv_criterion = NonSaturatingLoss(epsilon=0.1).cuda()
+        self.sim_criterion = None
+        if args.policy_loss=='classbal':
+            search_labels = self.search_queue.dataset.dataset.label
+            if not multilabel:
+                search_labels_count = [np.count_nonzero(search_labels == i) for i in range(n_class)] #formulticlass
+            else:
+                search_labels_count = np.sum(search_labels,axis=0)
+            sim_type = 'softmax'
+            if multilabel:
+                sim_type = 'focal'
+            self.sim_criterion = ClassBalLoss(search_labels_count,len(search_labels_count),loss_type=sim_type).cuda()
+        elif args.policy_loss=='classdiff':
+            self.class_difficulty = np.ones(n_class)
+            self.sim_criterion = ClassDiffLoss(class_difficulty=self.class_difficulty).cuda() #default now
 
         #  AdaAug settings for search
         after_transforms = self.train_queue.dataset.after_transforms
@@ -339,9 +363,9 @@ def main():
     print(hparams)
     hparams['search_freq'] = hparams['search_freq'][0] #tune.grid_search(hparams['search_freq'])
     hparams['search_round'] = hparams['search_round'][0] #tune.grid_search(hparams['search_round'])
-    hparams['proj_learning_rate'] = tune.uniform(hparams['proj_learning_rate'][0],hparams['proj_learning_rate'][1])
-    hparams['lambda_aug'] = tune.uniform(hparams['lambda_aug'][0],hparams['lambda_aug'][1])
-    hparams['lambda_sim'] = tune.uniform(hparams['lambda_sim'][0],hparams['lambda_sim'][1])
+    hparams['proj_learning_rate'] = tune.qloguniform(hparams['proj_learning_rate'][0],hparams['proj_learning_rate'][1],hparams['proj_learning_rate'][0]/2,2)
+    hparams['lambda_aug'] = tune.quniform(hparams['lambda_aug'][0],hparams['lambda_aug'][1],0.05)
+    hparams['lambda_sim'] = tune.quniform(hparams['lambda_sim'][0],hparams['lambda_sim'][1],0.05)
     hparams['keep_thres'] = hparams['keep_thres'] #tune.grid_search(hparams['keep_thres'])
     hparams['keep_len'] = hparams['keep_len'] #tune.grid_search(hparams['keep_len'])
     #if args.not_reweight:

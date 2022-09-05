@@ -998,7 +998,7 @@ def activate_bn_track_running_stats(model):
 
 class KeepAugment(object): #need fix
     def __init__(self, mode, length,thres=0.6,transfrom=None,default_select=None, early=False, low = False,
-        possible_segment=[1],grid_region=False, reverse=False,
+        possible_segment=[1],grid_region=False, reverse=False,info_upper = 0.0,
         sfreq=100,pw_len=0.2,tw_len=0.4,**_kwargs):
         assert mode in ['auto','b','p','t'] #auto: all, b: heart beat(-0.2,0.4), p: p-wave(-0.2,0), t: t-wave(0,0.4)
         self.mode = mode
@@ -1020,7 +1020,9 @@ class KeepAugment(object): #need fix
         self.possible_segment = possible_segment
         self.grid_region = grid_region
         self.reverse = reverse
+        self.info_upper = info_upper
         self.detectors = Detectors(sfreq) #need input ecg: (seq_len)
+        self.compare_func_list = [lt,ge]
         #'torch.nn.functional.avg_pool1d' use this for segment
         ##self.m_pool = torch.nn.AvgPool1d(kernel_size=self.length, stride=1, padding=0) #for winodow sum
         print(f'Apply InfoKeep Augment: mode={self.mode}, threshold={self.thres}, transfrom={self.trans}')
@@ -1048,7 +1050,8 @@ class KeepAugment(object): #need fix
                 compare_func = lt
             else:
                 compare_func = ge
-        return info_aug, compare_func
+        upper_bound = 1.0 - (1.0 - info_aug) * self.info_upper
+        return info_aug, compare_func, upper_bound
     def get_slc(self,t_series,model):
         t_series_ = t_series.clone().detach()
         if self.mode=='auto':
@@ -1073,7 +1076,7 @@ class KeepAugment(object): #need fix
         b,w,c = t_series.shape
         augment, selective = self.get_augment(apply_func,selective)
         slc_, t_series_ = self.get_slc(t_series,model)
-        info_aug, compare_func = self.get_selective(selective)
+        info_aug, compare_func, info_bound = self.get_selective(selective)
         #windowed_slc = self.m_pool(slc_.view(b,1,w)).view(b,-1)
         #select a segment number
         seg_number = np.random.choice(self.possible_segment)
@@ -1127,7 +1130,7 @@ class KeepAugment(object): #need fix
         b,w,c = t_series.shape
         augment, selective = self.get_augment(apply_func,selective)
         slc_, t_series_ = self.get_slc(t_series,model)
-        info_aug, compare_func = self.get_selective(selective)
+        info_aug, compare_func, info_bound = self.get_selective(selective)
         #windowed_slc = self.m_pool(slc_.view(b,1,w)).view(b,-1)
         #select a segment number
         seg_number = np.random.choice(self.possible_segment)

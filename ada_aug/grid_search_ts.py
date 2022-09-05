@@ -62,7 +62,7 @@ parser.add_argument('--multilabel', action='store_true', default=False, help='us
 parser.add_argument('--train_portion', type=float, default=1, help='portion of training data')
 parser.add_argument('--default_split', action='store_true', help='use dataset deault split')
 parser.add_argument('--kfold', type=int, default=-1, help='use kfold cross validation')
-parser.add_argument('--proj_learning_rate', type=float, default=1e-2, help='learning rate for h')
+parser.add_argument('--proj_learning_rate', nargs='+', type=float, default=[1e-4,1e-2], help='learning rate for h')
 parser.add_argument('--proj_weight_decay', type=float, default=1e-3, help='weight decay for h]')
 parser.add_argument('--cutout', action='store_true', default=False, help='use cutout')
 parser.add_argument('--cutout_length', type=int, default=16, help='cutout length')
@@ -81,8 +81,8 @@ parser.add_argument('--diff_aug', action='store_true', default=False, help='use 
 parser.add_argument('--same_train', action='store_true', default=False, help='use valid select')
 parser.add_argument('--not_mix', action='store_true', default=False, help='use valid select')
 parser.add_argument('--not_reweight', action='store_true', default=False, help='use valid select')
-parser.add_argument('--lambda_aug', type=float, default=1.0, help="augment sample weight")
-parser.add_argument('--lambda_sim', type=float, default=1.0, help="augment sample weight (simular)")
+parser.add_argument('--lambda_aug', type=float, nargs='+', default=[0.1, 1.0], help="augment sample weight")
+parser.add_argument('--lambda_sim', type=float, nargs='+', default=[0.1, 1.0], help="augment sample weight (simular)")
 parser.add_argument('--class_adapt', action='store_true', default=False, help='class adaptive')
 parser.add_argument('--class_embed', action='store_true', default=False, help='class embed') #tmp use
 parser.add_argument('--loss_type', type=str, default='minus', help="loss type for difficult policy training", choices=['minus','relative','adv'])
@@ -242,7 +242,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         args = argparse.Namespace(**self.config)
         lr = self.scheduler.get_last_lr()[0]
         step_dic={'epoch':self._iteration}
-        diff_dic = {'difficult_aug':self.diff_augment,'same_train':args.same_train,'reweight':self.diff_reweight,'lambda_aug':args.lambda_aug, 'class_adaptive':args.class_adapt,
+        diff_dic = {'difficult_aug':self.diff_augment,'same_train':args.same_train,'reweight':self.diff_reweight,'lambda_aug':args.lambda_aug,
+                'lambda_sim':args.lambda_sim,'class_adaptive':args.class_adapt,
                 'loss_type':args.loss_type, 'adv_criterion': self.adv_criterion, 'teacher_model':self.ema_model, 'sim_criterion':self.sim_criterion}
         # searching
         train_acc, train_obj, train_dic = search_train(args,self.train_queue, self.search_queue, self.tr_search_queue, self.gf_model, self.adaaug,
@@ -338,14 +339,15 @@ def main():
     print(hparams)
     hparams['search_freq'] = tune.grid_search(hparams['search_freq'])
     hparams['search_round'] = tune.grid_search(hparams['search_round'])
-    hparams['loss_type'] = tune.loguniform(hparams['loss_type'][0],hparams['loss_type'][1],2)
-    hparams['lambda_aug'] = tune.loguniform(hparams['lambda_aug'][0],hparams['lambda_aug'][1],2)
+    hparams['proj_learning_rate'] = tune.qloguniform(hparams['proj_learning_rate'][0],hparams['proj_learning_rate'][1],hparams['proj_learning_rate'][0])
+    hparams['lambda_aug'] = tune.qloguniform(hparams['lambda_aug'][0],hparams['lambda_aug'][1],hparams['lambda_aug'][0])
+    hparams['lambda_sim'] = tune.qloguniform(hparams['lambda_sim'][0],hparams['lambda_sim'][1],hparams['lambda_sim'][0])
     hparams['keep_thres'] = tune.grid_search(hparams['keep_thres'])
     hparams['keep_len'] = tune.grid_search(hparams['keep_len'])
-    if args.not_reweight:
-        hparams['not_reweight'] = tune.grid_search([True,False])
-    if args.class_adapt:
-        hparams['class_adapt'] = tune.grid_search([True,False])
+    #if args.not_reweight:
+    #    hparams['not_reweight'] = tune.grid_search([True,False])
+    #if args.class_adapt:
+    #    hparams['class_adapt'] = tune.grid_search([True,False])
     #wandb
     wandb_config = {
         #'config':FLAGS, 

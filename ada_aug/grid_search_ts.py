@@ -337,13 +337,13 @@ def main():
         hparams['kfold'] = args.kfold #for some fold
     #for grid search
     print(hparams)
-    hparams['search_freq'] = tune.grid_search(hparams['search_freq'])
-    hparams['search_round'] = tune.grid_search(hparams['search_round'])
-    hparams['proj_learning_rate'] = tune.qloguniform(hparams['proj_learning_rate'][0],hparams['proj_learning_rate'][1],hparams['proj_learning_rate'][0])
-    hparams['lambda_aug'] = tune.qloguniform(hparams['lambda_aug'][0],hparams['lambda_aug'][1],hparams['lambda_aug'][0])
-    hparams['lambda_sim'] = tune.qloguniform(hparams['lambda_sim'][0],hparams['lambda_sim'][1],hparams['lambda_sim'][0])
-    hparams['keep_thres'] = tune.grid_search(hparams['keep_thres'])
-    hparams['keep_len'] = tune.grid_search(hparams['keep_len'])
+    hparams['search_freq'] = hparams['search_freq'][0] #tune.grid_search(hparams['search_freq'])
+    hparams['search_round'] = hparams['search_round'][0] #tune.grid_search(hparams['search_round'])
+    hparams['proj_learning_rate'] = tune.uniform(hparams['proj_learning_rate'][0],hparams['proj_learning_rate'][1])
+    hparams['lambda_aug'] = tune.uniform(hparams['lambda_aug'][0],hparams['lambda_aug'][1])
+    hparams['lambda_sim'] = tune.uniform(hparams['lambda_sim'][0],hparams['lambda_sim'][1])
+    hparams['keep_thres'] = hparams['keep_thres'] #tune.grid_search(hparams['keep_thres'])
+    hparams['keep_len'] = hparams['keep_len'] #tune.grid_search(hparams['keep_len'])
     #if args.not_reweight:
     #    hparams['not_reweight'] = tune.grid_search([True,False])
     #if args.class_adapt:

@@ -226,6 +226,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                     gf_model=self.gf_model,
                     h_model=self.h_model,
                     save_dir=os.path.join(self.config['BASE_PATH'],self.config['save'],f'fold{test_fold_idx}'),
+                    visualize=args.visualize,
                     config=adaaug_config,
                     keepaug_config=keepaug_config,
                     multilabel=multilabel,

@@ -366,3 +366,184 @@ class AdaAug_TS(AdaAug):
             if title:
                 plt.title(title)
             plt.savefig(f'{self.save_dir}/img{idx}_{title}.png')
+
+class AdaAugkeep_TS(AdaAug):
+    def __init__(self, after_transforms, n_class, gf_model, h_model, save_dir=None, visualize=False,
+                    config=default_config,keepaug_config=default_config, multilabel=False, augselect='',class_adaptive=False):
+        super(AdaAugkeep_TS, self).__init__(after_transforms, n_class, gf_model, h_model, save_dir, config)
+        #other already define in AdaAug
+        self.ops_names = TS_OPS_NAMES.copy()
+        if 'tsadd' in augselect:
+            self.ops_names = self.ops_names + TS_ADD_NAMES.copy()
+        if 'ecg' in augselect:
+            self.ops_names = self.ops_names + ECG_OPS_NAMES.copy()
+        self.keep_lens = [100, 200, 400, 600, 800]
+        print('AdaAug Using ',self.ops_names)
+        print('KeepAug Using ',self.keep_lens)
+        self.n_ops = len(self.ops_names)
+        self.history = PolicyHistory(self.ops_names, self.save_dir, self.n_class)
+        self.config = config
+        self.use_keepaug = keepaug_config['keep_aug']
+        if self.use_keepaug:
+            self.Augment_wrapper = KeepAugment(**keepaug_config)
+            self.Search_wrapper = self.Augment_wrapper.Augment_search
+        else:
+            print('AdaAug Keep always use keep augment')
+            exit()
+        self.multilabel = multilabel
+        self.class_adaptive = class_adaptive
+        self.visualize = visualize
+
+    def predict_aug_params(self, X, seq_len, mode,y=None):
+        self.gf_model.eval()
+        if mode == 'exploit':
+            self.h_model.eval()
+            T = self.temp
+        elif mode == 'explore':
+            if hasattr(self.gf_model, 'lstm'):
+                self.gf_model.lstm.train() #!!!maybe for bn is better
+            self.h_model.train()
+            T = 1.0
+        a_params = self.h_model(self.gf_model.extract_features(X.cuda(),seq_len),y=y)
+        magnitudes, weights = torch.split(a_params, self.n_ops, dim=1)
+        magnitudes = torch.sigmoid(magnitudes)
+        weights = torch.nn.functional.softmax(weights/T, dim=-1)
+        return magnitudes, weights
+
+    def add_history(self, images, seq_len, targets,y=None):
+        magnitudes, weights = self.predict_aug_params(images, seq_len, 'exploit',y=y)
+        for k in range(self.n_class):
+            if self.multilabel:
+                idxs = (targets[:,k] == 1).nonzero().squeeze()
+            else:
+                idxs = (targets == k).nonzero().squeeze()
+            mean_lambda = magnitudes[idxs].mean(0).detach().cpu().tolist()
+            mean_p = weights[idxs].mean(0).detach().cpu().tolist()
+            std_lambda = magnitudes[idxs].std(0).detach().cpu().tolist()
+            std_p = weights[idxs].std(0).detach().cpu().tolist()
+            self.history.add(k, mean_lambda, mean_p, std_lambda, std_p)
+
+    def get_aug_valid_img(self, image, magnitudes,i=None,k=None,ops_name=None):
+        trans_image = apply_augment(image, ops_name, magnitudes[i][k].detach().cpu().numpy())
+        trans_image = self.after_transforms(trans_image)
+        trans_image = stop_gradient(trans_image.cuda(), magnitudes[i][k])
+        return trans_image
+    def get_aug_valid_imgs(self, images, magnitudes):
+        """Return the mixed latent feature
+
+        Args:
+            images ([Tensor]): [description]
+            magnitudes ([Tensor]): [description]
+        Returns:
+            [Tensor]: a set of augmented validation images
+        """
+        #trans_seqlen_list = []
+        '''trans_image_list = []
+        for i, image in enumerate(images):
+            pil_img = image.detach().cpu()
+            #e_len = seq_len[i]
+            # Prepare transformed image for mixing
+            for k, ops_name in enumerate(self.ops_names):
+                trans_image = apply_augment(pil_img, ops_name, magnitudes[i][k].detach().cpu().numpy())
+                trans_image = self.after_transforms(trans_image)
+                trans_image = stop_gradient(trans_image.cuda(), magnitudes[i][k])
+                trans_image_list.append(trans_image)
+                #trans_seqlen_list.append(e_len)'''
+        aug_imgs = self.Search_wrapper(images, model=self.gf_model,apply_func=self.get_aug_valid_img,magnitudes=magnitudes,ops_names=self.ops_names,selective='paste')
+        #return torch.stack(trans_image_list, dim=0) #, torch.stack(trans_seqlen_list, dim=0) #(b*k_ops, seq, ch)
+        return aug_imgs
+
+    def explore(self, images, seq_len, mix_feature=True,y=None):
+        """Return the mixed latent feature if mix_feature==True
+        !!!can't use for dynamic len now
+        Args:
+            images ([Tensor]): [description]
+        Returns:
+            [Tensor]: return a batch of mixed features
+        """
+        magnitudes, weights = self.predict_aug_params(images, seq_len,'explore',y=y)
+        a_imgs = self.get_aug_valid_imgs(images, magnitudes)
+        #a_imgs = self.Augment_wrapper(images, model=self.gf_model,apply_func=self.get_aug_valid_imgs,magnitudes=magnitudes,selective='paste')
+        #a_features = self.gf_model.extract_features(a_imgs, a_seq_len)
+        a_features = self.gf_model.extract_features(a_imgs)
+        ba_features = a_features.reshape(len(images), self.n_ops, -1) # batch, n_ops, n_hidden
+        if mix_feature:
+            mixed_features = [w.matmul(feat) for w, feat in zip(weights, ba_features)]
+            mixed_features = torch.stack(mixed_features, dim=0)
+            return mixed_features
+        else:
+            return ba_features, weights
+    def get_training_aug_image(self, image, magnitudes, idx_matrix,i=None):
+        if i!=None:
+            idx_list = idx_matrix[i]
+            magnitude_i = magnitudes[i]
+        else:
+            idx_list,magnitude_i = idx_matrix,magnitudes
+        for idx in idx_list:
+            m_pi = perturb_param(magnitude_i[idx], self.delta).detach().cpu().numpy()
+            image = apply_augment(image, self.ops_names[idx], m_pi)
+        return self.after_transforms(image)
+    def get_training_aug_images(self, images, magnitudes, weights):
+        # visualization
+        if self.k_ops > 0:
+            trans_images = []
+            if self.sampling == 'prob':
+                idx_matrix = torch.multinomial(weights, self.k_ops)
+            elif self.sampling == 'max':
+                idx_matrix = torch.topk(weights, self.k_ops, dim=1)[1] #where op index the highest weight
+
+            '''for i, image in enumerate(images):
+                pil_image = image.detach().cpu()
+                for idx in idx_matrix[i]:
+                    m_pi = perturb_param(magnitudes[i][idx], self.delta).detach().cpu().numpy()
+                    pil_image = apply_augment(pil_image, self.ops_names[idx], m_pi)
+
+                trans_images.append(self.after_transforms(pil_image))'''
+            aug_imgs = self.Augment_wrapper(images, model=self.gf_model,apply_func=self.get_training_aug_image,magnitudes=magnitudes,idx_matrix=idx_matrix,selective='paste')
+        else:
+            trans_images = []
+            for i, image in enumerate(images):
+                pil_image = image.detach().cpu()
+                trans_image = self.after_transforms(pil_image)
+                trans_images.append(trans_image)
+            aug_imgs = torch.stack(trans_images, dim=0).cuda()
+        
+        #aug_imgs = torch.stack(trans_images, dim=0).cuda()
+        return aug_imgs.cuda() #(b, seq, ch)
+
+    def exploit(self, images, seq_len,y=None):
+        if self.resize and 'lstm' not in self.config['gf_model_name']:
+            resize_imgs = F.interpolate(images, size=self.search_d)
+        else:
+            resize_imgs = images
+        #resize_imgs = F.interpolate(images, size=self.search_d) if self.resize else images
+        magnitudes, weights = self.predict_aug_params(resize_imgs, seq_len, 'exploit',y=y)
+        aug_imgs = self.get_training_aug_images(images, magnitudes, weights)
+        if self.visualize:
+            print('Visualize for Debug')
+            self.print_imgs(imgs=images,title='id')
+            self.print_imgs(imgs=aug_imgs,title='aug')
+            exit()
+        return aug_imgs
+
+    def forward(self, images, seq_len, mode, mix_feature=True,y=None):
+        if mode == 'explore':
+            #  return a set of mixed augmented features, mix_feature is for experiment
+            return self.explore(images,seq_len,mix_feature=mix_feature,y=y)
+        elif mode == 'exploit':
+            #  return a set of augmented images
+            return self.exploit(images,seq_len,y=y)
+        elif mode == 'inference':
+            return images
+    
+    def print_imgs(self,imgs,title):
+        imgs = imgs.cpu().detach().numpy()
+        t = np.linspace(0, 10, 1000)
+        for idx,img in enumerate(imgs):
+            plt.clf()
+            channel_num = img.shape[-1]
+            for i in  range(channel_num):
+                plt.plot(t, img[:,i])
+            if title:
+                plt.title(title)
+            plt.savefig(f'{self.save_dir}/img{idx}_{title}.png')

@@ -93,6 +93,7 @@ parser.add_argument('--keep_seg', type=int, nargs='+', default=[1], help='info k
 parser.add_argument('--keep_grid', action='store_true', default=False, help='info keep augment grid')
 parser.add_argument('--keep_thres', type=float, default=0.6, help="keep augment weight (lower protect more)")
 parser.add_argument('--keep_len', type=int, default=100, help="info keep seq len")
+parser.add_argument('--keep_bound', type=float, default=0.0, help="info keep bound %")
 parser.add_argument('--visualize', action='store_true', default=False, help='visualize')
 
 args = parser.parse_args()
@@ -220,7 +221,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                     'target_d': get_dataset_dimension(args.dataset),
                     'gf_model_name': args.gf_model_name}
         keepaug_config = {'keep_aug':args.keep_aug,'mode':args.keep_mode,'thres':args.keep_thres,'length':args.keep_len,
-            'grid_region':args.keep_grid, 'possible_segment': args.keep_seg}
+            'grid_region':args.keep_grid, 'possible_segment': args.keep_seg, 'info_upper': args.keep_bound}
         self.adaaug = AdaAug_TS(after_transforms=after_transforms,
                     n_class=search_n_class,
                     gf_model=self.gf_model,

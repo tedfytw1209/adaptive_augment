@@ -317,7 +317,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             #self.adaaug.save_history(self.class2label)
             #figure = self.adaaug.plot_history()
             wandb.log(step_dic)
-        call_back_dic = {'train_acc': train_acc, 'valid_acc': valid_acc, 'test_acc': test_acc}
+        call_back_dic = {'train_acc': train_acc, 'valid_acc': valid_acc, 'test_acc': test_acc, 'valid_loss': valid_dic['valid_loss']}
         return call_back_dic
 
     def _save(self, checkpoint_dir):
@@ -393,7 +393,7 @@ def main():
     print(f'Run {args.kfold} folds experiment')
     #tune_scheduler = ASHAScheduler(metric="valid_acc", mode="max",max_t=hparams['num_epochs'],grace_period=10,
     #    reduction_factor=3,brackets=1)1
-    bayesopt = BayesOptSearch(metric="valid_loss", mode="min",random_state=args.seed)
+    bayesopt = BayesOptSearch(metric="valid_loss", mode="min",random_state=args.seed,patience=12,random_search_steps=18)
     tune_scheduler = None
     analysis = tune.run(
         RayModel,
@@ -410,7 +410,7 @@ def main():
         stop={"training_iteration": hparams['epochs']},
         config=hparams,
         local_dir=args.ray_dir,
-        num_samples=50, #grid search no need
+        num_samples=100,
     )
     
     wandb.finish()

@@ -1040,18 +1040,18 @@ class KeepAugment(object): #need fix
         assert selective in ['cut','paste']
         if selective=='cut':
             info_aug = self.thres
-            if self.reverse:
-                compare_func = ge
-            else:
-                compare_func = lt
+            com_idx = 0
+            upper_bound = info_aug * self.info_upper
         else:
             info_aug = 1.0 - self.thres
-            if self.reverse:
-                compare_func = lt
-            else:
-                compare_func = ge
-        upper_bound = 1.0 - (1.0 - info_aug) * self.info_upper
-        return info_aug, compare_func, upper_bound
+            com_idx = 1
+            upper_bound = 1.0 - (1.0 - info_aug) * self.info_upper
+        if self.reverse:
+            com_idx = (com_idx+1)%2
+        compare_func = self.compare_func_list[com_idx] #[lt, ge]
+        bound_func = self.compare_func_list[(com_idx+1)%2] #[lt, ge]
+        
+        return info_aug, compare_func, upper_bound, bound_func
     def get_slc(self,t_series,model):
         t_series_ = t_series.clone().detach()
         if self.mode=='auto':
@@ -1076,7 +1076,7 @@ class KeepAugment(object): #need fix
         b,w,c = t_series.shape
         augment, selective = self.get_augment(apply_func,selective)
         slc_, t_series_ = self.get_slc(t_series,model)
-        info_aug, compare_func, info_bound = self.get_selective(selective)
+        info_aug, compare_func, info_bound, bound_func = self.get_selective(selective)
         #windowed_slc = self.m_pool(slc_.view(b,1,w)).view(b,-1)
         #select a segment number
         seg_number = np.random.choice(self.possible_segment)
@@ -1100,11 +1100,13 @@ class KeepAugment(object): #need fix
                     start, end = seg_accum[seg_idx], seg_accum[seg_idx+1]
                     win_start, win_end = windowed_accum[seg_idx], windowed_accum[seg_idx+1]
                 quant_score = torch.quantile(windowed_slc_each[win_start:win_end],info_aug)
+                bound_score = torch.quantile(windowed_slc_each[win_start:win_end],info_bound)
                 while(True):
                     x = np.random.randint(start,end)
                     x1 = np.clip(x - info_len // 2, 0, w)
                     x2 = np.clip(x + info_len // 2, 0, w)
-                    if compare_func(slc[x1: x2].mean(),quant_score):
+                    reg_mean = slc[x1: x2].mean()
+                    if compare_func(reg_mean,quant_score) and bound_func(reg_mean,bound_score):
                         region_list.append([x1,x2])
                         break
                 info_region = t_s[x1: x2,:].clone().detach().cpu()
@@ -1130,7 +1132,7 @@ class KeepAugment(object): #need fix
         b,w,c = t_series.shape
         augment, selective = self.get_augment(apply_func,selective)
         slc_, t_series_ = self.get_slc(t_series,model)
-        info_aug, compare_func, info_bound = self.get_selective(selective)
+        info_aug, compare_func, info_bound, bound_func = self.get_selective(selective)
         #windowed_slc = self.m_pool(slc_.view(b,1,w)).view(b,-1)
         #select a segment number
         seg_number = np.random.choice(self.possible_segment)
@@ -1158,11 +1160,13 @@ class KeepAugment(object): #need fix
                         start, end = seg_accum[seg_idx], seg_accum[seg_idx+1]
                         win_start, win_end = windowed_accum[seg_idx], windowed_accum[seg_idx+1]
                     quant_score = torch.quantile(windowed_slc_each[win_start: win_end],info_aug)
+                    bound_score = torch.quantile(windowed_slc_each[win_start:win_end],info_bound)
                     while(True):
                         x = np.random.randint(start,end)
                         x1 = np.clip(x - info_len // 2, 0, w)
                         x2 = np.clip(x + info_len // 2, 0, w)
-                        if compare_func(slc[x1: x2].mean(),quant_score):
+                        reg_mean = slc[x1: x2].mean()
+                        if compare_func(reg_mean,quant_score) and bound_func(reg_mean,bound_score):
                             region_list.append([x1,x2])
                             break
                     info_region = t_s_tmp[x1: x2,:].clone().detach().cpu()

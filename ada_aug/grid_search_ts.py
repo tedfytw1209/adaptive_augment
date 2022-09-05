@@ -393,7 +393,7 @@ def main():
     print(f'Run {args.kfold} folds experiment')
     #tune_scheduler = ASHAScheduler(metric="valid_acc", mode="max",max_t=hparams['num_epochs'],grace_period=10,
     #    reduction_factor=3,brackets=1)1
-    bayesopt = BayesOptSearch(metric="valid_acc", mode="max",random_state=args.seed)
+    bayesopt = BayesOptSearch(metric="valid_loss", mode="min",random_state=args.seed)
     tune_scheduler = None
     analysis = tune.run(
         RayModel,
@@ -410,7 +410,7 @@ def main():
         stop={"training_iteration": hparams['epochs']},
         config=hparams,
         local_dir=args.ray_dir,
-        num_samples=20, #grid search no need
+        num_samples=50, #grid search no need
     )
     
     wandb.finish()

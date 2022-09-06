@@ -130,6 +130,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         #self.trainer = TSeriesModelTrainer(self.config)
         os.environ['WANDB_START_METHOD'] = 'thread'
         args = argparse.Namespace(**self.config)
+        utils.reproducibility(args.seed) #for reproduce
         #  dataset settings for search
         n_channel = get_num_channel(self.config['dataset'])
         n_class = get_num_class(self.config['dataset'],self.config['labelgroup'])
@@ -375,7 +376,7 @@ def main():
     #wandb
     wandb_config = {
         #'config':FLAGS, 
-        'project':'AdaAug',
+        'project':'AdaAug_grid',
         'group':f'{now_str}_' + experiment_name,
         #'name':experiment_name,
         'dir':'./',
@@ -393,7 +394,7 @@ def main():
     print(f'Run {args.kfold} folds experiment')
     #tune_scheduler = ASHAScheduler(metric="valid_acc", mode="max",max_t=hparams['num_epochs'],grace_period=10,
     #    reduction_factor=3,brackets=1)1
-    bayesopt = BayesOptSearch(metric="valid_loss", mode="min",random_state=args.seed,patience=12,random_search_steps=18)
+    bayesopt = BayesOptSearch(metric="valid_loss", mode="min",random_state=args.seed,patience=12,random_search_steps=24)
     tune_scheduler = None
     analysis = tune.run(
         RayModel,
@@ -410,7 +411,7 @@ def main():
         stop={"training_iteration": hparams['epochs']},
         config=hparams,
         local_dir=args.ray_dir,
-        num_samples=100,
+        num_samples=120,
     )
     
     wandb.finish()

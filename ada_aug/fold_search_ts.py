@@ -115,7 +115,8 @@ else:
 if args.diff_aug and not args.not_reweight:
     description+='rew'
 if args.keep_aug:
-    description+=f'keep{args.keep_mode}{args.keep_seg}'
+    keep_seg_str = ''.join(args.keep_seg)
+    description+=f'keep{args.keep_mode}{keep_seg_str}'
 if args.teach_aug:
     description+=f'teach{args.ema_rate}'
 now_str = time.strftime("%Y%m%d-%H%M%S")

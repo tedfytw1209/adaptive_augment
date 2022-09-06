@@ -365,8 +365,8 @@ def main():
     hparams['search_freq'] = hparams['search_freq'][0] #tune.grid_search(hparams['search_freq'])
     hparams['search_round'] = hparams['search_round'][0] #tune.grid_search(hparams['search_round'])
     hparams['proj_learning_rate'] = tune.qloguniform(hparams['proj_learning_rate'][0],hparams['proj_learning_rate'][1],hparams['proj_learning_rate'][0]/2,2)
-    hparams['lambda_aug'] = tune.quniform(hparams['lambda_aug'][0],hparams['lambda_aug'][1],0.05)
-    hparams['lambda_sim'] = tune.quniform(hparams['lambda_sim'][0],hparams['lambda_sim'][1],0.05)
+    hparams['lambda_aug'] = tune.quniform(hparams['lambda_aug'][0],hparams['lambda_aug'][1],0.01)
+    hparams['lambda_sim'] = tune.quniform(hparams['lambda_sim'][0],hparams['lambda_sim'][1],0.01)
     hparams['keep_thres'] = hparams['keep_thres'] #tune.grid_search(hparams['keep_thres'])
     hparams['keep_len'] = hparams['keep_len'] #tune.grid_search(hparams['keep_len'])
     #if args.not_reweight:

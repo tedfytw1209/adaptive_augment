@@ -377,10 +377,11 @@ class AdaAugkeep_TS(AdaAug):
             self.ops_names = self.ops_names + TS_ADD_NAMES.copy()
         if 'ecg' in augselect:
             self.ops_names = self.ops_names + ECG_OPS_NAMES.copy()
-        self.keep_lens = [100, 200, 400, 600, 800]
+        self.keep_lens = [100, 200, 400, 600, 800] #!!!default
         print('AdaAug Using ',self.ops_names)
         print('KeepAug Using ',self.keep_lens)
         self.n_ops = len(self.ops_names)
+        self.n_keeplens = len(self.keep_lens)
         self.history = PolicyHistory(self.ops_names, self.save_dir, self.n_class)
         self.config = config
         self.use_keepaug = keepaug_config['keep_aug']
@@ -405,13 +406,17 @@ class AdaAugkeep_TS(AdaAug):
             self.h_model.train()
             T = 1.0
         a_params = self.h_model(self.gf_model.extract_features(X.cuda(),seq_len),y=y)
-        magnitudes, weights = torch.split(a_params, self.n_ops, dim=1)
+        #mags: mag for ops, weights: weight for ops, keeplen_ws: keeplen weights, keep_thres: keep threshold
+        magnitudes, weights, keeplen_ws, keep_thres = torch.split(a_params, [self.n_ops, self.n_ops, self.n_keeplens, 1], dim=1)
         magnitudes = torch.sigmoid(magnitudes)
         weights = torch.nn.functional.softmax(weights/T, dim=-1)
-        return magnitudes, weights
+        keeplen_ws = torch.nn.functional.softmax(keeplen_ws/T, dim=-1)
+        keep_thres = torch.sigmoid(keep_thres)
+        return magnitudes, weights, keeplen_ws, keep_thres
 
     def add_history(self, images, seq_len, targets,y=None):
-        magnitudes, weights = self.predict_aug_params(images, seq_len, 'exploit',y=y)
+        #need change
+        magnitudes, weights, keeplen_ws, keep_thres = self.predict_aug_params(images, seq_len, 'exploit',y=y)
         for k in range(self.n_class):
             if self.multilabel:
                 idxs = (targets[:,k] == 1).nonzero().squeeze()
@@ -428,47 +433,38 @@ class AdaAugkeep_TS(AdaAug):
         trans_image = self.after_transforms(trans_image)
         trans_image = stop_gradient(trans_image.cuda(), magnitudes[i][k])
         return trans_image
-    def get_aug_valid_imgs(self, images, magnitudes):
+    def get_aug_valid_imgs(self, images, magnitudes, keeplen_ws, keep_thres):
         """Return the mixed latent feature
-
         Args:
             images ([Tensor]): [description]
             magnitudes ([Tensor]): [description]
+            keeplen_ws ([Tensor]): [description]
+            keep_thres ([Tensor]): [description]
         Returns:
             [Tensor]: a set of augmented validation images
         """
-        #trans_seqlen_list = []
-        '''trans_image_list = []
-        for i, image in enumerate(images):
-            pil_img = image.detach().cpu()
-            #e_len = seq_len[i]
-            # Prepare transformed image for mixing
-            for k, ops_name in enumerate(self.ops_names):
-                trans_image = apply_augment(pil_img, ops_name, magnitudes[i][k].detach().cpu().numpy())
-                trans_image = self.after_transforms(trans_image)
-                trans_image = stop_gradient(trans_image.cuda(), magnitudes[i][k])
-                trans_image_list.append(trans_image)
-                #trans_seqlen_list.append(e_len)'''
+        #keep aug param
+
+        #
         aug_imgs = self.Search_wrapper(images, model=self.gf_model,apply_func=self.get_aug_valid_img,magnitudes=magnitudes,ops_names=self.ops_names,selective='paste')
-        #return torch.stack(trans_image_list, dim=0) #, torch.stack(trans_seqlen_list, dim=0) #(b*k_ops, seq, ch)
+        #(b*k_ops*keep_len, seq, ch)
         return aug_imgs
 
     def explore(self, images, seq_len, mix_feature=True,y=None):
-        """Return the mixed latent feature if mix_feature==True
-        !!!can't use for dynamic len now
+        """Return the mixed latent feature !!!can't use for dynamic len now
         Args:
             images ([Tensor]): [description]
         Returns:
             [Tensor]: return a batch of mixed features
         """
-        magnitudes, weights = self.predict_aug_params(images, seq_len,'explore',y=y)
-        a_imgs = self.get_aug_valid_imgs(images, magnitudes)
+        magnitudes, weights, keeplen_ws, keep_thres = self.predict_aug_params(images, seq_len,'explore',y=y)
+        a_imgs = self.get_aug_valid_imgs(images, magnitudes, keeplen_ws, keep_thres) #(b*k_ops*keep_len, seq, ch)
         #a_imgs = self.Augment_wrapper(images, model=self.gf_model,apply_func=self.get_aug_valid_imgs,magnitudes=magnitudes,selective='paste')
         #a_features = self.gf_model.extract_features(a_imgs, a_seq_len)
-        a_features = self.gf_model.extract_features(a_imgs)
-        ba_features = a_features.reshape(len(images), self.n_ops, -1) # batch, n_ops, n_hidden
+        a_features = self.gf_model.extract_features(a_imgs) #(b*k_ops*keep_len, n_hidden)
+        ba_features = a_features.reshape(len(images), self.n_ops, self.keep_lens, -1) # batch, n_ops,keep_lens, n_hidden
         if mix_feature:
-            mixed_features = [w.matmul(feat) for w, feat in zip(weights, ba_features)]
+            mixed_features = [w.matmul(feat) for w, feat in zip(weights, ba_features)] #
             mixed_features = torch.stack(mixed_features, dim=0)
             return mixed_features
         else:
@@ -483,22 +479,17 @@ class AdaAugkeep_TS(AdaAug):
             m_pi = perturb_param(magnitude_i[idx], self.delta).detach().cpu().numpy()
             image = apply_augment(image, self.ops_names[idx], m_pi)
         return self.after_transforms(image)
-    def get_training_aug_images(self, images, magnitudes, weights):
+    def get_training_aug_images(self, images, magnitudes, weights, keeplen_ws, keep_thres):
         # visualization
         if self.k_ops > 0:
             trans_images = []
             if self.sampling == 'prob':
                 idx_matrix = torch.multinomial(weights, self.k_ops)
+                len_idx = torch.multinomial(keeplen_ws, self.k_ops)
             elif self.sampling == 'max':
                 idx_matrix = torch.topk(weights, self.k_ops, dim=1)[1] #where op index the highest weight
+                len_idx = torch.topk(keeplen_ws, self.k_ops, dim=1)[1]
 
-            '''for i, image in enumerate(images):
-                pil_image = image.detach().cpu()
-                for idx in idx_matrix[i]:
-                    m_pi = perturb_param(magnitudes[i][idx], self.delta).detach().cpu().numpy()
-                    pil_image = apply_augment(pil_image, self.ops_names[idx], m_pi)
-
-                trans_images.append(self.after_transforms(pil_image))'''
             aug_imgs = self.Augment_wrapper(images, model=self.gf_model,apply_func=self.get_training_aug_image,magnitudes=magnitudes,idx_matrix=idx_matrix,selective='paste')
         else:
             trans_images = []

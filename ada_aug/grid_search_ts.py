@@ -130,6 +130,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         #self.trainer = TSeriesModelTrainer(self.config)
         os.environ['WANDB_START_METHOD'] = 'thread'
         args = argparse.Namespace(**self.config)
+        utils.reproducibility(args.seed) #for reproduce
         #  dataset settings for search
         n_channel = get_num_channel(self.config['dataset'])
         n_class = get_num_class(self.config['dataset'],self.config['labelgroup'])
@@ -375,7 +376,7 @@ def main():
     #wandb
     wandb_config = {
         #'config':FLAGS, 
-        'project':'AdaAug',
+        'project':'AdaAug_grid',
         'group':f'{now_str}_' + experiment_name,
         #'name':experiment_name,
         'dir':'./',

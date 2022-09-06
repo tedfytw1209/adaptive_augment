@@ -1035,15 +1035,17 @@ class KeepAugment(object): #need fix
             if self.default_select:
                 selective = self.default_select
         return augment, selective
-    def get_selective(self,selective):
+    def get_selective(self,selective,thres=None):
         #cut or paste
+        if thres==None:
+            thres = self.thres
         assert selective in ['cut','paste']
         if selective=='cut':
-            info_aug = self.thres
+            info_aug = thres
             com_idx = 0
             upper_bound = info_aug * self.info_upper
         else:
-            info_aug = 1.0 - self.thres
+            info_aug = 1.0 - thres
             com_idx = 1
             upper_bound = 1.0 - (1.0 - info_aug) * self.info_upper
         if self.reverse:
@@ -1231,6 +1233,154 @@ class KeepAugment(object): #need fix
             imp_map = torch.from_numpy(imp_map)
             imp_map_list.append(imp_map)
         return torch.stack(imp_map_list, dim=0) #(b,seq)
+
+class AdaKeepAugment(KeepAugment): #need fix
+    def __init__(self, mode, length,thres=0.6,transfrom=None,default_select=None, early=False, low = False,
+        possible_segment=[1],grid_region=False, reverse=False,info_upper = 0.0,
+        sfreq=100,pw_len=0.2,tw_len=0.4,**_kwargs):
+        assert mode in ['auto','b','p','t'] #auto: all, b: heart beat(-0.2,0.4), p: p-wave(-0.2,0), t: t-wave(0,0.4)
+        self.mode = mode
+        if self.mode=='p':
+            self.start_s,self.end_s = -0.2*sfreq,0
+        elif self.mode=='b':
+            self.start_s,self.end_s = -0.2*sfreq,0.4*sfreq
+        elif self.mode=='t':
+            self.start_s,self.end_s = 0,0.4*sfreq
+        self.length = length #len is a list in this case
+        self.early = early
+        self.low = low
+        self.sfreq = sfreq
+        self.pw_len = pw_len
+        self.tw_len = tw_len
+        self.trans = transfrom
+        self.default_select = default_select
+        self.thres = thres
+        self.possible_segment = possible_segment
+        self.grid_region = grid_region
+        self.reverse = reverse
+        self.info_upper = info_upper
+        self.detectors = Detectors(sfreq) #need input ecg: (seq_len)
+        self.compare_func_list = [lt,ge]
+        #'torch.nn.functional.avg_pool1d' use this for segment
+        print(f'Apply InfoKeep Augment: mode={self.mode}, threshold={self.thres}, transfrom={self.trans}')
+    #kwargs for apply_func, batch_inputs
+    def __call__(self, t_series, model=None,selective='paste', apply_func=None,keeplen_ws=None, keep_thres=None, **kwargs):
+        b,w,c = t_series.shape
+        augment, selective = self.get_augment(apply_func,selective)
+        slc_, t_series_ = self.get_slc(t_series,model)
+        info_aug, compare_func, info_bound, bound_func = self.get_selective(selective)
+        #windowed_slc = self.m_pool(slc_.view(b,1,w)).view(b,-1)
+        #select a segment number
+        seg_number = np.random.choice(self.possible_segment)
+        seg_len = int(w / seg_number)
+        info_len = int(self.length/seg_number)
+        windowed_slc = torch.nn.functional.avg_pool1d(slc_.view(b,1,w),kernel_size=info_len, stride=1, padding=0).view(b,-1)
+        windowed_w = windowed_slc.shape[1]
+        windowed_len = int(windowed_w / seg_number)
+        #quant_scores = torch.quantile(windowed_slc,info_aug,dim=1) #quant for each batch
+        seg_accum, windowed_accum = self.get_seg(seg_number,seg_len,w,windowed_w,windowed_len)
+        #print(slc_)
+        t_series_ = t_series_.detach().cpu()
+        aug_t_s_list = []
+        start, end = 0,w
+        win_start, win_end = 0,windowed_w
+        for i,(t_s, slc, windowed_slc_each) in enumerate(zip(t_series_, slc_, windowed_slc)):
+            #find region for each segment
+            region_list,inforegion_list = [],[]
+            for seg_idx in range(seg_number):
+                if self.grid_region:
+                    start, end = seg_accum[seg_idx], seg_accum[seg_idx+1]
+                    win_start, win_end = windowed_accum[seg_idx], windowed_accum[seg_idx+1]
+                quant_score = torch.quantile(windowed_slc_each[win_start:win_end],info_aug)
+                bound_score = torch.quantile(windowed_slc_each[win_start:win_end],info_bound)
+                while(True):
+                    x = np.random.randint(start,end)
+                    x1 = np.clip(x - info_len // 2, 0, w)
+                    x2 = np.clip(x + info_len // 2, 0, w)
+                    reg_mean = slc[x1: x2].mean()
+                    if compare_func(reg_mean,quant_score) and bound_func(reg_mean,bound_score):
+                        region_list.append([x1,x2])
+                        break
+                info_region = t_s[x1: x2,:].clone().detach().cpu()
+                inforegion_list.append(info_region)
+            #augment & paste back
+            if selective=='cut':
+                for info_region in inforegion_list:
+                    info_region = augment(info_region,i=i,**kwargs) #some other augment if needed
+            else:
+                t_s = augment(t_s,i=i,**kwargs) #some other augment if needed
+                
+            for reg_i in range(len(inforegion_list)):
+                x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
+                t_s[x1: x2, :] = inforegion_list[reg_i]
+            aug_t_s_list.append(t_s)
+        #back
+        if self.mode=='auto':
+            model.train()
+            for param in model.parameters():
+                param.requires_grad = True
+        return torch.stack(aug_t_s_list, dim=0) #(b,seq,ch)
+    def Augment_search(self, t_series, model=None,selective='paste', apply_func=None,ops_names=None, keep_thres=None, **kwargs):
+        b,w,c = t_series.shape
+        augment, selective = self.get_augment(apply_func,selective)
+        slc_, t_series_ = self.get_slc(t_series,model)
+        #info_aug, compare_func, info_bound, bound_func = self.get_selective(selective)
+        seg_number = np.random.choice(self.possible_segment)
+        seg_len = int(w / seg_number)
+        #print(slc_)
+        #print(windowed_slc)
+        #print(quant_scores)
+        t_series_ = t_series_.detach().cpu()
+        aug_t_s_list = []
+        start, end = 0,w
+        win_start, win_end = 0,windowed_w
+        for i,(t_s, slc) in enumerate(zip(t_series_, slc_)):
+            info_aug, compare_func, info_bound, bound_func = self.get_selective(selective,thres=keep_thres[i])
+            for each_len in self.length:
+                #select a segment number
+                info_len = int(each_len/seg_number)
+                windowed_slc = torch.nn.functional.avg_pool1d(slc.view(1,1,w),kernel_size=info_len, stride=1, padding=0).view(1,-1)
+                windowed_w = windowed_slc.shape[1]
+                windowed_len = int(windowed_w / seg_number)
+                seg_accum, windowed_accum = self.get_seg(seg_number,seg_len,w,windowed_w,windowed_len)
+                windowed_slc_each = windowed_slc[0]
+                #find region
+                for k, ops_name in enumerate(ops_names):
+                    t_s_tmp = t_s.clone().detach().cpu()
+                    region_list,inforegion_list = [],[]
+                    for seg_idx in range(seg_number):
+                        if self.grid_region:
+                            start, end = seg_accum[seg_idx], seg_accum[seg_idx+1]
+                            win_start, win_end = windowed_accum[seg_idx], windowed_accum[seg_idx+1]
+                        quant_score = torch.quantile(windowed_slc_each[win_start: win_end],info_aug)
+                        bound_score = torch.quantile(windowed_slc_each[win_start:win_end],info_bound)
+                        while(True):
+                            x = np.random.randint(start,end)
+                            x1 = np.clip(x - info_len // 2, 0, w)
+                            x2 = np.clip(x + info_len // 2, 0, w)
+                            reg_mean = slc[x1: x2].mean()
+                            if compare_func(reg_mean,quant_score) and bound_func(reg_mean,bound_score):
+                                region_list.append([x1,x2])
+                                break
+                        info_region = t_s_tmp[x1: x2,:].clone().detach().cpu()
+                        inforegion_list.append(info_region)
+                    #augment & paste back
+                    if selective=='cut':
+                        for info_region in inforegion_list:
+                            info_region = augment(info_region,i=i,k=k,ops_name=ops_name,**kwargs) #!!! some error
+                    else:
+                        t_s_tmp = augment(t_s_tmp,i=i,k=k,ops_name=ops_name,**kwargs) #some other augment if needed
+                        #print('Size compare: ',t_s[x1: x2, :].shape,info_region.shape)
+                    for reg_i in range(len(inforegion_list)):
+                        x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
+                        t_s_tmp[x1: x2, :] = inforegion_list[reg_i]
+                aug_t_s_list.append(t_s_tmp)
+        #back
+        if self.mode=='auto':
+            model.train()
+            for param in model.parameters():
+                param.requires_grad = True
+        return torch.stack(aug_t_s_list, dim=0) #(b*ops,seq,ch)
 
 if __name__ == '__main__':
     print('Test all operations')

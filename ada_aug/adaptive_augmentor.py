@@ -41,7 +41,7 @@ def stop_gradient(trans_image, magnitude):
     images = images.detach() + adds
     return images
 
-def Normal_augment(t_series, model=None,selective='paste', apply_func=None, **kwargs):
+def Normal_augment(t_series, model=None,selective='paste', apply_func=None,keeplen_ws=None, keep_thres=None, **kwargs):
     trans_t_series=[]
     for i, t_s in enumerate(t_series):
         t_s = t_s.detach().cpu()
@@ -49,7 +49,7 @@ def Normal_augment(t_series, model=None,selective='paste', apply_func=None, **kw
         trans_t_series.append(trans_t_s)
     aug_t_s = torch.stack(trans_t_series, dim=0)
     return aug_t_s
-def Normal_search(t_series, model=None,selective='paste', apply_func=None,ops_names=None, **kwargs):
+def Normal_search(t_series, model=None,selective='paste', apply_func=None,ops_names=None,keeplen_ws=None, keep_thres=None, **kwargs):
     trans_t_series=[]
     for i, t_s in enumerate(t_series):
         t_s = t_s.detach().cpu()
@@ -385,6 +385,7 @@ class AdaAugkeep_TS(AdaAug):
         self.history = PolicyHistory(self.ops_names, self.save_dir, self.n_class)
         self.config = config
         self.use_keepaug = keepaug_config['keep_aug']
+        keepaug_config['length'] = self.keep_lens
         if self.use_keepaug:
             self.Augment_wrapper = KeepAugment(**keepaug_config)
             self.Search_wrapper = self.Augment_wrapper.Augment_search
@@ -443,10 +444,9 @@ class AdaAugkeep_TS(AdaAug):
         Returns:
             [Tensor]: a set of augmented validation images
         """
-        #keep aug param
-
         #
-        aug_imgs = self.Search_wrapper(images, model=self.gf_model,apply_func=self.get_aug_valid_img,magnitudes=magnitudes,ops_names=self.ops_names,selective='paste')
+        aug_imgs = self.Search_wrapper(images, model=self.gf_model,apply_func=self.get_aug_valid_img,keeplen_ws=keeplen_ws, keep_thres=keep_thres, keeplens=self.keep_lens,
+            magnitudes=magnitudes,ops_names=self.ops_names,selective='paste')
         #(b*k_ops*keep_len, seq, ch)
         return aug_imgs
 
@@ -464,7 +464,8 @@ class AdaAugkeep_TS(AdaAug):
         a_features = self.gf_model.extract_features(a_imgs) #(b*k_ops*keep_len, n_hidden)
         ba_features = a_features.reshape(len(images), self.n_ops, self.keep_lens, -1) # batch, n_ops,keep_lens, n_hidden
         if mix_feature:
-            mixed_features = [w.matmul(feat) for w, feat in zip(weights, ba_features)] #
+            mixed_features = [w.matmul(feat) for w, feat in zip(weights, ba_features)] #[(keep_lens, n_hidden)]
+            mixed_features = [len_w.matmul(feat) for len_w,feat in zip(keeplen_ws,mixed_features)]
             mixed_features = torch.stack(mixed_features, dim=0)
             return mixed_features
         else:

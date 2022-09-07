@@ -525,6 +525,7 @@ class AdaAugkeep_TS(AdaAug):
         #resize_imgs = F.interpolate(images, size=self.search_d) if self.resize else images
         magnitudes, weights, keeplen_ws, keep_thres = self.predict_aug_params(resize_imgs, seq_len, 'exploit',y=y)
         print(magnitudes.shape, weights.shape, keeplen_ws.shape, keep_thres.shape)
+        print(keep_thres)
         aug_imgs = self.get_training_aug_images(images, magnitudes, weights, keeplen_ws, keep_thres)
         if self.visualize:
             print('Visualize for Debug')

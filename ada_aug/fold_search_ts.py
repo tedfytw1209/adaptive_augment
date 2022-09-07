@@ -3,7 +3,6 @@ from __future__ import absolute_import
 from multiprocessing import reduction
 
 import os
-from re import search
 import sys
 import time
 import torch

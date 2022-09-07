@@ -806,6 +806,14 @@ class TransfromAugment:
                 pass
         return img.permute(0,2,1).detach().view(seq_len,channel) #back to (len,channel)
 
+def stop_gradient(trans_image, magnitude):
+    images = trans_image
+    adds = 0
+
+    images = images - magnitude
+    adds = adds + magnitude
+    images = images.detach() + adds
+    return images
 class TransfromAugment_classwise:
     def __init__(self, names,m ,p=0.5,n=1,num_class=None, rd_seed=None):
         print(f'Using Class-wise Fix transfroms {names}, m={m}, n={n}, p={p}')
@@ -1264,27 +1272,29 @@ class AdaKeepAugment(KeepAugment): #need fix
         #'torch.nn.functional.avg_pool1d' use this for segment
         print(f'Apply InfoKeep Augment: mode={self.mode}, threshold={self.thres}, transfrom={self.trans}')
     #kwargs for apply_func, batch_inputs
-    def __call__(self, t_series, model=None,selective='paste', apply_func=None,keeplen_ws=None, keep_thres=None, **kwargs):
+    def __call__(self, t_series, model=None,selective='paste', apply_func=None,len_idx=None, keep_thres=None, **kwargs):
         b,w,c = t_series.shape
         augment, selective = self.get_augment(apply_func,selective)
         slc_, t_series_ = self.get_slc(t_series,model)
-        info_aug, compare_func, info_bound, bound_func = self.get_selective(selective)
         #windowed_slc = self.m_pool(slc_.view(b,1,w)).view(b,-1)
         #select a segment number
         seg_number = np.random.choice(self.possible_segment)
         seg_len = int(w / seg_number)
-        info_len = int(self.length/seg_number)
-        windowed_slc = torch.nn.functional.avg_pool1d(slc_.view(b,1,w),kernel_size=info_len, stride=1, padding=0).view(b,-1)
-        windowed_w = windowed_slc.shape[1]
-        windowed_len = int(windowed_w / seg_number)
-        #quant_scores = torch.quantile(windowed_slc,info_aug,dim=1) #quant for each batch
-        seg_accum, windowed_accum = self.get_seg(seg_number,seg_len,w,windowed_w,windowed_len)
         #print(slc_)
         t_series_ = t_series_.detach().cpu()
         aug_t_s_list = []
         start, end = 0,w
-        win_start, win_end = 0,windowed_w
-        for i,(t_s, slc, windowed_slc_each) in enumerate(zip(t_series_, slc_, windowed_slc)):
+        
+        for i,(t_s, slc) in enumerate(zip(t_series_, slc_)):
+            #len choose
+            info_aug, compare_func, info_bound, bound_func = self.get_selective(selective,thres=keep_thres[i])
+            info_len = int(self.length[len_idx[i]]/seg_number)
+            windowed_slc = torch.nn.functional.avg_pool1d(slc_.view(b,1,w),kernel_size=info_len, stride=1, padding=0).view(b,-1)
+            windowed_w = windowed_slc.shape[1]
+            windowed_len = int(windowed_w / seg_number)
+            seg_accum, windowed_accum = self.get_seg(seg_number,seg_len,w,windowed_w,windowed_len)
+            windowed_slc_each = windowed_slc[0]
+            win_start, win_end = 0,windowed_w
             #find region for each segment
             region_list,inforegion_list = [],[]
             for seg_idx in range(seg_number):
@@ -1333,7 +1343,6 @@ class AdaKeepAugment(KeepAugment): #need fix
         t_series_ = t_series_.detach().cpu()
         aug_t_s_list = []
         start, end = 0,w
-        win_start, win_end = 0,windowed_w
         for i,(t_s, slc) in enumerate(zip(t_series_, slc_)):
             info_aug, compare_func, info_bound, bound_func = self.get_selective(selective,thres=keep_thres[i])
             for each_len in self.length:
@@ -1344,6 +1353,7 @@ class AdaKeepAugment(KeepAugment): #need fix
                 windowed_len = int(windowed_w / seg_number)
                 seg_accum, windowed_accum = self.get_seg(seg_number,seg_len,w,windowed_w,windowed_len)
                 windowed_slc_each = windowed_slc[0]
+                win_start, win_end = 0,windowed_w
                 #find region
                 for k, ops_name in enumerate(ops_names):
                     t_s_tmp = t_s.clone().detach().cpu()
@@ -1367,7 +1377,7 @@ class AdaKeepAugment(KeepAugment): #need fix
                     #augment & paste back
                     if selective=='cut':
                         for info_region in inforegion_list:
-                            info_region = augment(info_region,i=i,k=k,ops_name=ops_name,**kwargs) #!!! some error
+                            info_region = augment(info_region,i=i,k=k,ops_name=ops_name,keep_thres=keep_thres,**kwargs) #!!! some error
                     else:
                         t_s_tmp = augment(t_s_tmp,i=i,k=k,ops_name=ops_name,**kwargs) #some other augment if needed
                         #print('Size compare: ',t_s[x1: x2, :].shape,info_region.shape)

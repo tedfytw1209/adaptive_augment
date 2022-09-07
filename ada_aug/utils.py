@@ -197,7 +197,7 @@ class PolicyHistoryKeep(object):
         os.makedirs(path, exist_ok=True)
         os.makedirs(vis_path, exist_ok=True)
         header = ','.join(self.op_names)
-        lens_header = ','.join(self.keep_lens)
+        lens_header = ','.join([str(l) for l in self.keep_lens])
         thres_header = ','.join(['threshold'])
         for i, history in enumerate(self.history):
             k = i if class2label is None else class2label[i]
@@ -214,9 +214,9 @@ class PolicyHistoryKeep(object):
                        history['var_magnitudes'], delimiter=',', header=header, comments='')
             np.savetxt(f'{vis_path}/policy{i}({k})_var_weights.csv',
                        history['var_weights'], delimiter=',', header=header, comments='')
-            np.savetxt(f'{path}/policy{i}({k})_var_keep_lens.csv',
+            np.savetxt(f'{vis_path}/policy{i}({k})_var_keep_lens.csv',
                        history['var_keep_lens'], delimiter=',', header=lens_header, comments='')
-            np.savetxt(f'{path}/policy{i}({k})_var_keep_thres.csv',
+            np.savetxt(f'{vis_path}/policy{i}({k})_var_keep_thres.csv',
                        history['var_keep_thres'], delimiter=',', header=thres_header, comments='')
 
     def plot(self):

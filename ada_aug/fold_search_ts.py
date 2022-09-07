@@ -16,7 +16,7 @@ import torch.nn as nn
 import torch.utils
 import torch.optim as optim
 
-from adaptive_augmentor import AdaAug_TS
+from adaptive_augmentor import AdaAug_TS,AdaAugkeep_TS
 from networks import get_model_tseries
 from networks.projection import Projection_TSeries
 from config import get_search_divider
@@ -87,7 +87,7 @@ parser.add_argument('--class_embed', action='store_true', default=False, help='c
 parser.add_argument('--loss_type', type=str, default='minus', help="loss type for difficult policy training", choices=['minus','relative','adv'])
 parser.add_argument('--policy_loss', type=str, default='', help="loss type for simular policy training")
 parser.add_argument('--keep_aug', action='store_true', default=False, help='info keep augment')
-parser.add_argument('--keep_mode', type=str, default='auto', help='info keep mode',choices=['auto','b','p','t'])
+parser.add_argument('--keep_mode', type=str, default='auto', help='info keep mode',choices=['auto','adapt','b','p','t'])
 parser.add_argument('--keep_seg', type=int, nargs='+', default=[1], help='info keep segment mode')
 parser.add_argument('--keep_grid', action='store_true', default=False, help='info keep augment grid')
 parser.add_argument('--keep_thres', type=float, default=0.6, help="keep augment weight (lower protect more)")
@@ -198,8 +198,12 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             h_input = h_input + label_embed
         elif args.class_adapt:
             h_input =h_input + n_class
+        #keep aug
+        proj_add = 0
+        if args.keep_mode=='adapt':
+            proj_add = 5 + 1 #!!!default 5 lens and 1 threshold
         self.h_model = Projection_TSeries(in_features=h_input,label_num=label_num,label_embed=label_embed,
-            n_layers=args.n_proj_layer, n_hidden=128, augselect=args.augselect).cuda()
+            n_layers=args.n_proj_layer, n_hidden=128, augselect=args.augselect, proj_addition=proj_add).cuda()
         #  training settings
         self.gf_optimizer = torch.optim.AdamW(self.gf_model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay) #follow ptbxl batchmark
         self.scheduler = torch.optim.lr_scheduler.OneCycleLR(self.gf_optimizer, max_lr=args.learning_rate, 
@@ -244,17 +248,31 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                     'gf_model_name': args.model_name}
         keepaug_config = {'keep_aug':args.keep_aug,'mode':args.keep_mode,'thres':args.keep_thres,'length':args.keep_len,
             'grid_region':args.keep_grid, 'possible_segment': args.keep_seg, 'info_upper': args.keep_bound}
-        self.adaaug = AdaAug_TS(after_transforms=after_transforms,
-            n_class=n_class,
-            gf_model=self.gf_model,
-            h_model=self.h_model,
-            save_dir=os.path.join(self.config['BASE_PATH'],self.config['save'],f'fold{test_fold_idx}'),
-            visualize=args.visualize,
-            config=adaaug_config,
-            keepaug_config=keepaug_config,
-            multilabel=multilabel,
-            augselect=args.augselect,
-            class_adaptive=args.class_adapt)
+        if args.keep_mode=='adapt':
+            keepaug_config['mode'] = 'auto'
+            self.adaaug = AdaAugkeep_TS(after_transforms=after_transforms,
+                n_class=n_class,
+                gf_model=self.gf_model,
+                h_model=self.h_model,
+                save_dir=os.path.join(self.config['BASE_PATH'],self.config['save'],f'fold{test_fold_idx}'),
+                visualize=args.visualize,
+                config=adaaug_config,
+                keepaug_config=keepaug_config,
+                multilabel=multilabel,
+                augselect=args.augselect,
+                class_adaptive=args.class_adapt)
+        else:
+            self.adaaug = AdaAug_TS(after_transforms=after_transforms,
+                n_class=n_class,
+                gf_model=self.gf_model,
+                h_model=self.h_model,
+                save_dir=os.path.join(self.config['BASE_PATH'],self.config['save'],f'fold{test_fold_idx}'),
+                visualize=args.visualize,
+                config=adaaug_config,
+                keepaug_config=keepaug_config,
+                multilabel=multilabel,
+                augselect=args.augselect,
+                class_adaptive=args.class_adapt)
         #to self
         self.n_channel = n_channel
         self.n_class = n_class

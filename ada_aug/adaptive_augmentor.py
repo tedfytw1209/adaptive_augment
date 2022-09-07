@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 from operation_tseries import apply_augment,TS_ADD_NAMES,ECG_OPS_NAMES,KeepAugment,AdaKeepAugment
 import operation
 from networks import get_model
-from utils import PolicyHistory
+from utils import PolicyHistory,PolicyHistoryKeep
 from config import OPS_NAMES,TS_OPS_NAMES
 
 default_config = {'sampling': 'prob',
@@ -395,7 +395,7 @@ class AdaAugkeep_TS(AdaAug):
         print('KeepAug Using ',self.keep_lens)
         self.n_ops = len(self.ops_names)
         self.n_keeplens = len(self.keep_lens)
-        self.history = PolicyHistory(self.ops_names, self.save_dir, self.n_class)
+        self.history = PolicyHistoryKeep(self.ops_names,self.keep_lens, self.save_dir, self.n_class)
         self.config = config
         self.use_keepaug = keepaug_config['keep_aug']
         keepaug_config['length'] = self.keep_lens

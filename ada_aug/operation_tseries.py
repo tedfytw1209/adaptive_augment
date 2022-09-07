@@ -743,6 +743,8 @@ def lt(a,b):
     return a < b
 def ge(a,b):
     return a >= b
+def le(a,b):
+    return a <= b
 
 class ToTensor:
     def __init__(self) -> None:
@@ -1268,7 +1270,7 @@ class AdaKeepAugment(KeepAugment): #need fix
         self.reverse = reverse
         self.info_upper = info_upper
         self.detectors = Detectors(sfreq) #need input ecg: (seq_len)
-        self.compare_func_list = [lt,ge]
+        self.compare_func_list = [le,ge]
         #'torch.nn.functional.avg_pool1d' use this for segment
         print(f'Apply InfoKeep Augment: mode={self.mode}, threshold={self.thres}, transfrom={self.trans}')
     #kwargs for apply_func, batch_inputs
@@ -1289,7 +1291,7 @@ class AdaKeepAugment(KeepAugment): #need fix
             #len choose
             info_aug, compare_func, info_bound, bound_func = self.get_selective(selective,thres=keep_thres[i])
             info_len = int(self.length[len_idx[i]]/seg_number)
-            windowed_slc = torch.nn.functional.avg_pool1d(slc_.view(b,1,w),kernel_size=info_len, stride=1, padding=0).view(b,-1)
+            windowed_slc = torch.nn.functional.avg_pool1d(slc.view(1,1,w),kernel_size=info_len, stride=1, padding=0).view(1,-1)
             windowed_w = windowed_slc.shape[1]
             windowed_len = int(windowed_w / seg_number)
             seg_accum, windowed_accum = self.get_seg(seg_number,seg_len,w,windowed_w,windowed_len)
@@ -1301,16 +1303,29 @@ class AdaKeepAugment(KeepAugment): #need fix
                 if self.grid_region:
                     start, end = seg_accum[seg_idx], seg_accum[seg_idx+1]
                     win_start, win_end = windowed_accum[seg_idx], windowed_accum[seg_idx+1]
-                quant_score = torch.quantile(windowed_slc_each[win_start:win_end],info_aug)
-                bound_score = torch.quantile(windowed_slc_each[win_start:win_end],info_bound)
-                while(True):
+                seg_window = windowed_slc_each[win_start:win_end]
+                quant_score = torch.quantile(seg_window,info_aug)
+                bound_score = torch.quantile(seg_window,info_bound)
+                select_windows = (compare_func(seg_window,quant_score) & bound_func(seg_window,bound_score)).nonzero(as_tuple=True)[0].detach().cpu().numpy()
+                if len(select_windows)==0:
+                    print('window index:', select_windows.shape)
+                    print('no result:')
+                    print('quant_score: ',quant_score)
+                    print('bound_score: ',bound_score)
+                    print('max windows: ',torch.max(seg_window))
+                select_p = np.random.choice(select_windows) + win_start #window start for adjust
+                x = select_p + info_len // 2 #back to seg
+                x1 = np.clip(x - info_len // 2, 0, w)
+                x2 = np.clip(x + info_len // 2, 0, w)
+                region_list.append([x1,x2])
+                '''while(True):
                     x = np.random.randint(start,end)
                     x1 = np.clip(x - info_len // 2, 0, w)
                     x2 = np.clip(x + info_len // 2, 0, w)
                     reg_mean = slc[x1: x2].mean()
                     if compare_func(reg_mean,quant_score) and bound_func(reg_mean,bound_score):
                         region_list.append([x1,x2])
-                        break
+                        break'''
                 info_region = t_s[x1: x2,:].clone().detach().cpu()
                 inforegion_list.append(info_region)
             #augment & paste back
@@ -1362,35 +1377,48 @@ class AdaKeepAugment(KeepAugment): #need fix
                         if self.grid_region:
                             start, end = seg_accum[seg_idx], seg_accum[seg_idx+1]
                             win_start, win_end = windowed_accum[seg_idx], windowed_accum[seg_idx+1]
-                        quant_score = torch.quantile(windowed_slc_each[win_start: win_end],info_aug)
-                        bound_score = torch.quantile(windowed_slc_each[win_start:win_end],info_bound)
-                        while(True):
+                        seg_window = windowed_slc_each[win_start:win_end]
+                        quant_score = torch.quantile(seg_window,info_aug)
+                        bound_score = torch.quantile(seg_window,info_bound)
+                        select_windows = (compare_func(seg_window,quant_score) & bound_func(seg_window,bound_score)).nonzero(as_tuple=True)[0].detach().cpu().numpy()
+                        if len(select_windows)==0:
+                            print('window index', select_windows.shape)
+                            print('no result:')
+                            print('quant_score: ',quant_score)
+                            print('bound_score: ',bound_score)
+                            print('max windows: ',torch.max(seg_window))
+                        select_p = np.random.choice(select_windows) + win_start #window start for adjust
+                        x = select_p + info_len // 2 #back to seg
+                        x1 = np.clip(x - info_len // 2, 0, w)
+                        x2 = np.clip(x + info_len // 2, 0, w)
+                        region_list.append([x1,x2])
+                        '''while(True):
                             x = np.random.randint(start,end)
                             x1 = np.clip(x - info_len // 2, 0, w)
                             x2 = np.clip(x + info_len // 2, 0, w)
                             reg_mean = slc[x1: x2].mean()
                             if compare_func(reg_mean,quant_score) and bound_func(reg_mean,bound_score):
                                 region_list.append([x1,x2])
-                                break
+                                break'''
                         info_region = t_s_tmp[x1: x2,:].clone().detach().cpu()
                         inforegion_list.append(info_region)
                     #augment & paste back
                     if selective=='cut':
                         for info_region in inforegion_list:
-                            info_region = augment(info_region,i=i,k=k,ops_name=ops_name,keep_thres=keep_thres,**kwargs) #!!! some error
+                            info_region = augment(info_region,i=i,k=k,ops_name=ops_name,keep_thres=keep_thres,**kwargs) #some error
                     else:
-                        t_s_tmp = augment(t_s_tmp,i=i,k=k,ops_name=ops_name,**kwargs) #some other augment if needed
+                        t_s_tmp = augment(t_s_tmp,i=i,k=k,ops_name=ops_name,keep_thres=keep_thres,**kwargs) #some other augment if needed
                         #print('Size compare: ',t_s[x1: x2, :].shape,info_region.shape)
                     for reg_i in range(len(inforegion_list)):
                         x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
                         t_s_tmp[x1: x2, :] = inforegion_list[reg_i]
-                aug_t_s_list.append(t_s_tmp)
+                    aug_t_s_list.append(t_s_tmp)
         #back
         if self.mode=='auto':
             model.train()
             for param in model.parameters():
                 param.requires_grad = True
-        return torch.stack(aug_t_s_list, dim=0) #(b*ops,seq,ch)
+        return torch.stack(aug_t_s_list, dim=0) #(b*lens*ops,seq,ch)
 
 if __name__ == '__main__':
     print('Test all operations')

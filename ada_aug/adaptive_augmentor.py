@@ -440,7 +440,7 @@ class AdaAugkeep_TS(AdaAug):
             mean_p,std_p = cuc_meanstd(weights,idxs)
             mean_len, std_len = cuc_meanstd(keeplen_ws,idxs)
             mean_thre, std_thre = cuc_meanstd(keep_thres,idxs)
-            self.history.add(k, mean_lambda, mean_p, std_lambda, std_p)
+            self.history.add(k, mean_lambda, mean_p, mean_len, mean_thre, std_lambda, std_p, std_len, std_thre)
 
     def get_aug_valid_img(self, image, magnitudes,keep_thres,i=None,k=None,ops_name=None):
         trans_image = apply_augment(image, ops_name, magnitudes[i][k].detach().cpu().numpy())
@@ -458,9 +458,9 @@ class AdaAugkeep_TS(AdaAug):
             [Tensor]: a set of augmented validation images
         """
         #
-        aug_imgs = self.Search_wrapper(images, model=self.gf_model,apply_func=self.get_aug_valid_img,keeplen_ws=keeplen_ws, keep_thres=keep_thres, keeplens=self.keep_lens,
+        aug_imgs = self.Search_wrapper(images, model=self.gf_model,apply_func=self.get_aug_valid_img, keep_thres=keep_thres,
             magnitudes=magnitudes,ops_names=self.ops_names,selective='paste')
-        #(b*k_ops*keep_len, seq, ch)
+        #(b*lens*ops,seq,ch)
         return aug_imgs
 
     def explore(self, images, seq_len, mix_feature=True,y=None):
@@ -471,15 +471,18 @@ class AdaAugkeep_TS(AdaAug):
             [Tensor]: return a batch of mixed features
         """
         magnitudes, weights, keeplen_ws, keep_thres = self.predict_aug_params(images, seq_len,'explore',y=y)
-        a_imgs = self.get_aug_valid_imgs(images, magnitudes, keeplen_ws, keep_thres) #(b*k_ops*keep_len, seq, ch)
+        a_imgs = self.get_aug_valid_imgs(images, magnitudes, keeplen_ws, keep_thres) #(b*lens*ops,seq,ch)
         #a_imgs = self.Augment_wrapper(images, model=self.gf_model,apply_func=self.get_aug_valid_imgs,magnitudes=magnitudes,selective='paste')
         #a_features = self.gf_model.extract_features(a_imgs, a_seq_len)
-        a_features = self.gf_model.extract_features(a_imgs) #(b*k_ops*keep_len, n_hidden)
-        ba_features = a_features.reshape(len(images), self.n_ops, self.keep_lens, -1) # batch, n_ops,keep_lens, n_hidden
+        a_features = self.gf_model.extract_features(a_imgs) #(b*keep_len*n_ops, n_hidden)
+        ba_features = a_features.reshape(len(images), self.n_ops, self.n_keeplens, -1).permute(0,2,1,3) # batch, n_ops,keep_lens, n_hidden
+        #print(weights.shape)
+        #print(keeplen_ws.shape)
         if mix_feature:
             mixed_features = [w.matmul(feat) for w, feat in zip(weights, ba_features)] #[(keep_lens, n_hidden)]
             mixed_features = [len_w.matmul(feat) for len_w,feat in zip(keeplen_ws,mixed_features)] #[(n_hidden)]
             mixed_features = torch.stack(mixed_features, dim=0)
+            #print('mix features: ',mixed_features.shape)
             return mixed_features
         else:
             return ba_features, weights
@@ -524,8 +527,7 @@ class AdaAugkeep_TS(AdaAug):
             resize_imgs = images
         #resize_imgs = F.interpolate(images, size=self.search_d) if self.resize else images
         magnitudes, weights, keeplen_ws, keep_thres = self.predict_aug_params(resize_imgs, seq_len, 'exploit',y=y)
-        print(magnitudes.shape, weights.shape, keeplen_ws.shape, keep_thres.shape)
-        print(keep_thres)
+        #print(magnitudes.shape, weights.shape, keeplen_ws.shape, keep_thres.shape)
         aug_imgs = self.get_training_aug_images(images, magnitudes, weights, keeplen_ws, keep_thres)
         if self.visualize:
             print('Visualize for Debug')

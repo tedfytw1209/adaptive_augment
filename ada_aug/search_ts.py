@@ -255,6 +255,7 @@ def main():
     keepaug_config = {'keep_aug':args.keep_aug,'mode':args.keep_mode,'thres':args.keep_thres,'length':args.keep_len,
             'grid_region':args.keep_grid, 'possible_segment': args.keep_seg, 'info_upper': args.keep_bound}
     if args.keep_mode=='adapt':
+        keepaug_config['mode'] = 'auto'
         adaaug = AdaAugkeep_TS(after_transforms=after_transforms,
             n_class=n_class,
             gf_model=gf_model,

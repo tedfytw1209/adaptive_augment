@@ -370,13 +370,12 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 input_search = input_search.float().cuda()
                 target_search = target_search.cuda()
                 policy_y = None
-                policy_y_list = None
                 if class_adaptive: #target to onehot
                     if not multilabel:
                         policy_y = nn.functional.one_hot(target_search, num_classes=n_class).cuda().float()
                     else:
                         policy_y = target_search.cuda().float()
-                    policy_y_list.append(policy_y)
+                policy_y_list.append(policy_y)
                 mixed_features = adaaug(input_search, seq_len, mode='explore',y=policy_y)
                 #tea
                 if teacher_model==None:
@@ -412,6 +411,8 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
             target_search_list = torch.cat(target_search_list,dim=0)
             if class_adaptive:
                 policy_y_list = torch.cat(policy_y_list,dim=0)
+            else:
+                policy_y_list = None
             adaaug.add_history(input_search_list, seq_len_list, target_search_list,y=policy_y_list)
         exploration_time = time.time() - timer
         torch.cuda.empty_cache()

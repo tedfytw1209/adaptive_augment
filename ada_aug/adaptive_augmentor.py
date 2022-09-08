@@ -54,7 +54,7 @@ def stop_gradient_keep(trans_image, magnitude, keep_thre):
     images = images.detach() + adds
     return images
 
-def Normal_augment(t_series, model=None,selective='paste', apply_func=None,keeplen_ws=None, keep_thres=None, **kwargs):
+def Normal_augment(t_series, model=None,selective='paste', apply_func=None, **kwargs):
     trans_t_series=[]
     for i, t_s in enumerate(t_series):
         t_s = t_s.detach().cpu()
@@ -62,7 +62,7 @@ def Normal_augment(t_series, model=None,selective='paste', apply_func=None,keepl
         trans_t_series.append(trans_t_s)
     aug_t_s = torch.stack(trans_t_series, dim=0)
     return aug_t_s
-def Normal_search(t_series, model=None,selective='paste', apply_func=None,ops_names=None,keeplen_ws=None, keep_thres=None, **kwargs):
+def Normal_search(t_series, model=None,selective='paste', apply_func=None,ops_names=None, **kwargs):
     trans_t_series=[]
     for i, t_s in enumerate(t_series):
         t_s = t_s.detach().cpu()

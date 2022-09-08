@@ -390,8 +390,8 @@ class AdaAugkeep_TS(AdaAug):
             self.ops_names = self.ops_names + TS_ADD_NAMES.copy()
         if 'ecg' in augselect:
             self.ops_names = self.ops_names + ECG_OPS_NAMES.copy()
-        if keepaug_config.get('keep_lens',[]):
-            self.keep_lens = keepaug_config.get('keep_lens',[])
+        if len(keepaug_config['length'])>1:
+            self.keep_lens = keepaug_config['length']
         else:
             self.keep_lens = [100, 200, 400, 600, 800] #!!!default
         self.thres_adapt = keepaug_config.get('thres_adapt',False)

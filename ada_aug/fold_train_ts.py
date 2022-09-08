@@ -14,7 +14,7 @@ from sklearn.metrics import average_precision_score,roc_auc_score
 import torch.nn as nn
 import torch.utils
 
-from adaptive_augmentor import AdaAug_TS
+from adaptive_augmentor import AdaAug_TS, AdaAugkeep_TS
 from networks import get_model_tseries
 from networks.projection import Projection_TSeries
 from config import get_search_divider
@@ -92,7 +92,7 @@ parser.add_argument('--keep_mode', type=str, default='auto', help='info keep mod
 parser.add_argument('--keep_seg', type=int, nargs='+', default=[1], help='info keep segment mode')
 parser.add_argument('--keep_grid', action='store_true', default=False, help='info keep augment grid')
 parser.add_argument('--keep_thres', type=float, default=0.6, help="keep augment weight (lower protect more)")
-parser.add_argument('--keep_len', type=int, default=100, help="info keep seq len")
+parser.add_argument('--keep_len', type=int, nargs='+', default=[100], help="info keep seq len")
 parser.add_argument('--keep_bound', type=float, default=0.0, help="info keep bound %")
 parser.add_argument('--visualize', action='store_true', default=False, help='visualize')
 
@@ -201,11 +201,12 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             h_input = h_input + label_embed
         elif args.class_adapt:
             h_input =h_input + n_class
-        self.h_model = Projection_TSeries(in_features=h_input,
-                            label_num=label_num,label_embed=label_embed,
-                            n_layers=args.n_proj_layer,
-                            n_hidden=args.n_proj_hidden,
-                            augselect=args.augselect).cuda()
+        #keep aug
+        proj_add = 0
+        if args.keep_mode=='adapt':
+            proj_add = len(args.keep_len) + 1
+        self.h_model = Projection_TSeries(in_features=h_input,label_num=label_num,label_embed=label_embed,
+            n_layers=args.n_proj_layer, n_hidden=args.n_proj_hidden, augselect=args.augselect, proj_addition=proj_add).cuda()
         utils.load_model(self.gf_model, os.path.join(self.config['BASE_PATH'],f'{args.gf_model_path}',f'fold{test_fold_idx}', 'gf_weights.pt'), location=0)
         utils.load_model(self.h_model, os.path.join(self.config['BASE_PATH'],f'{args.h_model_path}',f'fold{test_fold_idx}', 'h_weights.pt'), location=0)
 
@@ -223,17 +224,32 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                     'gf_model_name': args.gf_model_name}
         keepaug_config = {'keep_aug':args.keep_aug,'mode':args.keep_mode,'thres':args.keep_thres,'length':args.keep_len,
             'grid_region':args.keep_grid, 'possible_segment': args.keep_seg, 'info_upper': args.keep_bound}
-        self.adaaug = AdaAug_TS(after_transforms=after_transforms,
-                    n_class=search_n_class,
-                    gf_model=self.gf_model,
-                    h_model=self.h_model,
-                    save_dir=os.path.join(self.config['BASE_PATH'],self.config['save'],f'fold{test_fold_idx}'),
-                    visualize=args.visualize,
-                    config=adaaug_config,
-                    keepaug_config=keepaug_config,
-                    multilabel=multilabel,
-                    augselect=args.augselect,
-                    class_adaptive=args.class_adapt)
+        if args.keep_mode=='adapt':
+            keepaug_config['mode'] = 'auto'
+            self.adaaug = AdaAugkeep_TS(after_transforms=after_transforms,
+                n_class=n_class,
+                gf_model=self.gf_model,
+                h_model=self.h_model,
+                save_dir=os.path.join(self.config['BASE_PATH'],self.config['save'],f'fold{test_fold_idx}'),
+                visualize=args.visualize,
+                config=adaaug_config,
+                keepaug_config=keepaug_config,
+                multilabel=multilabel,
+                augselect=args.augselect,
+                class_adaptive=args.class_adapt)
+        else:
+            keepaug_config['length'] = keepaug_config['length'][0]
+            self.adaaug = AdaAug_TS(after_transforms=after_transforms,
+                n_class=n_class,
+                gf_model=self.gf_model,
+                h_model=self.h_model,
+                save_dir=os.path.join(self.config['BASE_PATH'],self.config['save'],f'fold{test_fold_idx}'),
+                visualize=args.visualize,
+                config=adaaug_config,
+                keepaug_config=keepaug_config,
+                multilabel=multilabel,
+                augselect=args.augselect,
+                class_adaptive=args.class_adapt)
         #to self
         self.n_channel = n_channel
         self.n_class = n_class

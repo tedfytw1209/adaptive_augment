@@ -90,7 +90,7 @@ parser.add_argument('--keep_mode', type=str, default='auto', help='info keep mod
 parser.add_argument('--keep_seg', type=int, nargs='+', default=[1], help='info keep segment mode')
 parser.add_argument('--keep_grid', action='store_true', default=False, help='info keep augment grid')
 parser.add_argument('--keep_thres', type=float, default=0.6, help="keep augment weight (lower protect more)")
-parser.add_argument('--keep_len', type=int, default=100, help="info keep seq len")
+parser.add_argument('--keep_len', type=int, nargs='+', default=[100], help="info keep seq len")
 parser.add_argument('--keep_bound', type=float, default=0.0, help="info keep bound %")
 parser.add_argument('--teach_aug', action='store_true', default=False, help='teacher augment')
 parser.add_argument('--ema_rate', type=float, default=0.999, help="teacher ema rate")
@@ -200,9 +200,9 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         #keep aug
         proj_add = 0
         if args.keep_mode=='adapt':
-            proj_add = 5 + 1 #!!!default 5 lens and 1 threshold
+            proj_add = len(args.keep_len) + 1
         self.h_model = Projection_TSeries(in_features=h_input,label_num=label_num,label_embed=label_embed,
-            n_layers=args.n_proj_layer, n_hidden=128, augselect=args.augselect, proj_addition=proj_add).cuda()
+            n_layers=args.n_proj_layer, n_hidden=args.n_proj_hidden, augselect=args.augselect, proj_addition=proj_add).cuda()
         #  training settings
         self.gf_optimizer = torch.optim.AdamW(self.gf_model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay) #follow ptbxl batchmark
         self.scheduler = torch.optim.lr_scheduler.OneCycleLR(self.gf_optimizer, max_lr=args.learning_rate, 
@@ -264,6 +264,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 augselect=args.augselect,
                 class_adaptive=args.class_adapt)
         else:
+            keepaug_config['length'] = keepaug_config['length'][0]
             self.adaaug = AdaAug_TS(after_transforms=after_transforms,
                 n_class=n_class,
                 gf_model=self.gf_model,

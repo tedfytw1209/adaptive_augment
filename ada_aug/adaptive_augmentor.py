@@ -8,10 +8,10 @@ import torch.nn.functional as F
 from torchvision import transforms
 
 import matplotlib.pyplot as plt
-from operation_tseries import apply_augment,TS_ADD_NAMES,ECG_OPS_NAMES,KeepAugment
+from operation_tseries import apply_augment,TS_ADD_NAMES,ECG_OPS_NAMES,KeepAugment,AdaKeepAugment
 import operation
 from networks import get_model
-from utils import PolicyHistory
+from utils import PolicyHistory,PolicyHistoryKeep
 from config import OPS_NAMES,TS_OPS_NAMES
 
 default_config = {'sampling': 'prob',
@@ -32,6 +32,11 @@ def perturb_param(param, delta):
     else:
         return torch.tensor(min(1, param+amt))
 
+def cuc_meanstd(values,idxs):
+    mean_v = values[idxs].mean(0).detach().cpu().tolist()
+    std_v = values[idxs].std(0).detach().cpu().tolist()
+    return mean_v, std_v
+
 def stop_gradient(trans_image, magnitude):
     images = trans_image
     adds = 0
@@ -40,8 +45,16 @@ def stop_gradient(trans_image, magnitude):
     adds = adds + magnitude
     images = images.detach() + adds
     return images
+def stop_gradient_keep(trans_image, magnitude, keep_thre):
+    images = trans_image
+    adds = 0
 
-def Normal_augment(t_series, model=None,selective='paste', apply_func=None, **kwargs):
+    images = images - magnitude - keep_thre
+    adds = adds + magnitude + keep_thre
+    images = images.detach() + adds
+    return images
+
+def Normal_augment(t_series, model=None,selective='paste', apply_func=None,keeplen_ws=None, keep_thres=None, **kwargs):
     trans_t_series=[]
     for i, t_s in enumerate(t_series):
         t_s = t_s.detach().cpu()
@@ -49,7 +62,7 @@ def Normal_augment(t_series, model=None,selective='paste', apply_func=None, **kw
         trans_t_series.append(trans_t_s)
     aug_t_s = torch.stack(trans_t_series, dim=0)
     return aug_t_s
-def Normal_search(t_series, model=None,selective='paste', apply_func=None,ops_names=None, **kwargs):
+def Normal_search(t_series, model=None,selective='paste', apply_func=None,ops_names=None,keeplen_ws=None, keep_thres=None, **kwargs):
     trans_t_series=[]
     for i, t_s in enumerate(t_series):
         t_s = t_s.detach().cpu()
@@ -382,11 +395,12 @@ class AdaAugkeep_TS(AdaAug):
         print('KeepAug Using ',self.keep_lens)
         self.n_ops = len(self.ops_names)
         self.n_keeplens = len(self.keep_lens)
-        self.history = PolicyHistory(self.ops_names, self.save_dir, self.n_class)
+        self.history = PolicyHistoryKeep(self.ops_names,self.keep_lens, self.save_dir, self.n_class)
         self.config = config
         self.use_keepaug = keepaug_config['keep_aug']
+        keepaug_config['length'] = self.keep_lens
         if self.use_keepaug:
-            self.Augment_wrapper = KeepAugment(**keepaug_config)
+            self.Augment_wrapper = AdaKeepAugment(**keepaug_config)
             self.Search_wrapper = self.Augment_wrapper.Augment_search
         else:
             print('AdaAug Keep always use keep augment')
@@ -422,16 +436,16 @@ class AdaAugkeep_TS(AdaAug):
                 idxs = (targets[:,k] == 1).nonzero().squeeze()
             else:
                 idxs = (targets == k).nonzero().squeeze()
-            mean_lambda = magnitudes[idxs].mean(0).detach().cpu().tolist()
-            mean_p = weights[idxs].mean(0).detach().cpu().tolist()
-            std_lambda = magnitudes[idxs].std(0).detach().cpu().tolist()
-            std_p = weights[idxs].std(0).detach().cpu().tolist()
-            self.history.add(k, mean_lambda, mean_p, std_lambda, std_p)
+            mean_lambda,std_lambda = cuc_meanstd(magnitudes,idxs)
+            mean_p,std_p = cuc_meanstd(weights,idxs)
+            mean_len, std_len = cuc_meanstd(keeplen_ws,idxs)
+            mean_thre, std_thre = cuc_meanstd(keep_thres,idxs)
+            self.history.add(k, mean_lambda, mean_p, mean_len, mean_thre, std_lambda, std_p, std_len, std_thre)
 
-    def get_aug_valid_img(self, image, magnitudes,i=None,k=None,ops_name=None):
+    def get_aug_valid_img(self, image, magnitudes,keep_thres,i=None,k=None,ops_name=None):
         trans_image = apply_augment(image, ops_name, magnitudes[i][k].detach().cpu().numpy())
         trans_image = self.after_transforms(trans_image)
-        trans_image = stop_gradient(trans_image.cuda(), magnitudes[i][k])
+        trans_image = stop_gradient_keep(trans_image.cuda(), magnitudes[i][k], keep_thres[i]) #add keep thres
         return trans_image
     def get_aug_valid_imgs(self, images, magnitudes, keeplen_ws, keep_thres):
         """Return the mixed latent feature
@@ -443,11 +457,10 @@ class AdaAugkeep_TS(AdaAug):
         Returns:
             [Tensor]: a set of augmented validation images
         """
-        #keep aug param
-
         #
-        aug_imgs = self.Search_wrapper(images, model=self.gf_model,apply_func=self.get_aug_valid_img,magnitudes=magnitudes,ops_names=self.ops_names,selective='paste')
-        #(b*k_ops*keep_len, seq, ch)
+        aug_imgs = self.Search_wrapper(images, model=self.gf_model,apply_func=self.get_aug_valid_img, keep_thres=keep_thres,
+            magnitudes=magnitudes,ops_names=self.ops_names,selective='paste')
+        #(b*lens*ops,seq,ch)
         return aug_imgs
 
     def explore(self, images, seq_len, mix_feature=True,y=None):
@@ -458,14 +471,18 @@ class AdaAugkeep_TS(AdaAug):
             [Tensor]: return a batch of mixed features
         """
         magnitudes, weights, keeplen_ws, keep_thres = self.predict_aug_params(images, seq_len,'explore',y=y)
-        a_imgs = self.get_aug_valid_imgs(images, magnitudes, keeplen_ws, keep_thres) #(b*k_ops*keep_len, seq, ch)
+        a_imgs = self.get_aug_valid_imgs(images, magnitudes, keeplen_ws, keep_thres) #(b*lens*ops,seq,ch)
         #a_imgs = self.Augment_wrapper(images, model=self.gf_model,apply_func=self.get_aug_valid_imgs,magnitudes=magnitudes,selective='paste')
         #a_features = self.gf_model.extract_features(a_imgs, a_seq_len)
-        a_features = self.gf_model.extract_features(a_imgs) #(b*k_ops*keep_len, n_hidden)
-        ba_features = a_features.reshape(len(images), self.n_ops, self.keep_lens, -1) # batch, n_ops,keep_lens, n_hidden
+        a_features = self.gf_model.extract_features(a_imgs) #(b*keep_len*n_ops, n_hidden)
+        ba_features = a_features.reshape(len(images), self.n_ops, self.n_keeplens, -1).permute(0,2,1,3) # batch, n_ops,keep_lens, n_hidden
+        #print(weights.shape)
+        #print(keeplen_ws.shape)
         if mix_feature:
-            mixed_features = [w.matmul(feat) for w, feat in zip(weights, ba_features)] #
+            mixed_features = [w.matmul(feat) for w, feat in zip(weights, ba_features)] #[(keep_lens, n_hidden)]
+            mixed_features = [len_w.matmul(feat) for len_w,feat in zip(keeplen_ws,mixed_features)] #[(n_hidden)]
             mixed_features = torch.stack(mixed_features, dim=0)
+            #print('mix features: ',mixed_features.shape)
             return mixed_features
         else:
             return ba_features, weights
@@ -485,12 +502,13 @@ class AdaAugkeep_TS(AdaAug):
             trans_images = []
             if self.sampling == 'prob':
                 idx_matrix = torch.multinomial(weights, self.k_ops)
-                len_idx = torch.multinomial(keeplen_ws, self.k_ops)
+                len_idx = torch.multinomial(keeplen_ws, 1).view(-1).detach().cpu().numpy()
             elif self.sampling == 'max':
                 idx_matrix = torch.topk(weights, self.k_ops, dim=1)[1] #where op index the highest weight
-                len_idx = torch.topk(keeplen_ws, self.k_ops, dim=1)[1]
-
-            aug_imgs = self.Augment_wrapper(images, model=self.gf_model,apply_func=self.get_training_aug_image,magnitudes=magnitudes,idx_matrix=idx_matrix,selective='paste')
+                len_idx = torch.topk(keeplen_ws, 1, dim=1)[1].view(-1).detach().cpu().numpy()
+            keep_thres = keep_thres.view(-1).detach().cpu().numpy()
+            aug_imgs = self.Augment_wrapper(images, model=self.gf_model,apply_func=self.get_training_aug_image,magnitudes=magnitudes,
+            idx_matrix=idx_matrix,len_idx=len_idx,keep_thres=keep_thres,selective='paste')
         else:
             trans_images = []
             for i, image in enumerate(images):
@@ -508,8 +526,9 @@ class AdaAugkeep_TS(AdaAug):
         else:
             resize_imgs = images
         #resize_imgs = F.interpolate(images, size=self.search_d) if self.resize else images
-        magnitudes, weights = self.predict_aug_params(resize_imgs, seq_len, 'exploit',y=y)
-        aug_imgs = self.get_training_aug_images(images, magnitudes, weights)
+        magnitudes, weights, keeplen_ws, keep_thres = self.predict_aug_params(resize_imgs, seq_len, 'exploit',y=y)
+        #print(magnitudes.shape, weights.shape, keeplen_ws.shape, keep_thres.shape)
+        aug_imgs = self.get_training_aug_images(images, magnitudes, weights, keeplen_ws, keep_thres)
         if self.visualize:
             print('Visualize for Debug')
             self.print_imgs(imgs=images,title='id')

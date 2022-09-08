@@ -158,6 +158,159 @@ class PolicyHistory(object):
         
         return f
 
+class PolicyHistoryKeep(object):
+
+    def __init__(self, op_names,keep_lens, save_dir, n_class):
+        self.op_names = op_names
+        self.keep_lens = keep_lens
+        self.save_dir = save_dir
+        self._initialize(n_class)
+
+    def _initialize(self, n_class):
+        self.history = []
+        # [{m:[], w:[]}, {}]
+        for i in range(n_class):
+            self.history.append({'magnitudes': [],
+                                'weights': [],
+                                'keep_lens': [],
+                                'keep_thres': [],
+                                'var_magnitudes': [],
+                                'var_weights': [],
+                                'var_keep_lens': [],
+                                'var_keep_thres': [],})
+
+    def add(self, class_idx, m_mu, w_mu, l_mu, t_mu, m_std, w_std, l_std, t_std):
+        if not isinstance(m_mu, list):  # ugly way to bypass batch with single element
+            return
+        self.history[class_idx]['magnitudes'].append(m_mu)
+        self.history[class_idx]['weights'].append(w_mu)
+        self.history[class_idx]['keep_lens'].append(l_mu)
+        self.history[class_idx]['keep_thres'].append(t_mu)
+        self.history[class_idx]['var_magnitudes'].append(m_std)
+        self.history[class_idx]['var_weights'].append(w_std)
+        self.history[class_idx]['var_keep_lens'].append(l_std)
+        self.history[class_idx]['var_keep_thres'].append(t_std)
+
+    def save(self, class2label=None):
+        path = os.path.join(self.save_dir, 'policy')
+        vis_path = os.path.join(self.save_dir, 'vis_policy')
+        os.makedirs(path, exist_ok=True)
+        os.makedirs(vis_path, exist_ok=True)
+        header = ','.join(self.op_names)
+        lens_header = ','.join([str(l) for l in self.keep_lens])
+        thres_header = ','.join(['threshold'])
+        for i, history in enumerate(self.history):
+            k = i if class2label is None else class2label[i]
+            np.savetxt(f'{path}/policy{i}({k})_magnitude.csv',
+                       history['magnitudes'], delimiter=',', header=header, comments='')
+            np.savetxt(f'{path}/policy{i}({k})_weights.csv',
+                       history['weights'], delimiter=',', header=header, comments='')
+            np.savetxt(f'{path}/policy{i}({k})_keep_lens.csv',
+                       history['keep_lens'], delimiter=',', header=lens_header, comments='')
+            np.savetxt(f'{path}/policy{i}({k})_keep_thres.csv',
+                       history['keep_thres'], delimiter=',', header=thres_header, comments='')
+
+            np.savetxt(f'{vis_path}/policy{i}({k})_var_magnitude.csv',
+                       history['var_magnitudes'], delimiter=',', header=header, comments='')
+            np.savetxt(f'{vis_path}/policy{i}({k})_var_weights.csv',
+                       history['var_weights'], delimiter=',', header=header, comments='')
+            np.savetxt(f'{vis_path}/policy{i}({k})_var_keep_lens.csv',
+                       history['var_keep_lens'], delimiter=',', header=lens_header, comments='')
+            np.savetxt(f'{vis_path}/policy{i}({k})_var_keep_thres.csv',
+                       history['var_keep_thres'], delimiter=',', header=thres_header, comments='')
+
+    def plot(self):
+        PATH = self.save_dir
+        print('Path: ',PATH)
+        mag_file_list = glob.glob(f'{PATH}/policy/*_magnitude.csv')
+        weights_file_list = glob.glob(f'{PATH}/policy/*_weights.csv')
+        keeplens_file_list = glob.glob(f'{PATH}/policy/*_keep_lens.csv')
+        keepthres_file_list = glob.glob(f'{PATH}/policy/*_keep_thres.csv')
+        print(mag_file_list)
+        print(weights_file_list)
+        print(keeplens_file_list)
+        print(keepthres_file_list)
+        n_class = len(mag_file_list)
+
+        f, axes = plt.subplots(n_class, 4, figsize=(40, 5*n_class))
+
+        for i, file in enumerate(mag_file_list):
+            df = pd.read_csv(file).dropna()
+            x = range(0, len(df))
+            y = df.to_numpy().T
+            axes[i][0].stackplot(x, y, labels=df.columns, edgecolor='none')
+            axes[i][0].set_title(file.split('/')[-1][:-4])
+
+        for i, file in enumerate(weights_file_list):
+            df = pd.read_csv(file).dropna()
+            x = range(0, len(df))
+            y = df.to_numpy().T
+            axes[i][1].stackplot(x, y, labels=df.columns, edgecolor='none')
+            axes[i][1].set_title(file.split('/')[-1][:-4])
+        
+        for i, file in enumerate(keepthres_file_list):
+            df = pd.read_csv(file).dropna()
+            x = range(0, len(df))
+            y = df.to_numpy().T
+            axes[i][2].stackplot(x, y, labels=df.columns, edgecolor='none')
+            axes[i][2].set_title(file.split('/')[-1][:-4])
+
+        for i, file in enumerate(keeplens_file_list):
+            df = pd.read_csv(file).dropna()
+            x = range(0, len(df))
+            y = df.to_numpy().T
+            axes[i][3].stackplot(x, y, labels=df.columns, edgecolor='none')
+            axes[i][3].set_title(file.split('/')[-1][:-4])
+
+        axes[-1][-1].legend(loc='upper center', bbox_to_anchor=(-0.1, -0.2), fancybox=True, shadow=True, ncol=10)
+        plt.savefig(f'{PATH}/policy/schedule.png')
+        #magnitude
+        f, axes = plt.subplots(1, 1, figsize=(7,5))
+        frames = []
+        for i, file in enumerate(mag_file_list):
+            df = pd.read_csv(file).dropna()
+            df['class'] = file.split('/')[-1][:-4].split('_')[0]
+            frames.append(df.tail(1))
+        df = pd.concat(frames)
+        df.set_index('class').plot(ax=axes, kind='bar', stacked=True, legend=False, rot=90, fontsize=8)
+        axes.set_ylabel("magnitude")
+        plt.savefig(f'{PATH}/policy/magnitude_by_class.png')
+        #probability
+        f, axes = plt.subplots(1, 1, figsize=(7,5))
+        frames = []
+        for i, file in enumerate(weights_file_list):
+            df = pd.read_csv(file).dropna()
+            df['class'] = file.split('/')[-1][:-4].split('_')[0].split('(')[1][:-1]
+            frames.append(df.tail(1))
+        df = pd.concat(frames)   
+        df.set_index('class').plot(ax=axes, kind='bar', stacked=True, legend=False, rot=90, fontsize=8)
+        axes.set_ylabel("probability")
+        axes.set_xlabel("")
+        plt.savefig(f'{PATH}/policy/probability_by_class.png')
+        #keep lens
+        f, axes = plt.subplots(1, 1, figsize=(7,5))
+        frames = []
+        for i, file in enumerate(keeplens_file_list):
+            df = pd.read_csv(file).dropna()
+            df['class'] = file.split('/')[-1][:-4].split('_')[0].split('(')[1][:-1]
+            frames.append(df.tail(1))
+        df = pd.concat(frames)   
+        df.set_index('class').plot(ax=axes, kind='bar', stacked=True, legend=False, rot=90, fontsize=8)
+        axes.set_ylabel("keeplen")
+        axes.set_xlabel("")
+        plt.savefig(f'{PATH}/policy/keeplen_by_class.png')
+        #keep thresholds
+        f, axes = plt.subplots(1, 1, figsize=(7,5))
+        frames = []
+        for i, file in enumerate(keepthres_file_list):
+            df = pd.read_csv(file).dropna()
+            df['class'] = file.split('/')[-1][:-4].split('_')[0]
+            frames.append(df.tail(1))
+        df = pd.concat(frames)
+        df.set_index('class').plot(ax=axes, kind='bar', stacked=True, legend=False, rot=90, fontsize=8)
+        axes.set_ylabel("keepthres")
+        plt.savefig(f'{PATH}/policy/keepthres_by_class.png')
+        return f
 
 class AvgrageMeter(object):
 

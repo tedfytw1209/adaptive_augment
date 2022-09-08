@@ -231,7 +231,10 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             self.sim_criterion = ClassBalLoss(search_labels_count,len(search_labels_count),loss_type=sim_type).cuda()
         elif args.policy_loss=='classdiff':
             self.class_difficulty = np.ones(n_class)
-            self.sim_criterion = ClassDiffLoss(class_difficulty=self.class_difficulty).cuda() #default now
+            gamma = None
+            if multilabel:
+                gamma = 2.0
+            self.sim_criterion = ClassDiffLoss(class_difficulty=self.class_difficulty,focal_gamma=gamma).cuda() #default now
 
         #  AdaAug settings for search
         after_transforms = self.train_queue.dataset.after_transforms

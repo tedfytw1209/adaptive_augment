@@ -33,10 +33,12 @@ def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_
         input = input.float().cuda()
         target = target.cuda(non_blocking=True)
         #  get augmented training data from adaaug
+        policy_y = None
         if class_adaptive: #target to onehot
-            policy_y = nn.functional.one_hot(target, num_classes=n_class).cuda().float()
-        else:
-            policy_y = None
+            if not multilabel:
+                policy_y = nn.functional.one_hot(target, num_classes=n_class).cuda().float()
+            else:
+                policy_y = target
         aug_images = adaaug(input, seq_len, mode='exploit',y=policy_y)
         model.train()
         optimizer.zero_grad()
@@ -253,10 +255,12 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     for step, (input, seq_len, target) in enumerate(train_queue):
         input = input.float().cuda() #(batch,sed_len,channel)
         target = target.cuda()
+        policy_y = None
         if class_adaptive: #target to onehot
-            policy_y = nn.functional.one_hot(target, num_classes=n_class).cuda().float()
-        else:
-            policy_y = None
+            if not multilabel:
+                policy_y = nn.functional.one_hot(target, num_classes=n_class).cuda().float()
+            else:
+                policy_y = target
         # exploitation
         timer = time.time()
         aug_images = adaaug(input, seq_len, mode='exploit',y=policy_y)
@@ -330,10 +334,12 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                     target_trsearch = target_trsearch.cuda()
                     batch_size = target_trsearch.shape[0]
                     origin_logits = gf_model(input_trsearch, seq_len)
+                    policy_y = None
                     if class_adaptive: #target to onehot
-                        policy_y = nn.functional.one_hot(target_trsearch, num_classes=n_class).cuda().float()
-                    else:
-                        policy_y = None
+                        if not multilabel:
+                            policy_y = nn.functional.one_hot(target_trsearch, num_classes=n_class).cuda().float()
+                        else:
+                            policy_y = target_trsearch
                     mixed_features = adaaug(input_trsearch, seq_len, mode='explore',mix_feature=mix_feature,y=policy_y)
                     aug_logits = gf_model.classify(mixed_features) 
                     if multilabel:
@@ -363,12 +369,14 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 input_search, seq_len, target_search = next(iter(search_queue))
                 input_search = input_search.float().cuda()
                 target_search = target_search.cuda()
+                policy_y = None
+                policy_y_list = None
                 if class_adaptive: #target to onehot
-                    policy_y = nn.functional.one_hot(target_search, num_classes=n_class).cuda().float()
+                    if not multilabel:
+                        policy_y = nn.functional.one_hot(target_search, num_classes=n_class).cuda().float()
+                    else:
+                        policy_y = target_search
                     policy_y_list.append(policy_y)
-                else:
-                    policy_y = None
-                    policy_y_list = None
                 mixed_features = adaaug(input_search, seq_len, mode='explore',y=policy_y)
                 #tea
                 if teacher_model==None:

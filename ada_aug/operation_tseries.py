@@ -808,14 +808,6 @@ class TransfromAugment:
                 pass
         return img.permute(0,2,1).detach().view(seq_len,channel) #back to (len,channel)
 
-def stop_gradient(trans_image, magnitude):
-    images = trans_image
-    adds = 0
-
-    images = images - magnitude
-    adds = adds + magnitude
-    images = images.detach() + adds
-    return images
 class TransfromAugment_classwise:
     def __init__(self, names,m ,p=0.5,n=1,num_class=None, rd_seed=None):
         print(f'Using Class-wise Fix transfroms {names}, m={m}, n={n}, p={p}')
@@ -1243,10 +1235,17 @@ class KeepAugment(object): #need fix
             imp_map = torch.from_numpy(imp_map)
             imp_map_list.append(imp_map)
         return torch.stack(imp_map_list, dim=0) #(b,seq)
-
+#segment gradient!!!
+def stop_gradient_keep(trans_image, magnitude, keep_thre, x1, x2):
+    images = trans_image
+    adds = 0
+    images = images - magnitude - keep_thre
+    adds = adds + magnitude + keep_thre
+    images = images.detach() + adds
+    return images
 class AdaKeepAugment(KeepAugment): #need fix
     def __init__(self, mode, length,thres=0.6,transfrom=None,default_select=None, early=False, low = False,
-        possible_segment=[1],grid_region=False, reverse=False,info_upper = 0.0,
+        possible_segment=[1],grid_region=False, reverse=False,info_upper = 0.0, thres_adapt=True,
         sfreq=100,pw_len=0.2,tw_len=0.4,**_kwargs):
         assert mode in ['auto','b','p','t'] #auto: all, b: heart beat(-0.2,0.4), p: p-wave(-0.2,0), t: t-wave(0,0.4)
         self.mode = mode
@@ -1265,6 +1264,7 @@ class AdaKeepAugment(KeepAugment): #need fix
         self.trans = transfrom
         self.default_select = default_select
         self.thres = thres
+        self.thres_adapt=thres_adapt
         self.possible_segment = possible_segment
         self.grid_region = grid_region
         self.reverse = reverse
@@ -1349,6 +1349,7 @@ class AdaKeepAugment(KeepAugment): #need fix
         b,w,c = t_series.shape
         augment, selective = self.get_augment(apply_func,selective)
         slc_, t_series_ = self.get_slc(t_series,model)
+        magnitudes = kwargs['magnitudes']
         #info_aug, compare_func, info_bound, bound_func = self.get_selective(selective)
         seg_number = np.random.choice(self.possible_segment)
         seg_len = int(w / seg_number)
@@ -1412,6 +1413,8 @@ class AdaKeepAugment(KeepAugment): #need fix
                     for reg_i in range(len(inforegion_list)):
                         x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
                         t_s_tmp[x1: x2, :] = inforegion_list[reg_i]
+                    #!!!bug when multisegment
+                    t_s_tmp = stop_gradient_keep(t_s_tmp.cuda(), magnitudes[i][k], keep_thres[i],x1,x2) #add keep thres
                     aug_t_s_list.append(t_s_tmp)
         #back
         if self.mode=='auto':

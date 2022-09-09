@@ -454,7 +454,7 @@ class AdaAugkeep_TS(AdaAug):
     def get_aug_valid_img(self, image, magnitudes,keep_thres,i=None,k=None,ops_name=None):
         trans_image = apply_augment(image, ops_name, magnitudes[i][k].detach().cpu().numpy())
         trans_image = self.after_transforms(trans_image)
-        trans_image = stop_gradient_keep(trans_image.cuda(), magnitudes[i][k], keep_thres[i]) #add keep thres
+        #trans_image = stop_gradient_keep(trans_image.cuda(), magnitudes[i][k], keep_thres[i]) #add keep thres
         return trans_image
     def get_aug_valid_imgs(self, images, magnitudes, keep_thres):
         """Return the mixed latent feature
@@ -482,13 +482,13 @@ class AdaAugkeep_TS(AdaAug):
         #a_features = self.gf_model.extract_features(a_imgs, a_seq_len)
         a_features = self.gf_model.extract_features(a_imgs) #(b*keep_len*n_ops, n_hidden)
         ba_features = a_features.reshape(len(images), self.n_ops, self.n_keeplens, -1).permute(0,2,1,3) # batch, n_ops,keep_lens, n_hidden
-        print('mixed shape')
-        print(ba_features.shape)
+        #print('mixed shape')
+        #print(ba_features.shape)
         if mix_feature:
             mixed_features = [w.matmul(feat) for w, feat in zip(weights, ba_features)] #[(keep_lens, n_hidden)]
-            print(mixed_features[0].shape)
+            #print(mixed_features[0].shape)
             mixed_features = [len_w.matmul(feat) for len_w,feat in zip(keeplen_ws,mixed_features)] #[(n_hidden)]
-            print(mixed_features[0].shape)
+            #print(mixed_features[0].shape)
             mixed_features = torch.stack(mixed_features, dim=0)
             return mixed_features
         else:

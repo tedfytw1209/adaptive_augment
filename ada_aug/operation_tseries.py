@@ -1235,13 +1235,17 @@ class KeepAugment(object): #need fix
             imp_map = torch.from_numpy(imp_map)
             imp_map_list.append(imp_map)
         return torch.stack(imp_map_list, dim=0) #(b,seq)
-#segment gradient!!!
+#segment gradient
 def stop_gradient_keep(trans_image, magnitude, keep_thre, x1, x2):
-    images = trans_image
+    images = trans_image #(seq, ch)
     adds = 0
-    images = images - magnitude - keep_thre
-    adds = adds + magnitude + keep_thre
+    info_part = images[x1:x2,:]
+    info_part = info_part - keep_thre
+    images = images - magnitude
+    adds = adds + magnitude
+    #add gradient
     images = images.detach() + adds
+    images[x1:x2,:] = images[x1:x2,:] + keep_thre
     return images
 class AdaKeepAugment(KeepAugment): #need fix
     def __init__(self, mode, length,thres=0.6,transfrom=None,default_select=None, early=False, low = False,

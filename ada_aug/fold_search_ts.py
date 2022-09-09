@@ -74,6 +74,7 @@ parser.add_argument('--search_freq', type=float, default=1, help='exploration fr
 parser.add_argument('--search_round', type=int, default=1, help='exploration frequency') #search_round
 parser.add_argument('--n_proj_layer', type=int, default=0, help="number of hidden layer in augmentation policy projection")
 parser.add_argument('--n_proj_hidden', type=int, default=128, help="number of hidden units in augmentation policy projection layers")
+parser.add_argument('--mapselect', action='store_true', default=False, help='use map select for multilabel')
 parser.add_argument('--valselect', action='store_true', default=False, help='use valid select')
 parser.add_argument('--augselect', type=str, default='', help="augmentation selection")
 parser.add_argument('--diff_aug', action='store_true', default=False, help='use valid select')
@@ -290,11 +291,15 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         self.best_val_acc = -1
         self.best_gf,self.best_h = None,None
         self.base_path = self.config['BASE_PATH']
+        self.mapselect = self.config['mapselect']
     def step(self):#use step replace _train
         if self._iteration==0:
             wandb.config.update(self.config)
         if self.multilabel:
-            ptype = 'auroc'
+            if self.mapselect:
+                ptype = 'map'
+            else:
+                ptype = 'auroc'
         else:
             ptype = 'acc'
         print(f'Starting Ray ID {self.trial_id} Iteration: {self._iteration}')
@@ -307,10 +312,11 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         # searching
         train_acc, train_obj, train_dic = search_train(args,self.train_queue, self.search_queue, self.tr_search_queue, self.gf_model, self.adaaug,
             self.criterion, self.gf_optimizer,self.scheduler, args.grad_clip, self.h_optimizer, self._iteration, args.search_freq, 
-            search_round=args.search_round,multilabel=self.multilabel,n_class=self.n_class, **diff_dic)
+            search_round=args.search_round,multilabel=self.multilabel,n_class=self.n_class,map_select=self.mapselect, **diff_dic)
 
         # validation
-        valid_acc, valid_obj,valid_dic = search_infer(self.valid_queue, self.gf_model, self.criterion, multilabel=self.multilabel,n_class=self.n_class,mode='valid')
+        valid_acc, valid_obj,valid_dic = search_infer(self.valid_queue, self.gf_model, self.criterion, 
+            multilabel=self.multilabel,n_class=self.n_class,mode='valid',map_select=self.mapselect)
         if args.policy_loss=='classdiff':
             class_acc = [valid_dic[f'valid_{ptype}_c{i}'] / 100.0 for i in range(self.n_class)]
             print(class_acc)
@@ -318,7 +324,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             self.sim_criterion.update_weight(self.class_difficulty)
         #scheduler.step()
         #test
-        test_acc, test_obj, test_dic  = search_infer(self.test_queue, self.gf_model, self.criterion, multilabel=self.multilabel,n_class=self.n_class,mode='test')
+        test_acc, test_obj, test_dic  = search_infer(self.test_queue, self.gf_model, self.criterion, 
+            multilabel=self.multilabel,n_class=self.n_class,mode='test',map_select=self.mapselect)
         #val select
         if args.valselect and valid_acc>self.best_val_acc:
             self.best_val_acc = valid_acc

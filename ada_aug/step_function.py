@@ -21,7 +21,7 @@ import wandb
 
 
 def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_clip, adaaug, multilabel=False,n_class=10,
-        difficult_aug=False,reweight=True,lambda_aug = 1.0,class_adaptive=False):
+        difficult_aug=False,reweight=True,lambda_aug = 1.0,class_adaptive=False,map_select=False):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
     top5 = utils.AvgrageMeter()
@@ -131,10 +131,12 @@ def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_
         out_dic[f'train_{add_type}_avg'] = perfrom2
         for i,e_c in enumerate(perfrom_cw2):
             out_dic[f'train_{add_type}_c{i}'] = e_c
+        if map_select:
+            return perfrom2, objs.avg, out_dic
     
     return perfrom, objs.avg, out_dic
 
-def infer(valid_queue, model, criterion, multilabel=False, n_class=10,mode='test'):
+def infer(valid_queue, model, criterion, multilabel=False, n_class=10,mode='test',map_select=False):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
     top5 = utils.AvgrageMeter()
@@ -203,6 +205,8 @@ def infer(valid_queue, model, criterion, multilabel=False, n_class=10,mode='test
         out_dic[f'{mode}_{add_type}_avg'] = perfrom2
         for i,e_c in enumerate(perfrom_cw2):
             out_dic[f'{mode}_{add_type}_c{i}'] = e_c
+        if map_select:
+            return perfrom2, objs.avg, out_dic
     
     return perfrom, objs.avg, perfrom2, objs.avg, out_dic
 
@@ -221,7 +225,7 @@ def rel_loss(ori_loss, aug_loss):
 def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, adaaug, criterion, gf_optimizer,scheduler,
             grad_clip, h_optimizer, epoch, search_freq,search_round=1, multilabel=False,n_class=10,
             difficult_aug=False,same_train=False,reweight=True,mix_feature=True,lambda_sim = 1.0,lambda_aug = 1.0,loss_type='minus',
-            class_adaptive=False,adv_criterion=None,sim_criterion=None,teacher_model=None):
+            class_adaptive=False,adv_criterion=None,sim_criterion=None,teacher_model=None,map_select=False):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
     top5 = utils.AvgrageMeter()
@@ -458,11 +462,12 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
         out_dic[f'train_{add_type}_avg'] = perfrom2
         for i,e_c in enumerate(perfrom_cw2):
             out_dic[f'train_{add_type}_c{i}'] = e_c
+        if map_select:
+            return perfrom2, objs.avg, out_dic
 
     return perfrom, objs.avg, out_dic
 
-
-def search_infer(valid_queue, gf_model, criterion, multilabel=False, n_class=10,mode='test'):
+def search_infer(valid_queue, gf_model, criterion, multilabel=False, n_class=10,mode='test',map_select=False):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
     top5 = utils.AvgrageMeter()
@@ -529,6 +534,8 @@ def search_infer(valid_queue, gf_model, criterion, multilabel=False, n_class=10,
         out_dic[f'{mode}_{add_type}_avg'] = perfrom2
         for i,e_c in enumerate(perfrom_cw2):
             out_dic[f'{mode}_{add_type}_c{i}'] = e_c
+        if map_select:
+            return perfrom2, objs.avg, out_dic
     
     return perfrom, objs.avg, out_dic
     #return top1.avg, objs.avg

@@ -78,6 +78,7 @@ parser.add_argument('--n_proj_layer', type=int, default=0, help="number of addit
 parser.add_argument('--n_proj_hidden', type=int, default=128, help="number of hidden units in augmentation policy projection layers")
 parser.add_argument('--restore_path', type=str, default='./', help='restore model path')
 parser.add_argument('--restore', action='store_true', default=False, help='restore model default False')
+parser.add_argument('--mapselect', action='store_true', default=False, help='use map select for multilabel')
 parser.add_argument('--valselect', action='store_true', default=False, help='use valid select')
 parser.add_argument('--notwarmup', action='store_true', default=False, help='use valid select')
 parser.add_argument('--augselect', type=str, default='', help="augmentation selection")
@@ -263,9 +264,17 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         self.best_val_acc = -1
         self.best_task = None
         self.base_path = self.config['BASE_PATH']
+        self.mapselect = self.config['mapselect']
     def step(self):#use step replace _train
         if self._iteration==0:
             wandb.config.update(self.config)
+        if self.multilabel:
+            if self.mapselect:
+                ptype = 'map'
+            else:
+                ptype = 'auroc'
+        else:
+            ptype = 'acc'
         print(f'Starting Ray ID {self.trial_id} Iteration: {self._iteration}')
         args = self.config['args']
         step_dic={'epoch':self._iteration}
@@ -274,22 +283,18 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         # training
         train_acc, train_obj, train_dic = train(args,
             self.train_queue, self.task_model, self.criterion, self.optimizer, self.scheduler, self._iteration, args.grad_clip, self.adaaug, 
-                multilabel=self.multilabel,n_class=self.n_class,**diff_dic)
+                multilabel=self.multilabel,n_class=self.n_class,map_select=self.mapselect,**diff_dic)
         # validation
         valid_acc, valid_obj, _, _, valid_dic = infer(self.valid_queue, self.task_model, self.criterion, multilabel=self.multilabel,
-                n_class=self.n_class,mode='valid')
+                n_class=self.n_class,mode='valid',map_select=self.mapselect)
         #test
         test_acc, test_obj, test_acc5, _,test_dic  = infer(self.test_queue, self.task_model, self.criterion, multilabel=self.multilabel,
-                n_class=self.n_class,mode='test')
+                n_class=self.n_class,mode='test',map_select=self.mapselect)
         #val select
         if args.valselect and valid_acc>self.best_val_acc:
             self.best_val_acc = valid_acc
             self.result_valid_dic = {f'result_{k}': valid_dic[k] for k in valid_dic.keys()}
             self.result_test_dic = {f'result_{k}': test_dic[k] for k in test_dic.keys()}
-            if self.multilabel:
-                ptype = 'auroc'
-            else:
-                ptype = 'acc'
             valid_dic[f'best_valid_{ptype}_avg'] = valid_acc
             test_dic[f'best_test_{ptype}_avg'] = test_acc
             self.best_task = self.task_model

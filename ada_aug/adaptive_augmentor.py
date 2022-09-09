@@ -394,7 +394,7 @@ class AdaAugkeep_TS(AdaAug):
             self.keep_lens = keepaug_config['length']
         else:
             self.keep_lens = [100, 200, 400, 600, 800] #!!!default
-        self.thres_adapt = keepaug_config.get('thres_adapt',False)
+        self.thres_adapt = keepaug_config.get('thres_adapt',True)
         print('AdaAug Using ',self.ops_names)
         print('KeepAug Using ',self.keep_lens)
         print('Keep thres adapt: ',self.thres_adapt)

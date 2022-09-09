@@ -98,22 +98,7 @@ def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_
             predicted = torch.sigmoid(logits.data)
         preds.append(predicted.cpu().detach())
         targets.append(target.cpu().detach())
-    #Total
-    if not multilabel:
-        perfrom = 100 * top1.avg
-        logging.info('Epoch train: loss=%e top1acc=%f top5acc=%f', objs.avg, top1.avg, top5.avg)
-    else:
-        targets_np = torch.cat(targets).numpy()
-        preds_np = torch.cat(preds).numpy()
-        try:
-            perfrom = 100 * roc_auc_score(targets_np, preds_np,average='macro')
-        except Exception as e:
-            nan_count = np.sum(np.isnan(preds_np))
-            inf_count = np.sum(np.isinf(preds_np))
-            print('predict nan, inf count: ',nan_count,inf_count)
-            raise e
-        logging.info('Epoch train: loss=%e macroAUROC=%f', objs.avg, perfrom)
-    #class-wise
+    #class-wise & Total
     if not multilabel:
         cw_acc = 100 * confusion_matrix.diag()/(confusion_matrix.sum(1)+1e-9)
         logging.info('class-wise Acc: ' + str(cw_acc))
@@ -121,23 +106,31 @@ def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_
         logging.info('Overall Acc: %f',nol_acc)
         perfrom = top1.avg
         perfrom_cw = cw_acc
+        ptype = 'acc'
+        logging.info(f'Epoch train: loss={objs.avg} top1acc={top1.avg} top5acc={top5.avg}')
     else:
         targets_np = torch.cat(targets).numpy()
         preds_np = torch.cat(preds).numpy()
         perfrom_cw = utils.AUROC_cw(targets_np,preds_np)
+        perfrom_cw2 = utils.mAP_cw(targets_np,preds_np)
         perfrom = perfrom_cw.mean()
+        perfrom2 = perfrom_cw2.mean()
+        logging.info('Epoch train: loss=%e macroAUROC=%f', objs.avg, perfrom)
         logging.info('class-wise AUROC: ' + '['+', '.join(['%.1f'%e for e in perfrom_cw])+']')
-        logging.info('Overall AUROC: %f',perfrom)
+        logging.info('Epoch train: loss=%e macroAP=%f', objs.avg, perfrom2)
+        logging.info('class-wise AUROC: ' + '['+', '.join(['%.1f'%e for e in perfrom_cw2])+']')
+        ptype = 'auroc'
     #wandb dic
     out_dic = {}
     out_dic[f'train_loss'] = objs.avg
-    if multilabel:
-        ptype = 'auroc'
-    else:
-        ptype = 'acc'
     out_dic[f'train_{ptype}_avg'] = perfrom
     for i,e_c in enumerate(perfrom_cw):
         out_dic[f'train_{ptype}_c{i}'] = e_c
+    if multilabel: #addition
+        add_type = 'ap'
+        out_dic[f'train_{add_type}_avg'] = perfrom2
+        for i,e_c in enumerate(perfrom_cw2):
+            out_dic[f'train_{add_type}_c{i}'] = e_c
     
     return perfrom, objs.avg, out_dic
 
@@ -186,24 +179,30 @@ def infer(valid_queue, model, criterion, multilabel=False, n_class=10,mode='test
         perfrom = top1.avg
         perfrom_cw = cw_acc
         perfrom2 = top5.avg
+        ptype = 'acc'
     else:
         targets_np = torch.cat(targets).numpy()
         preds_np = torch.cat(preds).numpy()
         perfrom_cw = utils.AUROC_cw(targets_np,preds_np)
+        perfrom_cw2 = utils.mAP_cw(targets_np,preds_np)
         perfrom = perfrom_cw.mean()
-        perfrom2 = perfrom
+        perfrom2 = perfrom_cw2.mean()
+        logging.info('Epoch %s: loss=%e macroAUROC=%f', mode, objs.avg, perfrom)
         logging.info('class-wise AUROC: ' + '['+', '.join(['%.1f'%e for e in perfrom_cw])+']')
-        logging.info('Overall AUROC: %f',perfrom)
+        logging.info('Epoch %s: loss=%e macroAP=%f',mode, objs.avg, perfrom2)
+        logging.info('class-wise AUROC: ' + '['+', '.join(['%.1f'%e for e in perfrom_cw2])+']')
+        ptype = 'auroc'
     #wandb dic
     out_dic = {}
     out_dic[f'{mode}_loss'] = objs.avg
-    if multilabel:
-        ptype = 'auroc'
-    else:
-        ptype = 'acc'
     out_dic[f'{mode}_{ptype}_avg'] = perfrom
     for i,e_c in enumerate(perfrom_cw):
         out_dic[f'{mode}_{ptype}_c{i}'] = e_c
+    if multilabel: #addition
+        add_type = 'ap'
+        out_dic[f'{mode}_{add_type}_avg'] = perfrom2
+        for i,e_c in enumerate(perfrom_cw2):
+            out_dic[f'{mode}_{add_type}_c{i}'] = e_c
     
     return perfrom, objs.avg, perfrom2, objs.avg, out_dic
 
@@ -422,22 +421,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
             logging.info('  |train %03d %e %f %f | %.3f + %.3f s', global_step,
                 objs.avg, top1.avg, top5.avg, exploitation_time, exploration_time)
 
-    #Total
-    if not multilabel:
-        perfrom = top1.avg
-        logging.info('Epoch train: loss=%e top1acc=%f top5acc=%f', objs.avg, top1.avg, top5.avg)
-    else:
-        targets_np = torch.cat(targets).numpy()
-        preds_np = torch.cat(preds).numpy()
-        try:
-            perfrom = 100 * roc_auc_score(targets_np, preds_np,average='macro')
-        except Exception as e:
-            nan_count = np.sum(np.isnan(preds_np))
-            inf_count = np.sum(np.isinf(preds_np))
-            print('predict nan, inf count: ',nan_count,inf_count)
-            raise e
-        logging.info('Epoch train: loss=%e macroAUROC=%f', objs.avg, perfrom)
-    #class-wise
+    #class-wise & Total
     if not multilabel:
         cw_acc = 100 * confusion_matrix.diag()/(confusion_matrix.sum(1)+1e-9)
         logging.info('class-wise Acc: ' + str(cw_acc))
@@ -445,13 +429,20 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
         logging.info('Overall Acc: %f',nol_acc)
         perfrom = top1.avg
         perfrom_cw = cw_acc
+        ptype = 'acc'
+        logging.info(f'Epoch train: loss={objs.avg} top1acc={top1.avg} top5acc={top5.avg}')
     else:
         targets_np = torch.cat(targets).numpy()
         preds_np = torch.cat(preds).numpy()
         perfrom_cw = utils.AUROC_cw(targets_np,preds_np)
+        perfrom_cw2 = utils.mAP_cw(targets_np,preds_np)
         perfrom = perfrom_cw.mean()
+        perfrom2 = perfrom_cw2.mean()
+        logging.info('Epoch train: loss=%e macroAUROC=%f', objs.avg, perfrom)
         logging.info('class-wise AUROC: ' + '['+', '.join(['%.1f'%e for e in perfrom_cw])+']')
-        logging.info('Overall AUROC: %f',perfrom)
+        logging.info('Epoch train: loss=%e macroAP=%f', objs.avg, perfrom2)
+        logging.info('class-wise AP: ' + '['+', '.join(['%.1f'%e for e in perfrom_cw2])+']')
+        ptype = 'auroc'
     
     #wandb dic
     out_dic = {}
@@ -459,13 +450,14 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     out_dic['adaptive_loss'] = adaptive_loss / search_total
     out_dic['difficult_loss'] = difficult_loss / search_total
     out_dic['search_loss'] = out_dic['adaptive_loss']+out_dic['difficult_loss']
-    if multilabel:
-        ptype = 'auroc'
-    else:
-        ptype = 'acc'
     out_dic[f'train_{ptype}_avg'] = perfrom
     for i,e_c in enumerate(perfrom_cw):
         out_dic[f'train_{ptype}_c{i}'] = e_c
+    if multilabel: #addition
+        add_type = 'ap'
+        out_dic[f'train_{add_type}_avg'] = perfrom2
+        for i,e_c in enumerate(perfrom_cw2):
+            out_dic[f'train_{add_type}_c{i}'] = e_c
 
     return perfrom, objs.avg, out_dic
 
@@ -513,23 +505,30 @@ def search_infer(valid_queue, gf_model, criterion, multilabel=False, n_class=10,
         logging.info('%s Overall Acc: %f',mode,nol_acc)
         perfrom = top1.avg
         perfrom_cw = cw_acc
+        ptype = 'acc'
     else:
         targets_np = torch.cat(targets).numpy()
         preds_np = torch.cat(preds).numpy()
         perfrom_cw = utils.AUROC_cw(targets_np,preds_np)
+        perfrom_cw2 = utils.mAP_cw(targets_np,preds_np)
         perfrom = perfrom_cw.mean()
-        logging.info(f'{mode} class-wise AUROC: ' + '['+', '.join(['%.1f'%e for e in perfrom_cw])+']')
-        logging.info('%s Overall AUROC: %f',mode,perfrom)
+        perfrom2 = perfrom_cw2.mean()
+        logging.info('Epoch %s: loss=%e macroAUROC=%f', mode, objs.avg, perfrom)
+        logging.info('class-wise AUROC: ' + '['+', '.join(['%.1f'%e for e in perfrom_cw])+']')
+        logging.info('Epoch %s: loss=%e macroAP=%f',mode, objs.avg, perfrom2)
+        logging.info('class-wise AP: ' + '['+', '.join(['%.1f'%e for e in perfrom_cw2])+']')
+        ptype = 'auroc'
     #wandb dic
     out_dic = {}
     out_dic[f'{mode}_loss'] = objs.avg
-    if multilabel:
-        ptype = 'auroc'
-    else:
-        ptype = 'acc'
     out_dic[f'{mode}_{ptype}_avg'] = perfrom
     for i,e_c in enumerate(perfrom_cw):
         out_dic[f'{mode}_{ptype}_c{i}'] = e_c
+    if multilabel: #addition
+        add_type = 'ap'
+        out_dic[f'{mode}_{add_type}_avg'] = perfrom2
+        for i,e_c in enumerate(perfrom_cw2):
+            out_dic[f'{mode}_{add_type}_c{i}'] = e_c
     
     return perfrom, objs.avg, out_dic
     #return top1.avg, objs.avg

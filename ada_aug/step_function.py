@@ -206,7 +206,7 @@ def infer(valid_queue, model, criterion, multilabel=False, n_class=10,mode='test
         for i,e_c in enumerate(perfrom_cw2):
             out_dic[f'{mode}_{add_type}_c{i}'] = e_c
         if map_select:
-            return perfrom2, objs.avg, out_dic
+            return perfrom2, objs.avg, perfrom2, objs.avg, out_dic
     
     return perfrom, objs.avg, perfrom2, objs.avg, out_dic
 

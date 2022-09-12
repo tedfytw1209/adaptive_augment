@@ -338,6 +338,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         elif not args.valselect:
             self.best_gf = self.gf_model
             self.best_h = self.h_model
+            self.result_valid_dic = {f'result_{k}': valid_dic[k] for k in valid_dic.keys()}
+            self.result_test_dic = {f'result_{k}': test_dic[k] for k in test_dic.keys()}
         if self.test_fold_idx>=0:
             gf_path = os.path.join(f'fold{self.test_fold_idx}', 'gf_weights.pt')
             h_path = os.path.join(f'fold{self.test_fold_idx}', 'h_weights.pt')

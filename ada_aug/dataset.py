@@ -328,6 +328,8 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
         dataset_func = EDFX
     elif dataset_name == 'chapman':
         dataset_func = Chapman
+        if labelgroup:
+            kwargs['labelgroup']=labelgroup
     else:
         ValueError(f'Invalid dataset name={dataset}')
     

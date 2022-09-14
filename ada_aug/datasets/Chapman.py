@@ -52,6 +52,10 @@ class Chapman(BaseDataset):
         self.label = None
         self.input_data = np.load(os.path.join(self.dataset_path,f'X_{self.labelgroup}data_{self.lb}.npy'),allow_pickle=True)
         self.label = np.load(os.path.join(self.dataset_path,f'y_{self.labelgroup}data_{self.lb}.npy'),allow_pickle=True)
+        print('Label counts:')
+        unique, counts = np.unique(self.label, return_counts=True)
+        counts_array = np.asarray((unique, counts)).T
+        print(counts_array)
         #Auto make self.split_indices / self.fold_indices
         all_indices = np.arange(len(self.label))
         n_fold = 10
@@ -78,10 +82,11 @@ class Chapman(BaseDataset):
         #make split indice
         if isinstance(mode,list):
             select_idxs = np.array([])
-            for fold in mode:
-                select_idxs = np.concatenate([select_idxs,self.fold_indices[fold]],axis=0).astype(int)
+            for fold in mode: # fold:1~10, fold_indices:0~9
+                select_idxs = np.concatenate([select_idxs,self.fold_indices[fold-1]],axis=0).astype(int)
             self.input_data = self.input_data[select_idxs]
             self.label = self.label[select_idxs]
+        
 
     def process_data(self):
         print('Process data')

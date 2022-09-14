@@ -1461,6 +1461,15 @@ if __name__ == '__main__':
     'add_gaussian_noise',
     'freq_shift',
     ]
+    #
+    plot_line(t,x,title='identity')
+    for name in test_ops:
+        for m in [0,0.1,0.5,0.98]:
+            trans_aug = 
+            x_aug = info_aug(x_tensor).numpy()
+            print(x_aug.shape)
+            plot_line(t,x_aug,f'{name}_mode:{each_mode}_m:{m}')
+    #beat aug
     '''plot_line(t,x,title='identity')
     for each_mode in ['b','p','t']:
         for name in test_ops:
@@ -1470,7 +1479,8 @@ if __name__ == '__main__':
                 x_aug = info_aug(x_tensor).numpy()
                 print(x_aug.shape)
                 plot_line(t,x_aug,f'{name}_mode:{each_mode}_m:{m}')'''
-    plot_line(t,x,title='identity')
+    #keep aug
+    '''plot_line(t,x,title='identity')
     x_tensor = torch.unsqueeze(x_tensor,dim=0)
     for each_mode in ['b','p','t']:
         for name in test_ops:
@@ -1482,7 +1492,8 @@ if __name__ == '__main__':
                 print(x_tensor.shape)
                 x_aug = torch.squeeze(x_aug,dim=0).numpy()
                 print(x_aug.shape)
-                plot_line(t,x_aug,f'{name}_mode:{each_mode}_m:{m}')
+                plot_line(t,x_aug,f'{name}_mode:{each_mode}_m:{m}')'''
+    #randaug
     '''randaug = RandAugment(1,0,rd_seed=42)
     name = 'random_time_mask'
     for i in range(3):

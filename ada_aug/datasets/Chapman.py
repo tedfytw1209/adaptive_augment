@@ -77,9 +77,9 @@ class Chapman(BaseDataset):
             self.split_indices.append([test_k, self.sub_tr_ratio, tr_idx, valid_idx, test_idx])
         #make split indice
         if isinstance(mode,list):
-            select_idxs = []
+            select_idxs = np.array([])
             for fold in mode:
-                select_idxs += self.fold_indices[fold]
+                select_idxs = np.concatenate([select_idxs,self.fold_indices[fold]],axis=0).astype(int)
             self.input_data = self.input_data[select_idxs]
             self.label = self.label[select_idxs]
 

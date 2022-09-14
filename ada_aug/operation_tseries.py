@@ -185,6 +185,18 @@ def add_gaussian_noise(X, std, random_state=None, *args, **kwargs):
     transformed_X = X + noise
     return transformed_X
 
+def exp_add_gaussian_noise(X, std, random_state=None, *args, **kwargs):
+    # XXX: Maybe have rng passed as argument here
+    rng = check_random_state(random_state)
+    noise = torch.from_numpy(
+        rng.normal(
+            loc=np.zeros(X.shape),
+            scale=1
+        )
+    ).float().to(X.device) * std
+    transformed_X = X + noise
+    return transformed_X
+
 def permute_channels(X, permutation, *args, **kwargs):
     return X[..., permutation, :]
 
@@ -672,13 +684,13 @@ TS_EXP_LIST = [
     (exp_time_mask, 0, 100),
     (exp_bandstop, 0, 48), #sample freq=100, bandstop=48 because of notch
     (exp_freq_shift, 0, 10), #sample freq=100
-    (add_gaussian_noise, 0, 1),  # noise up to std
+    (exp_add_gaussian_noise, 0, 1),  # noise up to std
 ]
 EXP_TEST_NAMES =[
     'exp_time_mask',
     'exp_bandstop',
     'exp_freq_shift',
-    'add_gaussian_noise',
+    'exp_add_gaussian_noise',
 ]
 INFO_EXP_LIST = [
     (info_time_mask, 0, 100),
@@ -1455,20 +1467,15 @@ if __name__ == '__main__':
     print(t.shape)
     print(x.shape)
     x_tensor = torch.from_numpy(x).float()
-    test_ops = [
-    'time_reverse', #time reverse
-    'random_time_mask',
-    'add_gaussian_noise',
-    'freq_shift',
-    ]
+    test_ops = EXP_TEST_NAMES
     #
     plot_line(t,x,title='identity')
     for name in test_ops:
         for m in [0,0.1,0.5,0.98]:
-            trans_aug = 
-            x_aug = info_aug(x_tensor).numpy()
+            trans_aug = TransfromAugment([name],m=m,n=1,p=0.5)
+            x_aug = trans_aug(x_tensor).numpy()
             print(x_aug.shape)
-            plot_line(t,x_aug,f'{name}_mode:{each_mode}_m:{m}')
+            plot_line(t,x_aug,f'{name}_m:{m}')
     #beat aug
     '''plot_line(t,x,title='identity')
     for each_mode in ['b','p','t']:

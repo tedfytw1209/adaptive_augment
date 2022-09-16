@@ -18,14 +18,14 @@ rhythm_classes_ori = ['SB', 'SR', 'AFIB', 'ST', 'AF', 'SI', 'SVT', 'AT', 'AVNRT'
 rhythm_sup = ['AFIB','GSVT','SB','SR']
 rhythm_sup_dic = {'SB':'SB', 'SR':'SR', 'AFIB':'AFIB', 'ST':'GSVT', 'AF':'AFIB', 'SI':'SR', 'SVT':'GSVT', 'AT':'GSVT', 'AVNRT':'GSVT', 'SAAWR':'GSVT'}
 rhythm_dic = {k:v for (k,v) in zip(rhythm_classes_cinc,rhythm_classes_ori)}
-
+LABEL_GROUPS = {"all":11, "rhythm":6, 'superrhythm':4}
 
 class Chapman(BaseDataset):
     def __init__(self, dataset_path,labelgroup='all',mode='all',seed=42,multilabel=False,transfroms=[],augmentations=[],label_transfroms=[],**_kwargs):
         super(Chapman,self).__init__(transfroms=transfroms,augmentations=augmentations,label_transfroms=label_transfroms)
         self.dataset_path = dataset_path
         self.max_len = MAX_LENGTH
-        self.num_class = 12
+        self.num_class = LABEL_GROUPS[labelgroup]
         self.multilabel = multilabel
         if multilabel:
             self.lb = 'ml'

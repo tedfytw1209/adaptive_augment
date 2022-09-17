@@ -377,11 +377,15 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
     print(samples[0].shape)
     print(samples[1])
     print(samples[2])
+    print('Label counts:')
+    unique, counts = np.unique(search_trainset.label, return_counts=True)
+    counts_array = np.asarray((unique, counts)).T
+    print(counts_array)
     #make search validation set by StratifiedShuffleSplit
     total = len(search_trainset)
     rd_idxs = [i for i in range(total)]
     if search_size > 0:
-        if not multilabel: #multilabel can't
+        if not multilabel and counts.min()<2: #multilabel can't, label<2 can't
             sss = StratifiedShuffleSplit(n_splits=5, test_size=search_size, random_state=0)
             sss = sss.split(list(rd_idxs), search_trainset.label)
         else:

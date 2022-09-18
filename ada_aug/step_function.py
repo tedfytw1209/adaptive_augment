@@ -224,7 +224,8 @@ def rel_loss(ori_loss, aug_loss):
 
 def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, adaaug, criterion, gf_optimizer,scheduler,
             grad_clip, h_optimizer, epoch, search_freq,search_round=1, multilabel=False,n_class=10,
-            difficult_aug=False,same_train=False,reweight=True,mix_feature=True,lambda_sim = 1.0,lambda_aug = 1.0,loss_type='minus',
+            difficult_aug=False,same_train=False,reweight=True,sim_reweight=False,mix_feature=True
+            ,lambda_sim = 1.0,lambda_aug = 1.0,loss_type='minus',
             class_adaptive=False,adv_criterion=None,sim_criterion=None,teacher_model=None,map_select=False):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
@@ -244,6 +245,8 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     elif loss_type=='relative':
         diff_loss_func = relative_loss
         sim_loss_func = rel_loss
+    elif loss_type=='relativediff':
+        diff_loss_func = relative_loss
     elif loss_type=='adv':
         diff_loss_func = adv_loss
     else:
@@ -394,9 +397,21 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 else:
                     loss = sim_criterion(logits_search, target_search.long())
                     ori_loss = sim_criterion(origin_logits, target_search.long())
-                loss = sim_loss_func(ori_loss,loss) * lambda_sim
+                #similar reweight?
+                loss = sim_loss_func(ori_loss,loss)
+                if sim_reweight: #reweight part, a,b = ?
+                    p_orig = origin_logits.softmax(dim=1)[torch.arange(batch_size), target_search].detach()
+                    p_aug = logits_search.softmax(dim=1)[torch.arange(batch_size), target_search].clone().detach()
+                    w_aug = torch.sqrt((1.0 - p_orig) * torch.clamp(p_aug - p_orig, min=0)) #a=0.5,b=0.5
+                    if w_aug.sum() > 0:
+                        w_aug /= (w_aug.mean().detach() + 1e-6)
+                    else:
+                        w_aug = 1
+                    loss = (w_aug * loss).mean()
+                else:
+                    loss = loss.mean()
+                loss = loss * lambda_sim
                 loss.backward()
-
                 adaptive_loss += loss.detach().item()
                 search_total += 1
                 input_search_list.append(input_search.detach())

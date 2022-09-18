@@ -170,7 +170,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                             use_cuda=True, data_parallel=False,dataset=args.dataset)
         #follow ptbxl batchmark!!!
         self.optimizer = torch.optim.AdamW(self.task_model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
-        self.scheduler = torch.optim.lr_scheduler.OneCycleLR(self.optimizer, max_lr=args.learning_rate, epochs = args.epochs, steps_per_epoch = len(self.train_queue)) #follow ptbxl batchmark!!!
+        self.scheduler = torch.optim.lr_scheduler.OneCycleLR(self.optimizer, max_lr=args.learning_rate,
+            epochs = args.epochs, steps_per_epoch = len(self.train_queue)) #follow ptbxl batchmark!!!
         if not args.notwarmup:
             m, e = get_warmup_config(args.dataset)
             self.scheduler = GradualWarmupScheduler( #paper not mention!!!

@@ -80,7 +80,8 @@ parser.add_argument('--augselect', type=str, default='', help="augmentation sele
 parser.add_argument('--diff_aug', action='store_true', default=False, help='use valid select')
 parser.add_argument('--same_train', action='store_true', default=False, help='use valid select')
 parser.add_argument('--not_mix', action='store_true', default=False, help='use valid select')
-parser.add_argument('--not_reweight', action='store_true', default=False, help='use valid select')
+parser.add_argument('--not_reweight', action='store_true', default=False, help='use diff reweight')
+parser.add_argument('--sim_rew', action='store_true', default=False, help='use sim reweight')
 parser.add_argument('--lambda_aug', type=float, default=1.0, help="augment sample weight (difficult)")
 parser.add_argument('--lambda_sim', type=float, default=1.0, help="augment sample weight (simular)")
 parser.add_argument('--class_adapt', action='store_true', default=False, help='class adaptive')
@@ -309,7 +310,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         step_dic={'epoch':self._iteration}
         diff_dic = {'difficult_aug':self.diff_augment,'same_train':args.same_train,'reweight':self.diff_reweight,'lambda_aug':args.lambda_aug,
                 'lambda_sim':args.lambda_sim,'class_adaptive':args.class_adapt,
-                'loss_type':args.loss_type, 'adv_criterion': self.adv_criterion, 'teacher_model':self.ema_model, 'sim_criterion':self.sim_criterion}
+                'loss_type':args.loss_type, 'adv_criterion': self.adv_criterion, 'teacher_model':self.ema_model, 'sim_criterion':self.sim_criterion,
+                'sim_reweight':args.sim_rew}
         # searching
         train_acc, train_obj, train_dic = search_train(args,self.train_queue, self.search_queue, self.tr_search_queue, self.gf_model, self.adaaug,
             self.criterion, self.gf_optimizer,self.scheduler, args.grad_clip, self.h_optimizer, self._iteration, args.search_freq, 

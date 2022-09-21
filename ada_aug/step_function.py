@@ -257,7 +257,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     preds = []
     targets = []
     total = 0
-    difficult_loss, adaptive_loss, search_total = 0, 0, 0
+    difficult_loss, adaptive_loss, search_total,re_weights_sum = 0, 0, 0, 0
     for step, (input, seq_len, target) in enumerate(train_queue):
         input = input.float().cuda() #(batch,sed_len,channel)
         target = target.cuda()
@@ -359,6 +359,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                         p_orig = origin_logits.softmax(dim=1)[torch.arange(batch_size), target_trsearch].detach()
                         p_aug = aug_logits.softmax(dim=1)[torch.arange(batch_size), target_trsearch].clone().detach()
                         w_aug = torch.sqrt(p_orig * torch.clamp(p_orig - p_aug, min=0)) #a=0.5,b=0.5
+                        re_weights_sum += w_aug.sum().detach().item() / search_round
                         if w_aug.sum() > 0:
                             w_aug /= (w_aug.mean().detach() + 1e-6)
                         else:
@@ -468,6 +469,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     out_dic['train_loss'] = objs.avg
     out_dic['adaptive_loss'] = adaptive_loss / search_total
     out_dic['difficult_loss'] = difficult_loss / search_total
+    out_dic['reweight_sum'] = re_weights_sum / search_total
     out_dic['search_loss'] = out_dic['adaptive_loss']+out_dic['difficult_loss']
     out_dic[f'train_{ptype}_avg'] = perfrom
     for i,e_c in enumerate(perfrom_cw):

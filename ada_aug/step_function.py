@@ -238,7 +238,8 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
         adv_criterion = criterion
     if sim_criterion==None:
         sim_criterion = criterion
-    
+    noaug_criterion = nn.CrossEntropyLoss().cuda()
+
     sim_loss_func = ab_loss
     if loss_type=='minus':
         diff_loss_func = minus_loss
@@ -390,8 +391,9 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 mixed_features, aug_weights = adaaug(input_search, seq_len, mode='explore',y=policy_y)
                 #weight regular to NOAUG
                 aug_weight = aug_weights[0] # (bs, n_ops), 0 is NOAUG
+                noaug_target = torch.zeros(target_search.shape).cuda().long()
                 if lambda_noaug>0: #need test
-                    noaug_loss = lambda_noaug * torch.mean(torch.sum(torch.norm(aug_weight[:,1:]),dim=1))
+                    noaug_loss = lambda_noaug * noaug_criterion(aug_weight,noaug_target)
                 else:
                     noaug_loss = 0
                 noaug_reg_sum += noaug_loss.detach().item()

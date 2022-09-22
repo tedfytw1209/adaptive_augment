@@ -82,8 +82,10 @@ parser.add_argument('--same_train', action='store_true', default=False, help='us
 parser.add_argument('--not_mix', action='store_true', default=False, help='use valid select')
 parser.add_argument('--not_reweight', action='store_true', default=False, help='use diff reweight')
 parser.add_argument('--sim_rew', action='store_true', default=False, help='use sim reweight')
+parser.add_argument('--pwarmup', type=int, default=0, help="warmup epoch for policy")
 parser.add_argument('--lambda_aug', type=float, default=1.0, help="augment sample weight (difficult)")
 parser.add_argument('--lambda_sim', type=float, default=1.0, help="augment sample weight (simular)")
+parser.add_argument('--lambda_noaug', type=float, default=0, help="no augment regular weight")
 parser.add_argument('--class_adapt', action='store_true', default=False, help='class adaptive')
 parser.add_argument('--class_embed', action='store_true', default=False, help='class embed') #tmp use
 parser.add_argument('--loss_type', type=str, default='minus', help="loss type for difficult policy training",
@@ -309,9 +311,9 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         lr = self.scheduler.get_last_lr()[0]
         step_dic={'epoch':self._iteration}
         diff_dic = {'difficult_aug':self.diff_augment,'same_train':args.same_train,'reweight':self.diff_reweight,'lambda_aug':args.lambda_aug,
-                'lambda_sim':args.lambda_sim,'class_adaptive':args.class_adapt,
+                'lambda_sim':args.lambda_sim,'class_adaptive':args.class_adapt,'lambda_noaug':args.lambda_noaug,
                 'loss_type':args.loss_type, 'adv_criterion': self.adv_criterion, 'teacher_model':self.ema_model, 'sim_criterion':self.sim_criterion,
-                'sim_reweight':args.sim_rew}
+                'sim_reweight':args.sim_rew,'warmup_epoch': args.pwarmup}
         # searching
         train_acc, train_obj, train_dic = search_train(args,self.train_queue, self.search_queue, self.tr_search_queue, self.gf_model, self.adaaug,
             self.criterion, self.gf_optimizer,self.scheduler, args.grad_clip, self.h_optimizer, self._iteration, args.search_freq, 

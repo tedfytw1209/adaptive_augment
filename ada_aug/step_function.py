@@ -224,8 +224,8 @@ def rel_loss(ori_loss, aug_loss):
 
 def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, adaaug, criterion, gf_optimizer,scheduler,
             grad_clip, h_optimizer, epoch, search_freq,search_round=1, multilabel=False,n_class=10,
-            difficult_aug=False,same_train=False,reweight=True,sim_reweight=False,mix_feature=True
-            ,lambda_sim = 1.0,lambda_aug = 1.0,loss_type='minus',
+            difficult_aug=False,same_train=False,reweight=True,sim_reweight=False,mix_feature=True, warmup_epoch = 0
+            ,lambda_sim = 1.0,lambda_aug = 1.0,loss_type='minus',lambda_noaug = 0,
             class_adaptive=False,adv_criterion=None,sim_criterion=None,teacher_model=None,map_select=False):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
@@ -258,6 +258,8 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     targets = []
     total = 0
     difficult_loss, adaptive_loss, search_total,re_weights_sum = 0, 0, 0, 0
+    aug_diff_loss, ori_diff_loss, aug_search_loss, ori_search_loss = 0,0,0,0
+    noaug_reg_sum = 0
     for step, (input, seq_len, target) in enumerate(train_queue):
         input = input.float().cuda() #(batch,sed_len,channel)
         target = target.cuda()
@@ -328,7 +330,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
 
         # exploration
         timer = time.time()
-        if step % search_freq == 0:
+        if epoch>= warmup_epoch and step % search_freq == search_freq-1: #warmup
             #difficult, train input, target
             gf_optimizer.zero_grad()
             h_optimizer.zero_grad()
@@ -346,7 +348,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                             policy_y = nn.functional.one_hot(target_trsearch, num_classes=n_class).cuda().float()
                         else:
                             policy_y = target_trsearch.cuda().float()
-                    mixed_features = adaaug(input_trsearch, seq_len, mode='explore',mix_feature=mix_feature,y=policy_y)
+                    mixed_features, aug_weights = adaaug(input_trsearch, seq_len, mode='explore',mix_feature=mix_feature,y=policy_y)
                     aug_logits = gf_model.classify(mixed_features) 
                     if multilabel:
                         aug_loss = adv_criterion(aug_logits, target_trsearch.float())
@@ -354,6 +356,8 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                     else:
                         aug_loss = adv_criterion(aug_logits, target_trsearch.long())
                         ori_loss = adv_criterion(origin_logits, target_trsearch.long())
+                    aug_diff_loss += aug_loss.detach().item()
+                    ori_diff_loss += ori_loss.detach().item()
                     loss_prepolicy = diff_loss_func(ori_loss=ori_loss,aug_loss=aug_loss,lambda_aug=lambda_aug)
                     if reweight: #reweight part, a,b = ?
                         p_orig = origin_logits.softmax(dim=1)[torch.arange(batch_size), target_trsearch].detach()
@@ -383,7 +387,14 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                     else:
                         policy_y = target_search.cuda().float()
                 policy_y_list.append(policy_y)
-                mixed_features = adaaug(input_search, seq_len, mode='explore',y=policy_y)
+                mixed_features, aug_weights = adaaug(input_search, seq_len, mode='explore',y=policy_y)
+                #weight regular to NOAUG
+                aug_weight = aug_weights[0] # (bs, n_ops), 0 is NOAUG
+                if lambda_noaug>0: #need test
+                    noaug_loss = lambda_noaug * torch.mean(torch.sum(torch.norm(aug_weight[:,1:]),dim=1))
+                else:
+                    noaug_loss = 0
+                noaug_reg_sum += noaug_loss.detach().item()
                 #tea
                 if teacher_model==None:
                     sim_model = gf_model
@@ -399,6 +410,8 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                     loss = sim_criterion(logits_search, target_search.long())
                     ori_loss = sim_criterion(origin_logits, target_search.long())
                 #similar reweight?
+                aug_search_loss += loss.detach().item()
+                ori_search_loss += ori_loss.detach().item()
                 loss = sim_loss_func(ori_loss,loss)
                 if sim_reweight: #reweight part, a,b = ?
                     p_orig = origin_logits.softmax(dim=1)[torch.arange(batch_size), target_search].detach()
@@ -411,7 +424,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                     loss = (w_aug * loss).mean()
                 else:
                     loss = loss.mean()
-                loss = loss * lambda_sim
+                loss = loss * lambda_sim + noaug_loss
                 loss.backward()
                 adaptive_loss += loss.detach().item()
                 search_total += 1
@@ -468,8 +481,15 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     out_dic = {}
     out_dic['train_loss'] = objs.avg
     out_dic['adaptive_loss'] = adaptive_loss / search_total
-    out_dic['difficult_loss'] = difficult_loss / search_total
-    out_dic['reweight_sum'] = re_weights_sum / search_total
+    out_dic['aug_sear_loss'] = aug_search_loss / search_total
+    out_dic['ori_sear_loss'] = ori_search_loss / search_total
+    if difficult_aug:
+        out_dic['difficult_loss'] = difficult_loss / search_total
+        out_dic['reweight_sum'] = re_weights_sum / search_total
+        out_dic['aug_diff_loss'] = aug_diff_loss / search_total
+        out_dic['ori_diff_loss'] = ori_diff_loss / search_total
+    if lambda_noaug>0:
+        out_dic['noaug_reg'] = noaug_reg_sum / search_total
     out_dic['search_loss'] = out_dic['adaptive_loss']+out_dic['difficult_loss']
     out_dic[f'train_{ptype}_avg'] = perfrom
     for i,e_c in enumerate(perfrom_cw):

@@ -302,7 +302,7 @@ class AdaAug_TS(AdaAug):
         if mix_feature:
             mixed_features = [w.matmul(feat) for w, feat in zip(weights, ba_features)]
             mixed_features = torch.stack(mixed_features, dim=0)
-            return mixed_features
+            return mixed_features, [weights]
         else:
             return ba_features, weights
     def get_training_aug_image(self, image, magnitudes, idx_matrix,i=None):
@@ -490,7 +490,7 @@ class AdaAugkeep_TS(AdaAug):
             mixed_features = [len_w.matmul(feat) for len_w,feat in zip(keeplen_ws,mixed_features)] #[(n_hidden)]
             #print(mixed_features[0].shape)
             mixed_features = torch.stack(mixed_features, dim=0)
-            return mixed_features
+            return mixed_features , [weights, keeplen_ws]
         else:
             return ba_features, weights
     

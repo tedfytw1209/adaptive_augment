@@ -127,7 +127,7 @@ class PolicyHistory(object):
         print(weights_file_list)
         n_class = len(mag_file_list)
 
-        f, axes = plt.subplots(n_class, 2, figsize=(15, 5*n_class))
+        f, axes = plt.subplots(n_class, 2, figsize=(25, 5*n_class))
 
         for i, file in enumerate(mag_file_list):
             df = pd.read_csv(file).dropna()

@@ -88,6 +88,8 @@ parser.add_argument('--lambda_sim', type=float, default=1.0, help="augment sampl
 parser.add_argument('--lambda_noaug', type=float, default=0, help="no augment regular weight")
 parser.add_argument('--class_adapt', action='store_true', default=False, help='class adaptive')
 parser.add_argument('--class_embed', action='store_true', default=False, help='class embed') #tmp use
+parser.add_argument('--noaug_reg', type=str, default='', help='add regular for noaugment ',
+        choices=['loss','add',''])
 parser.add_argument('--loss_type', type=str, default='minus', help="loss type for difficult policy training",
         choices=['minus','relative','relativediff','adv'])
 parser.add_argument('--policy_loss', type=str, default='', help="loss type for simular policy training")
@@ -157,6 +159,11 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         diff_augment = args.diff_aug
         diff_mix = not args.not_mix
         diff_reweight = not args.not_reweight
+        self.noaug_loss, self.noaug_add = False, False
+        if args.noaug_reg=='loss':
+            self.noaug_loss = True
+        elif args.noaug_reg=='add':
+            self.noaug_add = True
         test_fold_idx = self.config['kfold']
         train_val_test_folds = []
         if test_fold_idx>=0 and test_fold_idx<=9:
@@ -268,7 +275,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 keepaug_config=keepaug_config,
                 multilabel=multilabel,
                 augselect=args.augselect,
-                class_adaptive=args.class_adapt)
+                class_adaptive=args.class_adapt,
+                noaug_add=self.noaug_add)
         else:
             keepaug_config['length'] = keepaug_config['length'][0]
             self.adaaug = AdaAug_TS(after_transforms=after_transforms,
@@ -281,7 +289,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 keepaug_config=keepaug_config,
                 multilabel=multilabel,
                 augselect=args.augselect,
-                class_adaptive=args.class_adapt)
+                class_adaptive=args.class_adapt,
+                noaug_add=self.noaug_add)
         #to self
         self.n_channel = n_channel
         self.n_class = n_class
@@ -313,7 +322,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         diff_dic = {'difficult_aug':self.diff_augment,'same_train':args.same_train,'reweight':self.diff_reweight,'lambda_aug':args.lambda_aug,
                 'lambda_sim':args.lambda_sim,'class_adaptive':args.class_adapt,'lambda_noaug':args.lambda_noaug,
                 'loss_type':args.loss_type, 'adv_criterion': self.adv_criterion, 'teacher_model':self.ema_model, 'sim_criterion':self.sim_criterion,
-                'sim_reweight':args.sim_rew,'warmup_epoch': args.pwarmup}
+                'sim_reweight':args.sim_rew,'warmup_epoch': args.pwarmup,'lambda_noaug': args.lambda_noaug}
         # searching
         train_acc, train_obj, train_dic = search_train(args,self.train_queue, self.search_queue, self.tr_search_queue, self.gf_model, self.adaaug,
             self.criterion, self.gf_optimizer,self.scheduler, args.grad_clip, self.h_optimizer, self._iteration, args.search_freq, 

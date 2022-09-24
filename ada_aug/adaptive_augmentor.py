@@ -203,7 +203,8 @@ class AdaAug(nn.Module):
 
 class AdaAug_TS(AdaAug):
     def __init__(self, after_transforms, n_class, gf_model, h_model, save_dir=None, visualize=False,
-                    config=default_config,keepaug_config=default_config, multilabel=False, augselect='',class_adaptive=False):
+                    config=default_config,keepaug_config=default_config, multilabel=False, augselect='',class_adaptive=False,
+                    noaug_add=False):
         super(AdaAug_TS, self).__init__(after_transforms, n_class, gf_model, h_model, save_dir, config)
         #other already define in AdaAug
         self.ops_names = TS_OPS_NAMES.copy()
@@ -225,6 +226,11 @@ class AdaAug_TS(AdaAug):
         self.multilabel = multilabel
         self.class_adaptive = class_adaptive
         self.visualize = visualize
+        self.noaug_add = noaug_add
+        self.alpha = 0.5
+        self.noaug_max = 0.5
+        self.noaug_tensor = torch.zeros((1,self.n_ops)).float()
+        self.noaug_tensor[0:0] = self.noaug_max #noaug
 
     def predict_aug_params(self, X, seq_len, mode,y=None):
         self.gf_model.eval()
@@ -240,6 +246,8 @@ class AdaAug_TS(AdaAug):
         magnitudes, weights = torch.split(a_params, self.n_ops, dim=1)
         magnitudes = torch.sigmoid(magnitudes)
         weights = torch.nn.functional.softmax(weights/T, dim=-1)
+        if self.noaug_add: #add noaug reweights
+            weights = self.alpha * weights + (1-self.alpha) * self.noaug_tensor
         return magnitudes, weights
 
     def add_history(self, images, seq_len, targets,y=None):

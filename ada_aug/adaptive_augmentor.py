@@ -247,10 +247,11 @@ class AdaAug_TS(AdaAug):
         magnitudes = torch.sigmoid(magnitudes)
         weights = torch.nn.functional.softmax(weights/T, dim=-1)
         if self.noaug_add: #add noaug reweights
-            if self.class_adaptive: #alpha: (1,n_class), y: (batch_szie,n_class)
-                batch_alpha = self.alpha * y
+            if self.class_adaptive: #alpha: (1,n_class), y: (batch_szie,n_class)=>(batch_size,1)
+                batch_alpha = torch.sum(self.alpha * y,dim=-1,keepdim=True) / torch.sum(y,dim=-1,keepdim=True)
             else:
                 batch_alpha = self.alpha.view(-1)
+            print(batch_alpha)
             weights = batch_alpha * weights + (1.0-batch_alpha) * (self.noaug_tensor.cuda() + weights/2)
         return magnitudes, weights
 

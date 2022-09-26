@@ -135,6 +135,8 @@ def CB_loss(labels, logits, samples_per_cls, no_of_classes, loss_type, beta, gam
     weights = weights.sum(1)
     weights = weights.unsqueeze(1)
     weights = weights.repeat(1,no_of_classes)
+    print('CB loss weights:')
+    print(weights)
 
     if loss_type == "focal":
         cb_loss = focal_loss(labels_one_hot, logits, weights, gamma)

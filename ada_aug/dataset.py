@@ -7,6 +7,7 @@ from torchvision import transforms
 from datasets import EDFX,PTBXL,Chapman,WISDM
 import random
 from sklearn.preprocessing import StandardScaler
+from class_balanced_loss import CB_loss_weight
 
 _CIFAR_MEAN, _CIFAR_STD = (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)
 _SVHN_MEAN, _SVHN_STD = (0.43090966, 0.4302428, 0.44634357), (0.19652855, 0.19832038, 0.19942076)
@@ -299,7 +300,8 @@ def get_dataloaders(dataset, batch, num_workers, dataroot, cutout,
 def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
                     cutout_length, split=0.5, split_idx=0, target_lb=-1,
                     search=True, search_divider=1, search_size=0, test_size=0.2, multilabel=False,
-                    default_split=False,fold_assign=[], labelgroup=''):
+                    default_split=False,fold_assign=[], labelgroup='',
+                    bal_ssampler=''):
     '''
     If search is True, dataloader will give batches of image without after_transforms,
     the transform will be done by augment agent

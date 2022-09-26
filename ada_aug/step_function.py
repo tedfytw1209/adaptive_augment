@@ -496,9 +496,12 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
             out_dic['reweight_sum'] = re_weights_sum / search_total
             out_dic['aug_diff_loss'] = aug_diff_loss / search_total
             out_dic['ori_diff_loss'] = ori_diff_loss / search_total
+            out_dic['search_loss'] = out_dic['adaptive_loss']+out_dic['difficult_loss']
+        else:
+            out_dic['search_loss'] = out_dic['adaptive_loss']
         if lambda_noaug>0:
             out_dic['noaug_reg'] = noaug_reg_sum / search_total
-        out_dic['search_loss'] = out_dic['adaptive_loss']+out_dic['difficult_loss']
+        
     out_dic[f'train_{ptype}_avg'] = perfrom
     for i,e_c in enumerate(perfrom_cw):
         out_dic[f'train_{ptype}_c{i}'] = e_c

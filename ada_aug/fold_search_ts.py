@@ -119,6 +119,7 @@ if args.class_adapt:
     description += f'cada{args.policy_loss}'
 else:
     description += ''
+description += args.noaug_reg
 if args.diff_aug and not args.not_reweight:
     description+='rew'
 if args.keep_aug:

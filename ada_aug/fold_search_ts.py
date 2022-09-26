@@ -276,7 +276,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 keepaug_config=keepaug_config,
                 multilabel=multilabel,
                 augselect=args.augselect,
-                class_adaptive=args.class_adapt,
+                class_adaptive=self.class_noaug,
                 noaug_add=self.noaug_add)
         else:
             keepaug_config['length'] = keepaug_config['length'][0]
@@ -290,7 +290,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 keepaug_config=keepaug_config,
                 multilabel=multilabel,
                 augselect=args.augselect,
-                class_adaptive=args.class_adapt,
+                class_adaptive=self.class_noaug,
                 noaug_add=self.noaug_add)
         #to self
         self.n_channel = n_channel
@@ -330,6 +330,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             search_round=args.search_round,multilabel=self.multilabel,n_class=self.n_class,map_select=self.mapselect, **diff_dic)
         if self.noaug_add:
             class_acc = train_acc / 100.0
+            if self.class_noaug:
+                class_acc = [train_dic[f'train_{ptype}_c{i}'] / 100.0 for i in range(self.n_class)]
             self.adaaug.update_alpha(class_acc)
         # validation
         valid_acc, valid_obj,valid_dic = search_infer(self.valid_queue, self.gf_model, self.criterion, 

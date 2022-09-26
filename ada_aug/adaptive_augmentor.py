@@ -252,7 +252,8 @@ class AdaAug_TS(AdaAug):
                 batch_alpha = self.alpha[y]
             else:
                 batch_alpha = self.alpha
-            print(torch.sum(self.noaug_tensor.cuda() + weights/2,dim=-1))
+            print(torch.sum(self.noaug_tensor.cuda(),dim=-1))
+            print(torch.sum(weights/2,dim=-1))
             weights = batch_alpha * weights + (1.0-batch_alpha) * (self.noaug_tensor.cuda() + weights/2)
             print(torch.sum(weights,dim=-1))
         return magnitudes, weights

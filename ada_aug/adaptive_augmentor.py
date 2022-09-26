@@ -246,8 +246,10 @@ class AdaAug_TS(AdaAug):
         magnitudes, weights = torch.split(a_params, self.n_ops, dim=1)
         magnitudes = torch.sigmoid(magnitudes)
         weights = torch.nn.functional.softmax(weights/T, dim=-1)
+        assert 0.0<=self.alpha<=1.0
         if self.noaug_add: #add noaug reweights
-            weights = self.alpha * weights + (1-self.alpha) * (self.noaug_tensor.cuda()+weights/2)
+            weights = self.alpha * weights + (1.0-self.alpha) * (self.noaug_tensor.cuda()+weights/2)
+            print(torch.sum(weights,dim=1))
         return magnitudes, weights
 
     def add_history(self, images, seq_len, targets,y=None):

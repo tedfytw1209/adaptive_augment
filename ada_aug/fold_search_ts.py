@@ -328,7 +328,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             self.criterion, self.gf_optimizer,self.scheduler, args.grad_clip, self.h_optimizer, self._iteration, args.search_freq, 
             search_round=args.search_round,multilabel=self.multilabel,n_class=self.n_class,map_select=self.mapselect, **diff_dic)
         if self.noaug_add:
-            class_acc = train_acc
+            class_acc = train_acc / 100.0
             self.adaaug.update_alpha(class_acc)
         # validation
         valid_acc, valid_obj,valid_dic = search_infer(self.valid_queue, self.gf_model, self.criterion, 

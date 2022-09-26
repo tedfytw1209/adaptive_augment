@@ -227,7 +227,7 @@ class AdaAug_TS(AdaAug):
         self.class_adaptive = class_adaptive
         self.visualize = visualize
         self.noaug_add = noaug_add
-        self.alpha = 0.5
+        self.alpha = torch.tensor([0.5]).view(1,-1).cuda()
         self.noaug_max = 0.5
         self.noaug_tensor = self.noaug_max * F.one_hot(torch.tensor([0]), num_classes=self.n_ops).float()
         print(self.noaug_tensor)
@@ -247,10 +247,10 @@ class AdaAug_TS(AdaAug):
         magnitudes = torch.sigmoid(magnitudes)
         weights = torch.nn.functional.softmax(weights/T, dim=-1)
         if self.noaug_add: #add noaug reweights
-            if self.class_adaptive: #alpha: (n_class), y: (batch_szie)
-                batch_alpha = self.alpha[y]
+            if self.class_adaptive: #alpha: (1,n_class), y: (batch_szie,n_class)
+                batch_alpha = self.alpha * y
             else:
-                batch_alpha = self.alpha
+                batch_alpha = self.alpha.view(-1)
             weights = batch_alpha * weights + (1.0-batch_alpha) * (self.noaug_tensor.cuda() + weights/2)
         return magnitudes, weights
 
@@ -393,7 +393,7 @@ class AdaAug_TS(AdaAug):
             plt.savefig(f'{self.save_dir}/img{idx}_{title}.png')
     
     def update_alpha(self,class_acc):
-        self.alpha = class_acc
+        self.alpha = torch.tensor(class_acc).view(1,-1).cuda()
 
 class AdaAugkeep_TS(AdaAug):
     def __init__(self, after_transforms, n_class, gf_model, h_model, save_dir=None, visualize=False,

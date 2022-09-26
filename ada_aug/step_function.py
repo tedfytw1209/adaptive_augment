@@ -381,6 +381,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 input_search, seq_len, target_search = next(iter(search_queue))
                 input_search = input_search.float().cuda()
                 target_search = target_search.cuda()
+                search_bs = target_search.shape[0]
                 policy_y = None
                 if class_adaptive: #target to onehot
                     if not multilabel:
@@ -416,8 +417,8 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 ori_search_loss += ori_loss.detach().item()
                 loss = sim_loss_func(ori_loss,loss)
                 if sim_reweight: #reweight part, a,b = ?
-                    p_orig = origin_logits.softmax(dim=1)[torch.arange(batch_size), target_search].detach()
-                    p_aug = logits_search.softmax(dim=1)[torch.arange(batch_size), target_search].clone().detach()
+                    p_orig = origin_logits.softmax(dim=1)[torch.arange(search_bs), target_search].detach()
+                    p_aug = logits_search.softmax(dim=1)[torch.arange(search_bs), target_search].clone().detach()
                     w_aug = torch.sqrt((1.0 - p_orig) * torch.clamp(p_aug - p_orig, min=0)) #a=0.5,b=0.5
                     if w_aug.sum() > 0:
                         w_aug /= (w_aug.mean().detach() + 1e-6)
@@ -482,17 +483,18 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     #wandb dic
     out_dic = {}
     out_dic['train_loss'] = objs.avg
-    out_dic['adaptive_loss'] = adaptive_loss / search_total
-    out_dic['aug_sear_loss'] = aug_search_loss / search_total
-    out_dic['ori_sear_loss'] = ori_search_loss / search_total
-    if difficult_aug:
-        out_dic['difficult_loss'] = difficult_loss / search_total
-        out_dic['reweight_sum'] = re_weights_sum / search_total
-        out_dic['aug_diff_loss'] = aug_diff_loss / search_total
-        out_dic['ori_diff_loss'] = ori_diff_loss / search_total
-    if lambda_noaug>0:
-        out_dic['noaug_reg'] = noaug_reg_sum / search_total
-    out_dic['search_loss'] = out_dic['adaptive_loss']+out_dic['difficult_loss']
+    if epoch>= warmup_epoch:
+        out_dic['adaptive_loss'] = adaptive_loss / search_total
+        out_dic['aug_sear_loss'] = aug_search_loss / search_total
+        out_dic['ori_sear_loss'] = ori_search_loss / search_total
+        if difficult_aug:
+            out_dic['difficult_loss'] = difficult_loss / search_total
+            out_dic['reweight_sum'] = re_weights_sum / search_total
+            out_dic['aug_diff_loss'] = aug_diff_loss / search_total
+            out_dic['ori_diff_loss'] = ori_diff_loss / search_total
+        if lambda_noaug>0:
+            out_dic['noaug_reg'] = noaug_reg_sum / search_total
+        out_dic['search_loss'] = out_dic['adaptive_loss']+out_dic['difficult_loss']
     out_dic[f'train_{ptype}_avg'] = perfrom
     for i,e_c in enumerate(perfrom_cw):
         out_dic[f'train_{ptype}_c{i}'] = e_c

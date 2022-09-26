@@ -89,7 +89,7 @@ parser.add_argument('--lambda_noaug', type=float, default=0, help="no augment re
 parser.add_argument('--class_adapt', action='store_true', default=False, help='class adaptive')
 parser.add_argument('--class_embed', action='store_true', default=False, help='class embed') #tmp use
 parser.add_argument('--noaug_reg', type=str, default='', help='add regular for noaugment ',
-        choices=['loss','add',''])
+        choices=['cadd','add',''])
 parser.add_argument('--loss_type', type=str, default='minus', help="loss type for difficult policy training",
         choices=['minus','relative','relativediff','adv'])
 parser.add_argument('--policy_loss', type=str, default='', help="loss type for simular policy training")
@@ -159,9 +159,10 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         diff_augment = args.diff_aug
         diff_mix = not args.not_mix
         diff_reweight = not args.not_reweight
-        self.noaug_loss, self.noaug_add = False, False
-        if args.noaug_reg=='loss':
-            self.noaug_loss = True
+        self.class_noaug, self.noaug_add = False, False
+        if args.noaug_reg=='cadd':
+            self.class_noaug = True
+            self.noaug_add = True
         elif args.noaug_reg=='add':
             self.noaug_add = True
         test_fold_idx = self.config['kfold']

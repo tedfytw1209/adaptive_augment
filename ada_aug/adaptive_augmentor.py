@@ -247,7 +247,7 @@ class AdaAug_TS(AdaAug):
         magnitudes = torch.sigmoid(magnitudes)
         weights = torch.nn.functional.softmax(weights/T, dim=-1)
         if self.noaug_add: #add noaug reweights
-            weights = self.alpha * weights + (1-self.alpha) * self.noaug_tensor
+            weights = self.alpha * weights + (1-self.alpha) * (self.noaug_tensor.cuda()+weights/2)
         return magnitudes, weights
 
     def add_history(self, images, seq_len, targets,y=None):
@@ -387,6 +387,9 @@ class AdaAug_TS(AdaAug):
             if title:
                 plt.title(title)
             plt.savefig(f'{self.save_dir}/img{idx}_{title}.png')
+    
+    def update_alpha(self,class_acc):
+        self.alpha = class_acc
 
 class AdaAugkeep_TS(AdaAug):
     def __init__(self, after_transforms, n_class, gf_model, h_model, save_dir=None, visualize=False,

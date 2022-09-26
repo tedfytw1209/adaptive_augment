@@ -272,7 +272,10 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 policy_y = target.cuda().float()
         # exploitation
         timer = time.time()
-        aug_images = adaaug(input, seq_len, mode='exploit',y=policy_y)
+        if epoch>=warmup_epoch:
+            aug_images = adaaug(input, seq_len, mode='exploit',y=policy_y)
+        else:
+            aug_images = input
         aug_images = aug_images.cuda()
         gf_model.train()
         gf_optimizer.zero_grad()
@@ -394,9 +397,10 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 noaug_target = torch.zeros(target_search.shape).cuda().long()
                 if lambda_noaug>0: #need test
                     noaug_loss = lambda_noaug * noaug_criterion(aug_weight,noaug_target)
+                    noaug_reg_sum += noaug_loss.detach().item()
                 else:
                     noaug_loss = 0
-                noaug_reg_sum += noaug_loss.detach().item()
+                
                 #tea
                 if teacher_model==None:
                     sim_model = gf_model
@@ -418,7 +422,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 if sim_reweight: #reweight part, a,b = ?
                     p_orig = origin_logits.softmax(dim=1)[torch.arange(batch_size), target_search].detach()
                     p_aug = logits_search.softmax(dim=1)[torch.arange(batch_size), target_search].clone().detach()
-                    w_aug = torch.sqrt((1.0 - p_orig) * torch.clamp(p_aug - p_orig, min=0)) #a=0.5,b=0.5
+                    w_aug = torch.sqrt((1.0 - p_orig)) #a=0.5,b=0.5
                     if w_aug.sum() > 0:
                         w_aug /= (w_aug.mean().detach() + 1e-6)
                     else:
@@ -490,9 +494,12 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
         out_dic['reweight_sum'] = re_weights_sum / search_total
         out_dic['aug_diff_loss'] = aug_diff_loss / search_total
         out_dic['ori_diff_loss'] = ori_diff_loss / search_total
+        out_dic['search_loss'] = out_dic['adaptive_loss']+out_dic['difficult_loss']
+    else:
+        out_dic['search_loss'] = out_dic['adaptive_loss']
     if lambda_noaug>0:
         out_dic['noaug_reg'] = noaug_reg_sum / search_total
-    out_dic['search_loss'] = out_dic['adaptive_loss']+out_dic['difficult_loss']
+    
     out_dic[f'train_{ptype}_avg'] = perfrom
     for i,e_c in enumerate(perfrom_cw):
         out_dic[f'train_{ptype}_c{i}'] = e_c

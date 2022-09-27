@@ -225,7 +225,7 @@ def rel_loss(ori_loss, aug_loss):
 def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, adaaug, criterion, gf_optimizer,scheduler,
             grad_clip, h_optimizer, epoch, search_freq,search_round=1, multilabel=False,n_class=10,
             difficult_aug=False,same_train=False,reweight=True,sim_reweight=False,mix_feature=True, warmup_epoch = 0
-            ,lambda_sim = 1.0,lambda_aug = 1.0,loss_type='minus',lambda_noaug = 0,
+            ,lambda_sim = 1.0,lambda_aug = 1.0,loss_type='minus',lambda_noaug = 0,train_perfrom = 0.0,
             class_adaptive=False,adv_criterion=None,sim_criterion=None,teacher_model=None,map_select=False):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
@@ -397,7 +397,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 aug_weight = aug_weights[0] # (bs, n_ops), 0 is NOAUG
                 noaug_target = torch.zeros(target_search.shape).cuda().long()
                 if lambda_noaug>0: #need test
-                    noaug_loss = lambda_noaug * noaug_criterion(aug_weight,noaug_target)
+                    noaug_loss = lambda_noaug * (1.0 - train_perfrom) * noaug_criterion(aug_weight,noaug_target)
                     noaug_reg_sum += noaug_loss.detach().item()
                 else:
                     noaug_loss = 0

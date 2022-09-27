@@ -88,6 +88,8 @@ parser.add_argument('--not_reweight', action='store_true', default=False, help='
 parser.add_argument('--lambda_aug', type=float, default=1.0, help="augment sample weight")
 parser.add_argument('--class_adapt', action='store_true', default=False, help='class adaptive')
 parser.add_argument('--class_embed', action='store_true', default=False, help='class embed') #tmp use
+parser.add_argument('--noaug_reg', type=str, default='', help='add regular for noaugment ',
+        choices=['cadd','add',''])
 parser.add_argument('--keep_aug', action='store_true', default=False, help='info keep augment')
 parser.add_argument('--keep_mode', type=str, default='auto', help='info keep mode',choices=['auto','adapt','b','p','t'])
 parser.add_argument('--keep_seg', type=int, nargs='+', default=[1], help='info keep segment mode')
@@ -111,6 +113,7 @@ if args.class_adapt:
     description += 'cada'
 else:
     description += ''
+description += args.noaug_reg
 if args.diff_aug and not args.not_reweight:
     description+='rew'
 if args.keep_aug:
@@ -147,6 +150,12 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         multilabel = args.multilabel
         diff_augment = args.diff_aug
         diff_reweight = not args.not_reweight
+        self.class_noaug, self.noaug_add = False, False
+        if args.noaug_reg=='cadd':
+            self.class_noaug = True
+            self.noaug_add = True
+        elif args.noaug_reg=='add':
+            self.noaug_add = True
         test_fold_idx = self.config['kfold']
         train_val_test_folds = [[],[],[]] #train,valid,test
         for i in range(10):
@@ -238,7 +247,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 keepaug_config=keepaug_config,
                 multilabel=multilabel,
                 augselect=args.augselect,
-                class_adaptive=args.class_adapt)
+                class_adaptive=self.class_noaug,
+                noaug_add=self.noaug_add)
         else:
             keepaug_config['length'] = keepaug_config['length'][0]
             self.adaaug = AdaAug_TS(after_transforms=after_transforms,
@@ -251,7 +261,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 keepaug_config=keepaug_config,
                 multilabel=multilabel,
                 augselect=args.augselect,
-                class_adaptive=args.class_adapt)
+                class_adaptive=self.class_noaug,
+                noaug_add=self.noaug_add)
         #to self
         self.n_channel = n_channel
         self.n_class = n_class
@@ -266,6 +277,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         self.best_task = None
         self.base_path = self.config['BASE_PATH']
         self.mapselect = self.config['mapselect']
+        self.pre_train_acc = 0.0
     def step(self):#use step replace _train
         if self._iteration==0:
             wandb.config.update(self.config)
@@ -285,6 +297,12 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         train_acc, train_obj, train_dic = train(args,
             self.train_queue, self.task_model, self.criterion, self.optimizer, self.scheduler, self._iteration, args.grad_clip, self.adaaug, 
                 multilabel=self.multilabel,n_class=self.n_class,map_select=self.mapselect,**diff_dic)
+        if self.noaug_add:
+            class_acc = train_acc / 100.0
+            if self.class_noaug:
+                class_acc = [train_dic[f'train_{ptype}_c{i}'] / 100.0 for i in range(self.n_class)]
+            self.adaaug.update_alpha(class_acc)
+        self.pre_train_acc = train_acc / 100.0
         # validation
         valid_acc, valid_obj, _, _, valid_dic = infer(self.valid_queue, self.task_model, self.criterion, multilabel=self.multilabel,
                 n_class=self.n_class,mode='valid',map_select=self.mapselect)

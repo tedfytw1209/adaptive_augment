@@ -7,6 +7,7 @@ from torchvision import transforms
 from datasets import EDFX,PTBXL,Chapman,WISDM
 import random
 from sklearn.preprocessing import StandardScaler
+from utils import make_weights_for_balanced_classes
 
 _CIFAR_MEAN, _CIFAR_STD = (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)
 _SVHN_MEAN, _SVHN_STD = (0.43090966, 0.4302428, 0.44634357), (0.19652855, 0.19832038, 0.19942076)
@@ -452,12 +453,23 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
         pin_memory=True, num_workers=num_workers)
 
     if search and search_dataset is not None:
+        if bal_ssampler=='weight':
+            se_weights = make_weights_for_balanced_classes(search_data.dataset.label,nclasses=search_data.dataset.num_class)
+            se_sampler = torch.utils.data.sampler.WeightedRandomSampler(se_weights, len(se_weights))
+            tr_weights = make_weights_for_balanced_classes(train_data.dataset.label,nclasses=train_data.dataset.num_class)
+            tr_sampler = torch.utils.data.sampler.WeightedRandomSampler(tr_weights, len(tr_weights))
+            print('search set weight: ', se_weights)
+            print('search tr set weight: ', tr_weights)
+        else:
+            se_sampler = None
+            tr_sampler = None
+
         searchloader = torch.utils.data.DataLoader(
-            search_data, batch_size=search_divider,
+            search_data, batch_size=search_divider, sampler = se_sampler,
             shuffle=True, drop_last=True, pin_memory=True,
             num_workers=num_workers)
         tr_searchloader = torch.utils.data.DataLoader(
-            train_data, batch_size=search_divider,
+            train_data, batch_size=search_divider, sampler = tr_sampler,
             shuffle=True, drop_last=True, pin_memory=True,
             num_workers=num_workers)
     else:

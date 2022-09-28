@@ -233,6 +233,7 @@ class AdaAug_TS(AdaAug):
         print(self.noaug_tensor)
 
     def predict_aug_params(self, X, seq_len, mode,y=None):
+        print('y: ',y)
         self.gf_model.eval()
         if mode == 'exploit':
             self.h_model.eval()

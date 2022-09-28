@@ -367,7 +367,7 @@ def main():
     h_model_dir = h_model_dir.strip('/').split('/')[-1][:16]
     #wandb
     group_name = f'{Aug_type}_tottrain{args.augselect}_{args.dataset}{args.labelgroup}_{args.model_name}_hmodel{h_model_dir}_e{args.epochs}_lr{args.learning_rate}'
-    experiment_name = f'{Aug_type}{args.k_ops}_tottrain{args.augselect}_{args.dataset}{args.labelgroup}_{args.model_name}_{h_model_dir}_e{args.epochs}_lr{args.learning_rate}'
+    experiment_name = f'{Aug_type}{args.k_ops}{description}_tottrain{args.augselect}_{args.dataset}{args.labelgroup}_{args.model_name}_{h_model_dir}_e{args.epochs}_lr{args.learning_rate}'
     '''run_log = wandb.init(config=args, 
                   project='AdaAug',
                   group=experiment_name,

@@ -10,13 +10,14 @@ from .base import BaseDataset
 from biosppy.signals import tools
 
 #DEFAULT_PATH = "/mnt/data2/teddy"
-MAX_LENGTH = 30000
+HZ, MAX_LEN = 100,60
+MAX_LENGTH = HZ * MAX_LEN
 LABEL_GROUPS = {"all":9}
 
 def input_resizeing(raw_data,ratio=1):
-    input_data = np.zeros((len(raw_data),int(30000*ratio),12))
+    input_data = np.zeros((len(raw_data),int(MAX_LENGTH*ratio),12))
     for idx, data in enumerate(raw_data):
-        input_data[idx,:data.shape[0],:data.shape[1]] = tools.normalize(data[0:int(30000*ratio),:])['signal']
+        input_data[idx,:data.shape[0],:data.shape[1]] = tools.normalize(data[0:int(MAX_LENGTH*ratio),:])['signal']
     return input_data
 
 def make_split_indices(test_k,each_lens,sub_tr_ratio):
@@ -51,7 +52,7 @@ class ICBEB(BaseDataset):
         self.resize_ratio = resize_ratio
         self.channel = 12
         self.sub_tr_ratio = 1.0
-        self.Hz = 500
+        self.Hz = 100
         #k, ratio, sub_tr_idx, valid_idx, test_idx
         self.split_indices = [[0, self.sub_tr_ratio, 0, 0, 0]]
         if self.multilabel:

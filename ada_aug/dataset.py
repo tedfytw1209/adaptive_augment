@@ -513,7 +513,7 @@ Freq_dict = {
     'ptbxl' : 100,
     'wisdm' : 20,
     'chapman' : 500,
-    'icbeb' : 500,
+    'icbeb' : 100,
     'georgia' : 500,
 }
 TimeS_dict = {
@@ -534,7 +534,7 @@ def get_dataset_dimension(dset):
             'ptbxl':1000,
             'wisdm':200,
             'chapman':5000,
-            'icbeb' : 30000,
+            'icbeb' : 6000,
             'georgia' : 5000,
             }[dset]
 

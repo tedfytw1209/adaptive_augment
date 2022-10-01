@@ -1,0 +1,177 @@
+from cProfile import label
+import os
+import pickle
+from scipy import stats
+from scipy.io import loadmat
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split
+import torch
+from torch.utils.data import Dataset
+from .base import BaseDataset
+from sklearn.model_selection import StratifiedKFold,KFold
+
+
+MAX_LENGTH = 5000
+LABEL_GROUPS = {"all":11}
+
+class Georgia(BaseDataset):
+    def __init__(self, dataset_path,labelgroup='all',mode='all',seed=42,multilabel=False,transfroms=[],augmentations=[],label_transfroms=[],**_kwargs):
+        super(Georgia,self).__init__(transfroms=transfroms,augmentations=augmentations,label_transfroms=label_transfroms)
+        self.dataset_path = dataset_path
+        self.max_len = MAX_LENGTH
+        self.num_class = LABEL_GROUPS[labelgroup]
+        self.multilabel = multilabel
+        if multilabel:
+            self.lb = 'ml'
+        else:
+            self.lb = 'single'
+        self.channel = 12
+        self.labelgroup = labelgroup
+        self.sub_tr_ratio = 1.0
+        #k, ratio, sub_tr_idx, valid_idx, test_idx
+        self.split_indices = []
+        self.fold_indices = [] # fold_idx : indices
+        if self.labelgroup in ['rhythm','superrhythm'] and self.multilabel:
+            print('Rhythm only have single label')
+            exit()
+        if not self._check_data():
+            self.process_data()
+        self._get_data(mode=mode,seed=seed)
+    
+    def _check_data(self):
+        return os.path.isfile(os.path.join(self.dataset_path,f'X_{self.labelgroup}data_{self.lb}.npy')) and \
+                os.path.isfile(os.path.join(self.dataset_path,f'y_{self.labelgroup}data_{self.lb}.npy'))
+    def _get_data(self,mode='all',seed=42):
+        self.input_data = None
+        self.label = None
+        self.input_data = np.load(os.path.join(self.dataset_path,f'X_{self.labelgroup}data_{self.lb}.npy'),allow_pickle=True)
+        self.label = np.load(os.path.join(self.dataset_path,f'y_{self.labelgroup}data_{self.lb}.npy'),allow_pickle=True)
+        print('Label counts:')
+        unique, counts = np.unique(self.label, return_counts=True)
+        counts_array = np.asarray((unique, counts)).T
+        print(counts_array)
+        #Auto make self.split_indices / self.fold_indices
+        all_indices = np.arange(len(self.label))
+        n_fold = 10
+        if not self.multilabel:
+            skf = StratifiedKFold(n_splits=n_fold,random_state=seed, shuffle=True)
+        else:
+            skf = KFold(n_splits=n_fold,random_state=seed, shuffle=True)
+        tot_len = 0
+        for train_index, test_index in skf.split(self.input_data, self.label):
+            self.fold_indices.append(test_index) #give fold indexs
+            tot_len += len(test_index)
+        assert tot_len==len(self.label)
+        for test_k in range(n_fold):
+            tr_idx,valid_idx,test_idx = np.array([]),None,None
+            for i in range(n_fold):
+                fold_idx = self.fold_indices[i]
+                if i==test_k:
+                    test_idx = fold_idx
+                elif i==(test_k-1+10)%10:
+                    valid_idx = fold_idx
+                else:
+                    tr_idx = np.concatenate([tr_idx,fold_idx],axis=0).astype(int)
+            self.split_indices.append([test_k, self.sub_tr_ratio, tr_idx, valid_idx, test_idx])
+        #make split indice
+        if isinstance(mode,list):
+            select_idxs = np.array([])
+            for fold in mode: # fold:1~10, fold_indices:0~9
+                select_idxs = np.concatenate([select_idxs,self.fold_indices[fold-1]],axis=0).astype(int)
+            self.input_data = self.input_data[select_idxs]
+            self.label = self.label[select_idxs]
+        
+
+    def process_data(self):
+        print('Process data')
+        #dx dic
+        dx_df = pd.read_csv(os.path.join(self.dataset_path,'Dx_map.csv'))
+        dx_dic = {str(k):str(v) for (k,v) in zip(dx_df['SNOMED CT Code'],dx_df['Abbreviation'])}
+        print(dx_dic)
+        select = None
+        trans_dic = None
+        outlabel = None
+        if self.labelgroup=='all':
+            pass
+        else:
+            print('label group error')
+            exit()
+        
+        df = pd.DataFrame()
+        labels = set()
+        for i in range(1, 10647): # 10646
+            try:
+                with open(os.path.join(self.dataset_path,'raw','JS%05d.hea'%i), 'r') as f:
+                    header = f.read()
+                #print(header)
+                #print(m['val'].shape)
+            except:
+                continue
+            for l in header.split('\n'):
+                if l.startswith('#Dx'):
+                    entries = l.split(': ')[1].split(',')
+                    abb_names = []
+                    for entry in entries:
+                        #print(entry)
+                        abb_name = dx_dic.get(entry,None)
+                        if abb_name != None:
+                            if trans_dic:
+                                abb_name = trans_dic[abb_name]
+                            df.loc[i, abb_name] = 1
+                            df.loc[i, 'id'] = i
+                            df.loc[i, 'filename'] = '%s/raw/JS%05d'%(self.dataset_path,i)
+                            labels.add(abb_name.strip())
+                            abb_names.append(abb_name)
+                    #print(entry.strip(), end=' ')
+                    df.loc[i, 'count'] = len(abb_names)
+            #break
+        df = df.dropna(axis=0,how='any',subset=['id'])
+        df = df.fillna(0)
+        print(labels)
+        df.to_csv(f'raw{self.labelgroup}_{self.lb}.csv')
+        fixed_col = ['id', 'filename', 'count', 'new_count']
+        # del low number columns
+        cols = []
+        for col in df.columns:
+            if col in fixed_col: continue
+            yes_cnt = df[col].value_counts()[1]
+            #if yes_cnt < 300: 
+            #    df = df.drop(columns=col)
+            #else:
+            cols.append(col)
+        #index reset
+        df = df.reset_index(drop=True)
+        df = df.drop(columns=['count','filename'])
+        if outlabel==None:
+            outlabel = sorted(cols)
+        else:
+            outlabel = [n for n in outlabel if n in cols] #only if >300
+        df = df.reindex(columns=['id']+outlabel)
+        df.to_csv(f'test{self.labelgroup}_{self.lb}.csv')
+        #read data
+        id_list = df['id'].values
+        input_data = []
+        for id in id_list:
+            m = loadmat(os.path.join(self.dataset_path,'raw',"JS%05d.mat"%id))
+            input_data.append(m['val'].T)
+        input_data = np.array(input_data) #bs X L X channel
+        labels = df.drop(columns='id').values
+        #multilabel or singlelabel
+        label_sum = np.sum(labels,axis=1)
+        unique, counts = np.unique(label_sum, return_counts=True)
+        counts_array = np.asarray((unique, counts)).T
+        counts_data = pd.DataFrame(counts_array,columns=['label_counts','number'])
+        counts_data.to_csv(f'label_counts{self.labelgroup}_{self.lb}.csv')
+        if not self.multilabel:
+            input_data = input_data[(label_sum==1)]
+            labels = labels[(label_sum==1)]
+            labels = np.argmax(labels, axis=1)
+        print('Data shape: ',input_data.shape)
+        print('Labels shape: ',labels.shape)
+        np.save(os.path.join(self.dataset_path,f'X_{self.labelgroup}data_{self.lb}.npy'),input_data)
+        np.save(os.path.join(self.dataset_path,f'y_{self.labelgroup}data_{self.lb}.npy'),labels)
+        #self.input_data = input_data
+        #self.label = labels
+    def get_split_indices(self):
+        return self.split_indices

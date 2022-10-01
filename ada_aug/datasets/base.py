@@ -45,9 +45,15 @@ class BaseDataset(Dataset):
     def _get_data(self):
         return
     
-    def fit_preprocess(self,preprocessor):
-        preprocessor.fit(np.vstack(self.input_data).flatten()[:,np.newaxis].astype(float))
+    def fit_preprocess(self,preprocessor, indexs=[]):
+        if len(indexs)==0:
+            preprocessor.fit(np.vstack(self.input_data[indexs]).flatten()[:,np.newaxis].astype(float))
+        else:
+            preprocessor.fit(np.vstack(self.input_data).flatten()[:,np.newaxis].astype(float))
         return preprocessor
     def trans_preprocess(self,preprocessor):
         self.input_data = apply_standardizer(self.input_data,preprocessor)
         return preprocessor
+    def set_preprocess(self, preprocessor):
+        self.preprocessor = [preprocessor]
+        return

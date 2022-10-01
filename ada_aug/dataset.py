@@ -4,7 +4,7 @@ import torchvision
 from sklearn.model_selection import StratifiedShuffleSplit,ShuffleSplit
 from torch.utils.data import Sampler, Subset, SubsetRandomSampler
 from torchvision import transforms
-from datasets import EDFX,PTBXL,Chapman,WISDM
+from datasets import EDFX,PTBXL,Chapman,WISDM,ICBEB,Georgia
 import random
 from sklearn.preprocessing import StandardScaler
 from utils import make_weights_for_balanced_classes
@@ -132,6 +132,8 @@ def get_num_class(dataset,labelgroup=''):
         'chapmanall':11,
         'chapmanrhythm':6,
         'chapmansuperrhythm':4,
+        'icbeball' : 9,
+        'georgiaall' : 10, #!!! unknown now
     }
     return dataset_dic[dataset+labelgroup]
 
@@ -146,6 +148,8 @@ def get_num_channel(dataset):
         'ptbxl': 12,
         'wisdm': 3,
         'chapman': 12,
+        'icbeb' : 12,
+        'georgia' : 12,
     }[dataset]
 
 
@@ -332,6 +336,14 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
         dataset_func = Chapman
         if labelgroup:
             kwargs['labelgroup']=labelgroup
+    elif dataset_name == 'icbeb':
+        dataset_func = ICBEB
+        if labelgroup:
+            kwargs['labelgroup']=labelgroup
+    elif dataset_name == 'georgia':
+        dataset_func = Georgia
+        if labelgroup:
+            kwargs['labelgroup']=labelgroup
     else:
         ValueError(f'Invalid dataset name={dataset}')
     
@@ -501,12 +513,16 @@ Freq_dict = {
     'ptbxl' : 100,
     'wisdm' : 20,
     'chapman' : 500,
+    'icbeb' : 500,
+    'georgia' : 500,
 }
 TimeS_dict = {
     'edfx' : 30,
     'ptbxl' : 10,
     'wisdm' : 10,
     'chapman' : 10,
+    'icbeb' : 60,
+    'georgia' : 10,
 }
 
 def get_dataset_dimension(dset):
@@ -518,6 +534,8 @@ def get_dataset_dimension(dset):
             'ptbxl':1000,
             'wisdm':200,
             'chapman':5000,
+            'icbeb' : 30000,
+            'georgia' : 5000,
             }[dset]
 
 

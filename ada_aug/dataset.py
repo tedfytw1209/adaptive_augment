@@ -132,6 +132,7 @@ def get_num_class(dataset,labelgroup=''):
         'chapmanall':11,
         'chapmanrhythm':6,
         'chapmansuperrhythm':4,
+        'icbeb' : 9,
         'icbeball' : 9,
         'georgiaall' : 10, #!!! unknown now
     }

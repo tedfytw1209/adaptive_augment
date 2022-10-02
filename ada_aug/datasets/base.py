@@ -46,7 +46,7 @@ class BaseDataset(Dataset):
         return
     
     def fit_preprocess(self,preprocessor, indexs=[]):
-        if len(indexs)==0:
+        if len(indexs)!=0:
             preprocessor.fit(np.vstack(self.input_data[indexs]).flatten()[:,np.newaxis].astype(float))
         else:
             preprocessor.fit(np.vstack(self.input_data).flatten()[:,np.newaxis].astype(float))

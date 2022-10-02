@@ -134,6 +134,7 @@ def get_num_class(dataset,labelgroup=''):
         'chapmansuperrhythm':4,
         'icbeb' : 9,
         'icbeball' : 9,
+        'georgia' : 10,
         'georgiaall' : 10, #!!! unknown now
     }
     return dataset_dic[dataset+labelgroup]

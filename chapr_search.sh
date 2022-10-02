@@ -1,0 +1,16 @@
+
+CUDA_VISIBLE_DEVICES=3,4 python ada_aug/fold_search_ts.py --k_ops 1 --report_freq 5 --num_workers 4 --epochs 50 --batch_size 128  --learning_rate 0.01  --dataset chapman --model_name resnet_wang --save chapmanr_resnet_kfold --gpu 0.5 --cpu 2  --ray_name chapmanr_resnet_kfold --kfold 8 --weight_decay 0.01 --proj_learning_rate 0.0001 --search_freq 10  --temperature 3 --dataroot /mnt/data2/teddy/CWDA_research/CWDA/datasets/WFDB_ChapmanShaoxing/ --train_portion 0.5 --search_size 0.5 --labelgroup rhythm --valselect --search_round 4
+
+#tmp train
+#CUDA_VISIBLE_DEVICES=0,3,4 python ada_aug/fold_train_ts.py --temperature 3 --delta 0.3 --search_dataset chapman --gf_model_path search/chapman/20220914-113228-chapmanr_resnet_kfold-AdaAug/ --h_model_path search/chapman/20220914-113228-chapmanr_resnet_kfold-AdaAug/ --gf_model_name resnet_wang --k_ops 1 --report_freq 10 --num_workers 2 --epochs 50 --batch_size 128 --learning_rate 0.01 --dataset chapman  --model_name resnet_wang --labelgroup rhythm --save chapr_resnettr_kfold --ray_name chapr_resnettr_kfold --gpu 0.5 --cpu 2 --weight_decay 0.01 --train_portion 1 --dataroot /mnt/data2/teddy/CWDA_research/CWDA/datasets/WFDB_ChapmanShaoxing/ --kfold 10 --valselect
+
+#CUDA_VISIBLE_DEVICES=0,3,4 python ada_aug/fold_train_ts.py --temperature 3 --delta 0.3 --search_dataset chapman --gf_model_path search/chapman/20220914-113228-chapmanr_resnet_kfold-AdaAug/ --h_model_path search/chapman/20220914-113228-chapmanr_resnet_kfold-AdaAug/ --gf_model_name resnet_wang --k_ops 0 --report_freq 10 --num_workers 2 --epochs 50 --batch_size 128 --learning_rate 0.01 --dataset chapman  --model_name resnet_wang --labelgroup rhythm --save chapr_resnettr_kfold_noaug --ray_name chapr_resnettr_kfold_noaug --gpu 0.5 --cpu 2 --weight_decay 0.01 --train_portion 1 --dataroot /mnt/data2/teddy/CWDA_research/CWDA/datasets/WFDB_ChapmanShaoxing/ --kfold 10 --valselect
+
+
+#CUDA_VISIBLE_DEVICES=0,3,4 python ada_aug/fold_search_ts.py --k_ops 1 --report_freq 5 --num_workers 4 --epochs 50 --batch_size 128  --learning_rate 0.01  --dataset chapman --model_name resnet_wang --save chapmanr_resnet_kfold_all --gpu 1 --cpu 2  --ray_name chapmanr_resnet_kfold_all --kfold 10 --weight_decay 0.01 --proj_learning_rate 0.0001 --search_freq 10  --temperature 3 --dataroot /mnt/data2/teddy/CWDA_research/CWDA/datasets/WFDB_ChapmanShaoxing/ --train_portion 0.5 --search_size 0.5 --labelgroup rhythm --valselect --search_round 4 --keep_aug --keep_len 100 --same_train --diff_aug --loss_type relative --class_adapt --class_embed
+
+CUDA_VISIBLE_DEVICES=3,4 python ada_aug/fold_search_ts.py --k_ops 1 --report_freq 5 --num_workers 4 --epochs 50 --batch_size 128  --learning_rate 0.01  --dataset chapman --model_name resnet_wang --save chapmanr_resnet_kfold_all2 --gpu 0.33 --cpu 2  --ray_name chapmanr_resnet_kfold_all2 --kfold 10 --weight_decay 0.01 --proj_learning_rate 0.0001 --search_freq 10  --temperature 3 --dataroot /mnt/data2/teddy/CWDA_research/CWDA/datasets/WFDB_ChapmanShaoxing/ --train_portion 0.5 --search_size 0.5 --labelgroup rhythm --valselect --search_round 4 --keep_aug --keep_len 100 200 400 --keep_mode adapt --same_train --diff_aug --loss_type relative --class_adapt --class_embed
+
+
+
+

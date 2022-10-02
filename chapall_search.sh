@@ -1,0 +1,5 @@
+
+CUDA_VISIBLE_DEVICES=3,4 python ada_aug/fold_search_ts.py --k_ops 1 --report_freq 5 --num_workers 4 --epochs 50 --batch_size 128  --learning_rate 0.01  --dataset chapman --model_name resnet_wang --save chapmanr_resnet_kfold --gpu 0.5 --cpu 2  --ray_name chapmanrall_resnet_kfold --kfold 10 --weight_decay 0.01 --proj_learning_rate 0.0001 --search_freq 10  --temperature 3 --dataroot /mnt/data2/teddy/CWDA_research/CWDA/datasets/WFDB_ChapmanShaoxing/ --train_portion 0.5 --search_size 0.5 --labelgroup all --valselect --search_round 4
+
+
+CUDA_VISIBLE_DEVICES=3,4 python ada_aug/fold_search_ts.py --k_ops 1 --report_freq 5 --num_workers 4 --epochs 50 --batch_size 128  --learning_rate 0.01  --dataset chapman --model_name resnet_wang --save chapmanr_resnet_kfold_all2 --gpu 0.5 --cpu 2  --ray_name chapmanall_resnet_kfold_all2 --kfold 10 --weight_decay 0.01 --proj_learning_rate 0.0001 --search_freq 10  --temperature 3 --dataroot /mnt/data2/teddy/CWDA_research/CWDA/datasets/WFDB_ChapmanShaoxing/ --train_portion 0.5 --search_size 0.5 --labelgroup all --valselect --search_round 4 --keep_aug --keep_len 100 --same_train --diff_aug --loss_type relative --class_adapt --class_embed

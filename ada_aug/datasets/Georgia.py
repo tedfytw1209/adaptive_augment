@@ -39,6 +39,8 @@ class Georgia(BaseDataset):
         if not self._check_data():
             self.process_data()
         self._get_data(mode=mode,seed=seed)
+        print('Dataset X: ',self.input_data.shape)
+        print('Dataset y: ',self.label.shape)
     
     def _check_data(self):
         return os.path.isfile(os.path.join(self.dataset_path,f'X_{self.labelgroup}data_{self.lb}.npy')) and \
@@ -47,6 +49,9 @@ class Georgia(BaseDataset):
         self.input_data = None
         self.label = None
         self.input_data = np.load(os.path.join(self.dataset_path,f'X_{self.labelgroup}data_{self.lb}.npy'),allow_pickle=True)
+        if len(self.input_data.shape)==1:
+            #for len!=5000
+            pass
         self.label = np.load(os.path.join(self.dataset_path,f'y_{self.labelgroup}data_{self.lb}.npy'),allow_pickle=True)
         print('Label counts:')
         unique, counts = np.unique(self.label, return_counts=True)

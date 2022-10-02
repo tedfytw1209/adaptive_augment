@@ -13,7 +13,8 @@ from sklearn.model_selection import StratifiedKFold,KFold
 
 
 MAX_LENGTH = 5000
-LABEL_GROUPS = {"all":11}
+LABEL_GROUPS = {"all":22,'rhythm':4}
+rhythm_classes_cinc = ['SB', 'NSR', 'AF', 'STach', 'AFL', 'SI', 'SVT', 'ATach', 'AVNRT', 'SAAWR'] #SI(Sinus Irregularity), AVNRT, SAAWR can't find
 
 class Georgia(BaseDataset):
     def __init__(self, dataset_path,labelgroup='all',mode='all',seed=42,multilabel=False,transfroms=[],augmentations=[],label_transfroms=[],**_kwargs):
@@ -92,7 +93,10 @@ class Georgia(BaseDataset):
         select = None
         trans_dic = None
         outlabel = None
-        if self.labelgroup=='all':
+        if self.labelgroup=='rhythm':
+            select = rhythm_classes_cinc
+            trans_dic = None
+        elif self.labelgroup=='all':
             pass
         else:
             print('label group error')
@@ -100,46 +104,50 @@ class Georgia(BaseDataset):
         
         df = pd.DataFrame()
         labels = set()
-        for i in range(1, 10647): # 10646
+        for i in range(1, 10344): # 10344
             try:
-                with open(os.path.join(self.dataset_path,'raw','JS%05d.hea'%i), 'r') as f:
+                with open(os.path.join(self.dataset_path,'raw','E%05d.hea'%i), 'r') as f:
                     header = f.read()
                 #print(header)
                 #print(m['val'].shape)
             except:
                 continue
             for l in header.split('\n'):
+
                 if l.startswith('#Dx'):
                     entries = l.split(': ')[1].split(',')
                     abb_names = []
                     for entry in entries:
                         #print(entry)
                         abb_name = dx_dic.get(entry,None)
+                        if select!=None and abb_name not in select:
+                            continue
                         if abb_name != None:
                             if trans_dic:
                                 abb_name = trans_dic[abb_name]
                             df.loc[i, abb_name] = 1
                             df.loc[i, 'id'] = i
-                            df.loc[i, 'filename'] = '%s/raw/JS%05d'%(self.dataset_path,i)
+                            df.loc[i, 'filename'] = '%s/raw/E%05d'%(self.dataset_path,i)
                             labels.add(abb_name.strip())
                             abb_names.append(abb_name)
                     #print(entry.strip(), end=' ')
                     df.loc[i, 'count'] = len(abb_names)
             #break
+        df.to_csv(f'raw{self.labelgroup}_{self.lb}.csv')
         df = df.dropna(axis=0,how='any',subset=['id'])
         df = df.fillna(0)
         print(labels)
-        df.to_csv(f'raw{self.labelgroup}_{self.lb}.csv')
+        df.to_csv(f'raw2{self.labelgroup}_{self.lb}.csv')
         fixed_col = ['id', 'filename', 'count', 'new_count']
         # del low number columns
         cols = []
         for col in df.columns:
             if col in fixed_col: continue
             yes_cnt = df[col].value_counts()[1]
-            #if yes_cnt < 300: 
-            #    df = df.drop(columns=col)
-            #else:
-            cols.append(col)
+            if yes_cnt < 300: 
+                df = df.drop(columns=col)
+            else:
+                cols.append(col)
         #index reset
         df = df.reset_index(drop=True)
         df = df.drop(columns=['count','filename'])
@@ -153,7 +161,7 @@ class Georgia(BaseDataset):
         id_list = df['id'].values
         input_data = []
         for id in id_list:
-            m = loadmat(os.path.join(self.dataset_path,'raw',"JS%05d.mat"%id))
+            m = loadmat(os.path.join(self.dataset_path,'raw',"E%05d.mat"%id))
             input_data.append(m['val'].T)
         input_data = np.array(input_data) #bs X L X channel
         labels = df.drop(columns='id').values
@@ -167,10 +175,12 @@ class Georgia(BaseDataset):
             input_data = input_data[(label_sum==1)]
             labels = labels[(label_sum==1)]
             labels = np.argmax(labels, axis=1)
+        pd.DataFrame(labels).to_csv(f'label_processed_{self.labelgroup}_{self.lb}.csv')
         print('Data shape: ',input_data.shape)
         print('Labels shape: ',labels.shape)
         np.save(os.path.join(self.dataset_path,f'X_{self.labelgroup}data_{self.lb}.npy'),input_data)
         np.save(os.path.join(self.dataset_path,f'y_{self.labelgroup}data_{self.lb}.npy'),labels)
+        
         #self.input_data = input_data
         #self.label = labels
     def get_split_indices(self):

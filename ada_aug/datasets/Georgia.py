@@ -10,11 +10,17 @@ import torch
 from torch.utils.data import Dataset
 from .base import BaseDataset
 from sklearn.model_selection import StratifiedKFold,KFold
-
+from biosppy.signals import tools
 
 MAX_LENGTH = 5000
 LABEL_GROUPS = {"all":22,'rhythm':4}
 rhythm_classes_cinc = ['SB', 'NSR', 'AF', 'STach', 'AFL', 'SI', 'SVT', 'ATach', 'AVNRT', 'SAAWR'] #SI(Sinus Irregularity), AVNRT, SAAWR can't find
+def input_resizeing(raw_data,ratio=1):
+    input_data = np.zeros((len(raw_data),int(MAX_LENGTH*ratio),12))
+    for idx, data in enumerate(raw_data):
+        input_data[idx,:data.shape[0],:data.shape[1]] = tools.normalize(data[0:int(MAX_LENGTH*ratio),:])['signal']
+    return input_data
+
 
 class Georgia(BaseDataset):
     def __init__(self, dataset_path,labelgroup='all',mode='all',seed=42,multilabel=False,transfroms=[],augmentations=[],label_transfroms=[],**_kwargs):
@@ -50,8 +56,7 @@ class Georgia(BaseDataset):
         self.label = None
         self.input_data = np.load(os.path.join(self.dataset_path,f'X_{self.labelgroup}data_{self.lb}.npy'),allow_pickle=True)
         if len(self.input_data.shape)==1:
-            #for len!=5000
-            pass
+            self.input_data = input_resizeing(self.input_data)
         self.label = np.load(os.path.join(self.dataset_path,f'y_{self.labelgroup}data_{self.lb}.npy'),allow_pickle=True)
         print('Label counts:')
         unique, counts = np.unique(self.label, return_counts=True)
@@ -87,7 +92,6 @@ class Georgia(BaseDataset):
                 select_idxs = np.concatenate([select_idxs,self.fold_indices[fold-1]],axis=0).astype(int)
             self.input_data = self.input_data[select_idxs]
             self.label = self.label[select_idxs]
-        
 
     def process_data(self):
         print('Process data')
@@ -167,7 +171,8 @@ class Georgia(BaseDataset):
         input_data = []
         for id in id_list:
             m = loadmat(os.path.join(self.dataset_path,'raw',"E%05d.mat"%id))
-            input_data.append(m['val'].T)
+            m_array = m['val'].T
+            input_data.append(m_array)
         input_data = np.array(input_data) #bs X L X channel
         labels = df.drop(columns='id').values
         #multilabel or singlelabel
@@ -190,3 +195,23 @@ class Georgia(BaseDataset):
         #self.label = labels
     def get_split_indices(self):
         return self.split_indices
+    #ICBEB special, no need for preprocess
+    def fit_preprocess(self,preprocessor, indexs=[]):
+        '''
+        if len(indexs)==0:
+            preprocessor.fit(np.vstack(self.input_data[indexs]).flatten()[:,np.newaxis].astype(float))
+        else:
+            preprocessor.fit(np.vstack(self.input_data).flatten()[:,np.newaxis].astype(float))
+        '''
+        return preprocessor
+    def trans_preprocess(self,preprocessor):
+        '''
+        self.input_data = apply_standardizer(self.input_data,preprocessor)
+        '''
+        return preprocessor
+    def set_preprocess(self, preprocessor):
+        '''
+        self.preprocessor = [preprocessor]
+        '''
+        self.preprocessor = []
+        return

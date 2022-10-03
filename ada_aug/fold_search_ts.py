@@ -157,7 +157,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         n_channel = get_num_channel(args.dataset)
         n_class = get_num_class(args.dataset,args.labelgroup)
         sdiv = get_search_divider(args.model_name)
-        class2label = get_label_name(args.dataset, args.dataroot)
+        class2label = get_label_name(args.dataset, args.dataroot,args.labelgroup)
         multilabel = args.multilabel
         diff_augment = args.diff_aug
         diff_mix = not args.not_mix

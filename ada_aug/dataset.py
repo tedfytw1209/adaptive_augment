@@ -121,12 +121,12 @@ def get_num_class(dataset,labelgroup=''):
         'reduced_svhn': 10,
         'edfx': 5,
         'ptbxl': 44,
-        'ptbxlall':71,
+        'ptbxlall':50,
         'ptbxldiagnostic':44,
         'ptbxlsubdiagnostic': 23,
         'ptbxlsuperdiagnostic':5,
         'ptbxlform':19,
-        'rhythm':12,
+        'ptbxlrhythm':12,
         'wisdm': 18,
         'chapman': 12,
         'chapmanall':11,
@@ -541,13 +541,13 @@ def get_dataset_dimension(dset):
             }[dset]
 
 
-def get_label_name(dset, dataroot):
+def get_label_name(dset, dataroot,labelgroup):
     if 'cifar10' in dset:
         meta = unpickle(f'{dataroot}/cifar-10-batches-py/batches.meta')
         classes = [t.decode('utf8') for t in meta[b'label_names']]
     elif 'svhn' in dset:
         classes = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
     else:
-        class_idxs = np.arange(0, get_num_class(dset))
+        class_idxs = np.arange(0, get_num_class(dset,labelgroup=labelgroup))
         classes = [str(i) for i in class_idxs]
     return classes

@@ -112,6 +112,7 @@ if args.k_ops>0:
     Aug_type = 'AdaAug'
 else:
     Aug_type = 'NOAUG'
+Aug_type += args.augselect
 if args.diff_aug:
     description = 'diff2'
     description += args.loss_type
@@ -413,7 +414,7 @@ def main():
     #logging.info('gpu device = %d' % args.gpu)
     logging.info("args = %s", args)
     #wandb
-    experiment_name = f'{Aug_type}{description}lamda{args.lambda_aug}_search{args.augselect}_vselect_{args.dataset}{args.labelgroup}_{args.model_name}_e{args.epochs}_lr{args.learning_rate}'
+    experiment_name = f'{Aug_type}{args.augselect}{description}lamda{args.lambda_aug}_search{args.augselect}_vselect_{args.dataset}{args.labelgroup}_{args.model_name}_e{args.epochs}_lr{args.learning_rate}'
     '''run_log = wandb.init(config=args, 
                   project='AdaAug',
                   group=experiment_name,

@@ -1036,7 +1036,7 @@ class KeepAugment(object): #need fix
         self.reverse = reverse
         self.info_upper = info_upper
         self.detectors = Detectors(sfreq) #need input ecg: (seq_len)
-        self.compare_func_list = [lt,ge]
+        self.compare_func_list = [le,ge]
         #'torch.nn.functional.avg_pool1d' use this for segment
         ##self.m_pool = torch.nn.AvgPool1d(kernel_size=self.length, stride=1, padding=0) #for winodow sum
         print(f'Apply InfoKeep Augment: mode={self.mode}, threshold={self.thres}, transfrom={self.trans}')

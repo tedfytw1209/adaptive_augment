@@ -406,21 +406,33 @@ class AdaAugkeep_TS(AdaAug):
             self.ops_names = self.ops_names + TS_ADD_NAMES.copy()
         if 'ecg' in augselect:
             self.ops_names = self.ops_names + ECG_OPS_NAMES.copy()
-        if len(keepaug_config['length'])>1:
+        possible_segment = keepaug_config.get('possible_segment',[1])
+        if len(keepaug_config['length'])>1: # adapt len
             self.keep_lens = keepaug_config['length']
+            self.possible_segment = [1]
+            keepaug_config['adapt_target'] = 'len'
+        elif len(possible_segment)>1: #adapt segment
+            self.keep_lens = keepaug_config['length']
+            self.possible_segment = possible_segment
+            keepaug_config['adapt_target'] = 'seg'
         else:
-            self.keep_lens = [100, 200, 400, 600, 800] #!!!default
+            print('KeepAdapt need multiple lens or segment to learn')
+            exit()
         self.thres_adapt = keepaug_config.get('thres_adapt',True)
         print('AdaAug Using ',self.ops_names)
-        print('KeepAug Using ',self.keep_lens)
+        print('KeepAug lens using ',self.keep_lens)
+        print('KeepAug segments using ',self.keep_lens)
         print('Keep thres adapt: ',self.thres_adapt)
         self.n_ops = len(self.ops_names)
         self.n_keeplens = len(self.keep_lens)
-        self.history = PolicyHistoryKeep(self.ops_names,self.keep_lens, self.save_dir, self.n_class)
+        if keepaug_config['adapt_target']=='len':
+            self.history = PolicyHistoryKeep(self.ops_names,self.keep_lens, self.save_dir, self.n_class)
+        else:
+            self.history = PolicyHistoryKeep(self.ops_names,self.possible_segment, self.save_dir, self.n_class)
         self.config = config
         self.use_keepaug = keepaug_config['keep_aug']
+        self.adapt_target = keepaug_config['adapt_target']
         self.keepaug_config = keepaug_config
-        keepaug_config['length'] = self.keep_lens
         if self.use_keepaug:
             self.Augment_wrapper = AdaKeepAugment(**keepaug_config)
             self.Search_wrapper = self.Augment_wrapper.Augment_search
@@ -448,7 +460,8 @@ class AdaAugkeep_TS(AdaAug):
             T = 1.0
         a_params = self.h_model(self.gf_model.extract_features(X.cuda(),seq_len),y=y)
         #mags: mag for ops, weights: weight for ops, keeplen_ws: keeplen weights, keep_thres: keep threshold
-        magnitudes, weights, keeplen_ws, keep_thres = torch.split(a_params, [self.n_ops, self.n_ops, self.n_keeplens, 1], dim=1)
+        adapt_len = max(self.n_keeplens,self.possible_segment)
+        magnitudes, weights, keeplen_ws, keep_thres = torch.split(a_params, [self.n_ops, self.n_ops, adapt_len, 1], dim=1)
         magnitudes = torch.sigmoid(magnitudes)
         weights = torch.nn.functional.softmax(weights/T, dim=-1)
         keeplen_ws = torch.nn.functional.softmax(keeplen_ws/T, dim=-1)
@@ -504,7 +517,8 @@ class AdaAugkeep_TS(AdaAug):
         #a_imgs = self.Augment_wrapper(images, model=self.gf_model,apply_func=self.get_aug_valid_imgs,magnitudes=magnitudes,selective='paste')
         #a_features = self.gf_model.extract_features(a_imgs, a_seq_len)
         a_features = self.gf_model.extract_features(a_imgs) #(b*keep_len*n_ops, n_hidden)
-        ba_features = a_features.reshape(len(images), self.n_ops, self.n_keeplens, -1).permute(0,2,1,3) # batch, n_ops,keep_lens, n_hidden
+        adapt_len = max(self.n_keeplens,self.possible_segment)
+        ba_features = a_features.reshape(len(images), self.n_ops, adapt_len, -1).permute(0,2,1,3) # batch, n_ops,keep_lens, n_hidden
         #print('mixed shape')
         #print(ba_features.shape)
         if mix_feature:

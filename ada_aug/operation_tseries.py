@@ -1248,20 +1248,24 @@ class KeepAugment(object): #need fix
             imp_map_list.append(imp_map)
         return torch.stack(imp_map_list, dim=0) #(b,seq)
 #segment gradient
-def stop_gradient_keep(trans_image, magnitude, keep_thre, x1, x2):
+def stop_gradient_keep(trans_image, magnitude, keep_thre, region_list):
+    x1, x2 = region_list[0][0], region_list[0][1]
     images = trans_image #(seq, ch)
     adds = 0
-    info_part = images[x1:x2,:]
-    info_part = info_part - keep_thre
     images = images - magnitude
     adds = adds + magnitude
+    for (x1,x2) in region_list:
+        info_part = images[x1:x2,:]
+        info_part = info_part - keep_thre
     #add gradient
     images = images.detach() + adds
-    images[x1:x2,:] = images[x1:x2,:] + keep_thre
+    for (x1,x2) in region_list:
+        info_part = images[x1:x2,:]
+        info_part = info_part + keep_thre
     return images
-class AdaKeepAugment(KeepAugment): #need fix
+class AdaKeepAugment(KeepAugment): #
     def __init__(self, mode, length,thres=0.6,transfrom=None,default_select=None, early=False, low = False,
-        possible_segment=[1],grid_region=False, reverse=False,info_upper = 0.0, thres_adapt=True,
+        possible_segment=[1],grid_region=False, reverse=False,info_upper = 0.0, thres_adapt=True, adapt_target='len',
         sfreq=100,pw_len=0.2,tw_len=0.4,**_kwargs):
         assert mode in ['auto','b','p','t'] #auto: all, b: heart beat(-0.2,0.4), p: p-wave(-0.2,0), t: t-wave(0,0.4)
         self.mode = mode
@@ -1271,7 +1275,8 @@ class AdaKeepAugment(KeepAugment): #need fix
             self.start_s,self.end_s = -0.2*sfreq,0.4*sfreq
         elif self.mode=='t':
             self.start_s,self.end_s = 0,0.4*sfreq
-        self.length = length #len is a list in this case
+        self.adapt_target = adapt_target
+        self.length = length #len is a list if adapt target 
         self.early = early
         self.low = low
         self.sfreq = sfreq
@@ -1297,19 +1302,23 @@ class AdaKeepAugment(KeepAugment): #need fix
         #windowed_slc = self.m_pool(slc_.view(b,1,w)).view(b,-1)
         #select a segment number
         seg_number = np.random.choice(self.possible_segment)
-        seg_len = int(w / seg_number)
+        total_len = self.length[0]
         #print(slc_)
         t_series_ = t_series_.detach().cpu()
         aug_t_s_list = []
         start, end = 0,w
-        
         for i,(t_s, slc) in enumerate(zip(t_series_, slc_)):
             #len choose
             info_aug, compare_func, info_bound, bound_func = self.get_selective(selective,thres=keep_thres[i])
-            info_len = int(self.length[len_idx[i]]/seg_number)
+            if self.adapt_target=='len':
+                total_len = self.length[len_idx[i]]
+            else:
+                seg_number = self.possible_segment[len_idx[i]]
+            info_len = int(total_len/seg_number)
             windowed_slc = torch.nn.functional.avg_pool1d(slc.view(1,1,w),kernel_size=info_len, stride=1, padding=0).view(1,-1)
             windowed_w = windowed_slc.shape[1]
             windowed_len = int(windowed_w / seg_number)
+            seg_len = int(w / seg_number)
             seg_accum, windowed_accum = self.get_seg(seg_number,seg_len,w,windowed_w,windowed_len)
             windowed_slc_each = windowed_slc[0]
             win_start, win_end = 0,windowed_w
@@ -1317,7 +1326,7 @@ class AdaKeepAugment(KeepAugment): #need fix
             region_list,inforegion_list = [],[]
             for seg_idx in range(seg_number):
                 if self.grid_region:
-                    start, end = seg_accum[seg_idx], seg_accum[seg_idx+1]
+                    #start, end = seg_accum[seg_idx], seg_accum[seg_idx+1] #calculate all window no need this
                     win_start, win_end = windowed_accum[seg_idx], windowed_accum[seg_idx+1]
                 seg_window = windowed_slc_each[win_start:win_end]
                 quant_score = torch.quantile(seg_window,info_aug)
@@ -1347,11 +1356,11 @@ class AdaKeepAugment(KeepAugment): #need fix
                 inforegion_list.append(info_region)
             #augment & paste back
             if selective=='cut':
-                for info_region in inforegion_list:
+                for info_region in inforegion_list: #augment segment
                     info_region = augment(info_region,i=i,**kwargs) #some other augment if needed
             else:
                 t_s = augment(t_s,i=i,**kwargs) #some other augment if needed
-                
+            #paste back
             for reg_i in range(len(inforegion_list)):
                 x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
                 t_s[x1: x2, :] = inforegion_list[reg_i]
@@ -1368,22 +1377,28 @@ class AdaKeepAugment(KeepAugment): #need fix
         slc_, t_series_ = self.get_slc(t_series,model)
         magnitudes = kwargs['magnitudes']
         #info_aug, compare_func, info_bound, bound_func = self.get_selective(selective)
-        seg_number = np.random.choice(self.possible_segment)
-        seg_len = int(w / seg_number)
+        #seg_number = np.random.choice(self.possible_segment)
+        #each_len = self.length[0]
         #print(slc_)
         #print(windowed_slc)
         #print(quant_scores)
         t_series_ = t_series_.detach().cpu()
         aug_t_s_list = []
-        start, end = 0,w
+        if self.adapt_target=='len': #search over keep len or keep segment
+            keeplen_params = self.length
+            keepseg_params = [seg_number for i in range(len(self.length))]
+        else:
+            keeplen_params = [each_len for i in range(len(self.possible_segment))]
+            keepseg_params = self.possible_segment
         for i,(t_s, slc) in enumerate(zip(t_series_, slc_)):
             info_aug, compare_func, info_bound, bound_func = self.get_selective(selective,thres=keep_thres[i])
-            for each_len in self.length:
+            for (each_len, seg_number) in zip(keeplen_params,keepseg_params):
                 #select a segment number
                 info_len = int(each_len/seg_number)
                 windowed_slc = torch.nn.functional.avg_pool1d(slc.view(1,1,w),kernel_size=info_len, stride=1, padding=0).view(1,-1)
                 windowed_w = windowed_slc.shape[1]
                 windowed_len = int(windowed_w / seg_number)
+                seg_len = int(w / seg_number)
                 seg_accum, windowed_accum = self.get_seg(seg_number,seg_len,w,windowed_w,windowed_len)
                 windowed_slc_each = windowed_slc[0]
                 win_start, win_end = 0,windowed_w
@@ -1432,7 +1447,7 @@ class AdaKeepAugment(KeepAugment): #need fix
                         x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
                         t_s_tmp[x1: x2, :] = inforegion_list[reg_i]
                     #!!!bug when multisegment
-                    t_s_tmp = stop_gradient_keep(t_s_tmp.cuda(), magnitudes[i][k], keep_thres[i],x1,x2) #add keep thres
+                    t_s_tmp = stop_gradient_keep(t_s_tmp.cuda(), magnitudes[i][k], keep_thres[i],region_list) #add keep thres
                     aug_t_s_list.append(t_s_tmp)
         #back
         if self.mode=='auto':

@@ -1324,6 +1324,7 @@ class AdaKeepAugment(KeepAugment): #need fix
                 bound_score = torch.quantile(seg_window,info_bound)
                 select_windows = (compare_func(seg_window,quant_score) & bound_func(seg_window,bound_score)).nonzero(as_tuple=True)[0].detach().cpu().numpy()
                 if len(select_windows)==0:
+                    print('origin window: ', seg_window)
                     print('window index:', select_windows.shape)
                     print('no result:')
                     print('quant_score: ',quant_score)
@@ -1399,6 +1400,7 @@ class AdaKeepAugment(KeepAugment): #need fix
                         bound_score = torch.quantile(seg_window,info_bound)
                         select_windows = (compare_func(seg_window,quant_score) & bound_func(seg_window,bound_score)).nonzero(as_tuple=True)[0].detach().cpu().numpy()
                         if len(select_windows)==0:
+                            print('origin window: ', seg_window)
                             print('window index', select_windows.shape)
                             print('no result:')
                             print('quant_score: ',quant_score)

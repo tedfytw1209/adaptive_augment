@@ -231,7 +231,6 @@ class AdaAug_TS(AdaAug):
         self.alpha = torch.tensor([0.5]).view(1,-1).cuda()
         self.noaug_max = 0.5
         self.noaug_tensor = self.noaug_max * F.one_hot(torch.tensor([0]), num_classes=self.n_ops).float()
-        print(self.noaug_tensor)
 
     def predict_aug_params(self, X, seq_len, mode,y=None):
         self.gf_model.eval()

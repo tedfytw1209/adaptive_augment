@@ -728,7 +728,6 @@ def apply_augment(img, name, level, rd_seed=None,sfreq=100):
     augment_fn, low, high = get_augment(name)
     assert 0 <= level
     assert level <= 1
-    print(sfreq) #tmp check
     #change tseries signal from (len,channel) to (batch,channel,len)
     seq_len , channel = img.shape
     img = img.permute(1,0).view(1,channel,seq_len)

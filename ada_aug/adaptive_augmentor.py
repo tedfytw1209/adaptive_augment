@@ -397,7 +397,7 @@ class AdaAug_TS(AdaAug):
 
 class AdaAugkeep_TS(AdaAug):
     def __init__(self, after_transforms, n_class, gf_model, h_model, save_dir=None, visualize=False,
-                    config=default_config,keepaug_config=default_config, multilabel=False, augselect='',class_adaptive=False,
+                    config=default_config,keepaug_config=default_config, multilabel=False, augselect='',class_adaptive=False,ind_mix=False,
                     noaug_add=False):
         super(AdaAugkeep_TS, self).__init__(after_transforms, n_class, gf_model, h_model, save_dir, config)
         #other already define in AdaAug
@@ -419,6 +419,7 @@ class AdaAugkeep_TS(AdaAug):
             print('KeepAdapt need multiple lens or segment to learn')
             exit()
         self.thres_adapt = keepaug_config.get('thres_adapt',True)
+        self.ind_mix = ind_mix
         print('AdaAug Using ',self.ops_names)
         print('KeepAug lens using ',self.keep_lens)
         print('KeepAug segments using ',self.keep_lens)
@@ -436,6 +437,8 @@ class AdaAugkeep_TS(AdaAug):
         if self.use_keepaug:
             self.Augment_wrapper = AdaKeepAugment(**keepaug_config)
             self.Search_wrapper = self.Augment_wrapper.Augment_search
+            if ind_mix:
+                self.Search_wrapper = self.Augment_wrapper.Augment_search_ind
         else:
             print('AdaAug Keep always use keep augment')
             exit()
@@ -492,7 +495,7 @@ class AdaAugkeep_TS(AdaAug):
         trans_image = self.after_transforms(trans_image)
         #trans_image = stop_gradient_keep(trans_image.cuda(), magnitudes[i][k], keep_thres[i]) #add keep thres
         return trans_image
-    def get_aug_valid_imgs(self, images, magnitudes, keep_thres):
+    def get_aug_valid_imgs(self, images, magnitudes,weights, keeplen_ws, keep_thres):
         """Return the mixed latent feature
         Args:
             images ([Tensor]): [description]
@@ -501,9 +504,20 @@ class AdaAugkeep_TS(AdaAug):
         Returns:
             [Tensor]: a set of augmented validation images
         """
-        aug_imgs = self.Search_wrapper(images, model=self.gf_model,apply_func=self.get_aug_valid_img, keep_thres=keep_thres,
-            magnitudes=magnitudes,ops_names=self.ops_names,selective='paste')
-        #(b*lens*ops,seq,ch)
+        #get fixed value, if search ops, fix idx is keeplen_ws after select. if search lens, fix idx is keeplen_ws after select.
+        if self.ind_mix:
+            stage_name = self.Augment_wrapper.all_stages[self.Augment_wrapper.stage]
+            idx_matrix,len_idx = self.select_params(weights,keeplen_ws)
+            if stage_name=='trans':
+                fix_idx = len_idx
+            elif stage_name=='keep':
+                fix_idx = idx_matrix
+            aug_imgs = self.Search_wrapper(images, model=self.gf_model,apply_func=self.get_aug_valid_img, keep_thres=keep_thres,
+                magnitudes=magnitudes,ops_names=self.ops_names,fix_idx=fix_idx,selective='paste')
+        else:
+            aug_imgs = self.Search_wrapper(images, model=self.gf_model,apply_func=self.get_aug_valid_img, keep_thres=keep_thres,
+                magnitudes=magnitudes,ops_names=self.ops_names,selective='paste')
+        #(b*lens*ops,seq,ch) or 
         return aug_imgs
     def explore(self, images, seq_len, mix_feature=True,y=None):
         """Return the mixed latent feature !!!can't use for dynamic len now
@@ -513,24 +527,41 @@ class AdaAugkeep_TS(AdaAug):
             [Tensor]: return a batch of mixed features
         """
         magnitudes, weights, keeplen_ws, keep_thres = self.predict_aug_params(images, seq_len,'explore',y=y)
-        a_imgs = self.get_aug_valid_imgs(images, magnitudes, keep_thres) #(b*lens*ops,seq,ch)
-        #a_imgs = self.Augment_wrapper(images, model=self.gf_model,apply_func=self.get_aug_valid_imgs,magnitudes=magnitudes,selective='paste')
-        #a_features = self.gf_model.extract_features(a_imgs, a_seq_len)
+        a_imgs = self.get_aug_valid_imgs(images, magnitudes,weights, keeplen_ws, keep_thres) #(b*lens*ops,seq,ch)
         a_features = self.gf_model.extract_features(a_imgs) #(b*keep_len*n_ops, n_hidden)
         adapt_len = max(self.n_keeplens,self.possible_segment)
-        ba_features = a_features.reshape(len(images), self.n_ops, adapt_len, -1).permute(0,2,1,3) # batch, n_ops,keep_lens, n_hidden
-        #print('mixed shape')
-        #print(ba_features.shape)
-        if mix_feature:
-            mixed_features = [w.matmul(feat) for w, feat in zip(weights, ba_features)] #[(keep_lens, n_hidden)]
-            #print(mixed_features[0].shape)
-            mixed_features = [len_w.matmul(feat) for len_w,feat in zip(keeplen_ws,mixed_features)] #[(n_hidden)]
-            #print(mixed_features[0].shape)
-            mixed_features = torch.stack(mixed_features, dim=0)
-            return mixed_features , [weights, keeplen_ws]
+        stage_name = self.Augment_wrapper.all_stages[self.Augment_wrapper.stage] #
+        if self.ind_mix:
+            if stage_name=='trans':
+                ba_features = a_features.reshape(len(images), self.n_ops, -1)# batch, n_ops, n_hidden
+                out_w = weights
+            elif stage_name=='keep':
+                ba_features = a_features.reshape(len(images), adapt_len, -1)# batch, keep_lens, n_hidden
+                out_w = keeplen_ws
+            self.Augment_wrapper.change_stage() #finish
+            if mix_feature:
+                mixed_features = [w.matmul(feat) for w, feat in zip(out_w, ba_features)]
+                mixed_features = torch.stack(mixed_features, dim=0)
+                return mixed_features, [out_w]
+            else:
+                return ba_features, out_w
         else:
-            return ba_features, weights
-    
+            ba_features = a_features.reshape(len(images), self.n_ops, adapt_len, -1).permute(0,2,1,3) # batch, n_ops,keep_lens, n_hidden
+            if mix_feature:
+                mixed_features = [w.matmul(feat) for w, feat in zip(weights, ba_features)] #[(keep_lens, n_hidden)]
+                mixed_features = [len_w.matmul(feat) for len_w,feat in zip(keeplen_ws,mixed_features)] #[(n_hidden)]
+                mixed_features = torch.stack(mixed_features, dim=0)
+                return mixed_features , [weights, keeplen_ws]
+            else:
+                return ba_features, [weights, keeplen_ws]
+    def select_params(self,weights,keeplen_ws):
+        if self.sampling == 'prob':
+            idx_matrix = torch.multinomial(weights, self.k_ops)
+            len_idx = torch.multinomial(keeplen_ws, 1).view(-1).detach().cpu().numpy()
+        elif self.sampling == 'max':
+            idx_matrix = torch.topk(weights, self.k_ops, dim=1)[1] #where op index the highest weight
+            len_idx = torch.topk(keeplen_ws, 1, dim=1)[1].view(-1).detach().cpu().numpy()
+        return idx_matrix,len_idx
     def get_training_aug_image(self, image, magnitudes, idx_matrix,i=None):
         if i!=None:
             idx_list = idx_matrix[i]
@@ -545,12 +576,7 @@ class AdaAugkeep_TS(AdaAug):
         # visualization
         if self.k_ops > 0:
             trans_images = []
-            if self.sampling == 'prob':
-                idx_matrix = torch.multinomial(weights, self.k_ops)
-                len_idx = torch.multinomial(keeplen_ws, 1).view(-1).detach().cpu().numpy()
-            elif self.sampling == 'max':
-                idx_matrix = torch.topk(weights, self.k_ops, dim=1)[1] #where op index the highest weight
-                len_idx = torch.topk(keeplen_ws, 1, dim=1)[1].view(-1).detach().cpu().numpy()
+            idx_matrix,len_idx = self.select_params(weights,keeplen_ws)
             keep_thres = keep_thres.view(-1).detach().cpu().numpy()
             aug_imgs = self.Augment_wrapper(images, model=self.gf_model,apply_func=self.get_training_aug_image,magnitudes=magnitudes,
             idx_matrix=idx_matrix,len_idx=len_idx,keep_thres=keep_thres,selective='paste')

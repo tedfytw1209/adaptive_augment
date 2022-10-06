@@ -81,7 +81,8 @@ parser.add_argument('--search_sampler', type=str, default='', help='for search s
         choices=['weight',''])
 parser.add_argument('--diff_aug', action='store_true', default=False, help='use valid select')
 parser.add_argument('--same_train', action='store_true', default=False, help='use valid select')
-parser.add_argument('--not_mix', action='store_true', default=False, help='use valid select')
+parser.add_argument('--mix_type', type=str, default='embed', help='add regular for noaugment ',
+        choices=['embed','out','loss'])
 parser.add_argument('--not_reweight', action='store_true', default=False, help='use diff reweight')
 parser.add_argument('--sim_rew', action='store_true', default=False, help='use sim reweight')
 parser.add_argument('--pwarmup', type=int, default=0, help="warmup epoch for policy")
@@ -97,6 +98,9 @@ parser.add_argument('--loss_type', type=str, default='minus', help="loss type fo
 parser.add_argument('--policy_loss', type=str, default='', help="loss type for simular policy training")
 parser.add_argument('--keep_aug', action='store_true', default=False, help='info keep augment')
 parser.add_argument('--keep_mode', type=str, default='auto', help='info keep mode',choices=['auto','adapt','b','p','t'])
+parser.add_argument('--adapt_target', type=str, default='len', help='info keep mode',choices=['len','seg'])
+parser.add_argument('--mix_method', type=str, default='', help='who search mix params',
+        choices=['ind','sub','indsub',''])
 parser.add_argument('--keep_seg', type=int, nargs='+', default=[1], help='info keep segment mode')
 parser.add_argument('--keep_grid', action='store_true', default=False, help='info keep augment grid')
 parser.add_argument('--keep_thres', type=float, default=0.6, help="keep augment weight (lower protect more)")
@@ -161,7 +165,6 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         class2label = get_label_name(args.dataset, args.dataroot,args.labelgroup)
         multilabel = args.multilabel
         diff_augment = args.diff_aug
-        diff_mix = not args.not_mix
         diff_reweight = not args.not_reweight
         self.class_noaug, self.noaug_add = False, False
         if args.noaug_reg=='cadd':
@@ -258,6 +261,9 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             self.sim_criterion = ClassDiffLoss(class_difficulty=self.class_difficulty,focal_gamma=gamma).cuda() #default now
 
         #  AdaAug settings for search
+        ind_mix,sub_mix = False,False
+        if 'ind' in args.mix_method:
+            ind_mix = True
         after_transforms = self.train_queue.dataset.after_transforms
         adaaug_config = {'sampling': 'prob',
                     'k_ops': self.config['k_ops'], #as paper
@@ -267,7 +273,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                     'target_d': get_dataset_dimension(args.dataset),
                     'gf_model_name': args.model_name}
         keepaug_config = {'keep_aug':args.keep_aug,'mode':args.keep_mode,'thres':args.keep_thres,'length':args.keep_len,
-            'grid_region':args.keep_grid, 'possible_segment': args.keep_seg, 'info_upper': args.keep_bound}
+            'grid_region':args.keep_grid, 'possible_segment': args.keep_seg, 'info_upper': args.keep_bound, 'adapt_target':args.adapt_target}
         if args.keep_mode=='adapt':
             keepaug_config['mode'] = 'auto'
             self.adaaug = AdaAugkeep_TS(after_transforms=after_transforms,
@@ -281,6 +287,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 multilabel=multilabel,
                 augselect=args.augselect,
                 class_adaptive=self.class_noaug,
+                ind_mix=ind_mix,
                 noaug_add=self.noaug_add)
         else:
             keepaug_config['length'] = keepaug_config['length'][0]

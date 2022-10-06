@@ -1292,6 +1292,8 @@ class AdaKeepAugment(KeepAugment): #
         self.info_upper = info_upper
         self.detectors = Detectors(sfreq) #need input ecg: (seq_len)
         self.compare_func_list = [le,ge]
+        self.all_stages = ['trans','keep']
+        self.stage = 0
         #'torch.nn.functional.avg_pool1d' use this for segment
         print(f'Apply InfoKeep Augment: mode={self.mode}, threshold={self.thres}, transfrom={self.trans}')
     #kwargs for apply_func, batch_inputs
@@ -1376,12 +1378,6 @@ class AdaKeepAugment(KeepAugment): #
         augment, selective = self.get_augment(apply_func,selective)
         slc_, t_series_ = self.get_slc(t_series,model)
         magnitudes = kwargs['magnitudes']
-        #info_aug, compare_func, info_bound, bound_func = self.get_selective(selective)
-        #seg_number = np.random.choice(self.possible_segment)
-        #each_len = self.length[0]
-        #print(slc_)
-        #print(windowed_slc)
-        #print(quant_scores)
         t_series_ = t_series_.detach().cpu()
         aug_t_s_list = []
         if self.adapt_target=='len': #search over keep len or keep segment
@@ -1426,14 +1422,6 @@ class AdaKeepAugment(KeepAugment): #
                         x1 = np.clip(x - info_len // 2, 0, w)
                         x2 = np.clip(x + info_len // 2, 0, w)
                         region_list.append([x1,x2])
-                        '''while(True):
-                            x = np.random.randint(start,end)
-                            x1 = np.clip(x - info_len // 2, 0, w)
-                            x2 = np.clip(x + info_len // 2, 0, w)
-                            reg_mean = slc[x1: x2].mean()
-                            if compare_func(reg_mean,quant_score) and bound_func(reg_mean,bound_score):
-                                region_list.append([x1,x2])
-                                break'''
                         info_region = t_s_tmp[x1: x2,:].clone().detach().cpu()
                         inforegion_list.append(info_region)
                     #augment & paste back
@@ -1446,7 +1434,6 @@ class AdaKeepAugment(KeepAugment): #
                     for reg_i in range(len(inforegion_list)):
                         x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
                         t_s_tmp[x1: x2, :] = inforegion_list[reg_i]
-                    #!!!bug when multisegment
                     t_s_tmp = stop_gradient_keep(t_s_tmp.cuda(), magnitudes[i][k], keep_thres[i],region_list) #add keep thres
                     aug_t_s_list.append(t_s_tmp)
         #back
@@ -1455,6 +1442,95 @@ class AdaKeepAugment(KeepAugment): #
             for param in model.parameters():
                 param.requires_grad = True
         return torch.stack(aug_t_s_list, dim=0) #(b*lens*ops,seq,ch)
+    #independent search, ops_names is this turn params and fix_idx is this turn fixs
+    ###!!!Not a good implement!!!###
+    def Augment_search_ind(self, t_series, model=None,selective='paste', apply_func=None,ops_names=None,fix_idx=None, keep_thres=None, **kwargs):
+        b,w,c = t_series.shape
+        augment, selective = self.get_augment(apply_func,selective)
+        slc_, t_series_ = self.get_slc(t_series,model)
+        magnitudes = kwargs['magnitudes']
+        t_series_ = t_series_.detach().cpu()
+        aug_t_s_list = []
+        stage_name = self.all_stages[self.stage]
+        #keep param or transfrom param
+        if stage_name=='trans':
+            keeplen_params = fix_idx
+        #keep len or segment
+        if self.adapt_target=='len': #search over keep len or keep segment
+            keeplen_params = self.length
+            keepseg_params = [seg_number for i in range(len(self.length))]
+        else:
+            keeplen_params = [each_len for i in range(len(self.possible_segment))]
+            keepseg_params = self.possible_segment
+        for i,(t_s, slc) in enumerate(zip(t_series_, slc_)):
+            info_aug, compare_func, info_bound, bound_func = self.get_selective(selective,thres=keep_thres[i])
+            if stage_name=='trans': #from all possible to a fix number
+                keeplen_params_l = [keeplen_params[fix_idx[i]]]
+                keepseg_params_l = [keepseg_params[fix_idx[i]]]
+            else:
+                keeplen_params_l,keepseg_params_l = keeplen_params,keepseg_params
+            for (each_len, seg_number) in zip(keeplen_params_l,keepseg_params_l):
+                #select a segment number
+                info_len = int(each_len/seg_number)
+                windowed_slc = torch.nn.functional.avg_pool1d(slc.view(1,1,w),kernel_size=info_len, stride=1, padding=0).view(1,-1)
+                windowed_w = windowed_slc.shape[1]
+                windowed_len = int(windowed_w / seg_number)
+                seg_len = int(w / seg_number)
+                seg_accum, windowed_accum = self.get_seg(seg_number,seg_len,w,windowed_w,windowed_len)
+                windowed_slc_each = windowed_slc[0]
+                win_start, win_end = 0,windowed_w
+                #find region
+                if stage_name=='keep': #from all possible to a fix number
+                    ops_names_l = [ops_names[fix_idx[i]]]
+                else:
+                    ops_names_l = ops_names
+                for k, ops_name in enumerate(ops_names_l):
+                    t_s_tmp = t_s.clone().detach().cpu()
+                    region_list,inforegion_list = [],[]
+                    for seg_idx in range(seg_number):
+                        if self.grid_region:
+                            start, end = seg_accum[seg_idx], seg_accum[seg_idx+1]
+                            win_start, win_end = windowed_accum[seg_idx], windowed_accum[seg_idx+1]
+                        seg_window = windowed_slc_each[win_start:win_end]
+                        quant_score = torch.quantile(seg_window,info_aug)
+                        bound_score = torch.quantile(seg_window,info_bound)
+                        select_windows = (compare_func(seg_window,quant_score) & bound_func(seg_window,bound_score)).nonzero(as_tuple=True)[0].detach().cpu().numpy()
+                        if len(select_windows)==0:
+                            print('origin window: ', seg_window)
+                            print('window index', select_windows.shape)
+                            print('no result:')
+                            print('quant_score: ',quant_score)
+                            print('bound_score: ',bound_score)
+                            print('max windows: ',torch.max(seg_window))
+                        select_p = np.random.choice(select_windows) + win_start #window start for adjust
+                        x = select_p + info_len // 2 #back to seg
+                        x1 = np.clip(x - info_len // 2, 0, w)
+                        x2 = np.clip(x + info_len // 2, 0, w)
+                        region_list.append([x1,x2])
+                        info_region = t_s_tmp[x1: x2,:].clone().detach().cpu()
+                        inforegion_list.append(info_region)
+                    #augment & paste back
+                    if selective=='cut':
+                        for info_region in inforegion_list:
+                            info_region = augment(info_region,i=i,k=k,ops_name=ops_name,keep_thres=keep_thres,**kwargs) #some error
+                    else:
+                        t_s_tmp = augment(t_s_tmp,i=i,k=k,ops_name=ops_name,keep_thres=keep_thres,**kwargs) #some other augment if needed
+                        #print('Size compare: ',t_s[x1: x2, :].shape,info_region.shape)
+                    for reg_i in range(len(inforegion_list)):
+                        x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
+                        t_s_tmp[x1: x2, :] = inforegion_list[reg_i]
+                    t_s_tmp = stop_gradient_keep(t_s_tmp.cuda(), magnitudes[i][k], keep_thres[i],region_list) #add keep thres
+                    aug_t_s_list.append(t_s_tmp)
+        #back
+        if self.mode=='auto':
+            model.train()
+            for param in model.parameters():
+                param.requires_grad = True
+        return torch.stack(aug_t_s_list, dim=0) #(b*lens,seq,ch) or (b*ops,seq,ch)
+    
+    def change_stage(self):
+        #stage change
+        self.stage = (self.stage+1) % len(self.all_stages)
 
 if __name__ == '__main__':
     print('Test all operations')

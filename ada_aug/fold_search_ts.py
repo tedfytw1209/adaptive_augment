@@ -19,7 +19,7 @@ from adaptive_augmentor import AdaAug_TS,AdaAugkeep_TS
 from networks import get_model_tseries
 from networks.projection import Projection_TSeries
 from config import get_search_divider
-from dataset import get_ts_dataloaders, get_num_class, get_label_name, get_dataset_dimension,get_num_channel
+from dataset import get_ts_dataloaders, get_num_class, get_label_name, get_dataset_dimension,get_num_channel,Freq_dict,TimeS_dict
 from operation_tseries import TS_OPS_NAMES,ECG_OPS_NAMES,TS_ADD_NAMES,MAG_TEST_NAMES,NOMAG_TEST_NAMES
 from step_function import train,infer,search_train,search_infer
 from non_saturating_loss import NonSaturatingLoss
@@ -159,6 +159,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         n_class = get_num_class(args.dataset,args.labelgroup)
         sdiv = get_search_divider(args.model_name)
         class2label = get_label_name(args.dataset, args.dataroot,args.labelgroup)
+        self.sfreq = Freq_dict[args.dataset]
+        self.time_s = TimeS_dict[args.dataset]
         multilabel = args.multilabel
         diff_augment = args.diff_aug
         diff_mix = not args.not_mix
@@ -267,7 +269,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                     'target_d': get_dataset_dimension(args.dataset),
                     'gf_model_name': args.model_name}
         keepaug_config = {'keep_aug':args.keep_aug,'mode':args.keep_mode,'thres':args.keep_thres,'length':args.keep_len,
-            'grid_region':args.keep_grid, 'possible_segment': args.keep_seg, 'info_upper': args.keep_bound}
+            'grid_region':args.keep_grid, 'possible_segment': args.keep_seg, 'info_upper': args.keep_bound, 'sfreq':self.sfreq}
+        trans_config = {'sfreq':self.sfreq}
         if args.keep_mode=='adapt':
             keepaug_config['mode'] = 'auto'
             self.adaaug = AdaAugkeep_TS(after_transforms=after_transforms,
@@ -281,7 +284,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 multilabel=multilabel,
                 augselect=args.augselect,
                 class_adaptive=self.class_noaug,
-                noaug_add=self.noaug_add)
+                noaug_add=self.noaug_add,
+                transfrom_dic=trans_config)
         else:
             keepaug_config['length'] = keepaug_config['length'][0]
             self.adaaug = AdaAug_TS(after_transforms=after_transforms,
@@ -295,7 +299,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 multilabel=multilabel,
                 augselect=args.augselect,
                 class_adaptive=self.class_noaug,
-                noaug_add=self.noaug_add)
+                noaug_add=self.noaug_add,
+                transfrom_dic=trans_config)
         #to self
         self.n_channel = n_channel
         self.n_class = n_class

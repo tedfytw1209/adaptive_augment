@@ -204,7 +204,7 @@ class AdaAug(nn.Module):
 class AdaAug_TS(AdaAug):
     def __init__(self, after_transforms, n_class, gf_model, h_model, save_dir=None, visualize=False,
                     config=default_config,keepaug_config=default_config, multilabel=False, augselect='',class_adaptive=False,
-                    noaug_add=False):
+                    noaug_add=False,transfrom_dic={}):
         super(AdaAug_TS, self).__init__(after_transforms, n_class, gf_model, h_model, save_dir, config)
         #other already define in AdaAug
         self.ops_names = TS_OPS_NAMES.copy()
@@ -214,6 +214,7 @@ class AdaAug_TS(AdaAug):
             self.ops_names = self.ops_names + ECG_OPS_NAMES.copy()
         print('AdaAug Using ',self.ops_names)
         self.n_ops = len(self.ops_names)
+        self.transfrom_dic = transfrom_dic
         self.history = PolicyHistory(self.ops_names, self.save_dir, self.n_class)
         self.config = config
         self.use_keepaug = keepaug_config['keep_aug']
@@ -268,7 +269,7 @@ class AdaAug_TS(AdaAug):
             self.history.add(k, mean_lambda, mean_p, std_lambda, std_p)
 
     def get_aug_valid_img(self, image, magnitudes,i=None,k=None,ops_name=None):
-        trans_image = apply_augment(image, ops_name, magnitudes[i][k].detach().cpu().numpy())
+        trans_image = apply_augment(image, ops_name, magnitudes[i][k].detach().cpu().numpy(),**self.transfrom_dic)
         trans_image = self.after_transforms(trans_image)
         trans_image = stop_gradient(trans_image.cuda(), magnitudes[i][k])
         return trans_image
@@ -325,7 +326,7 @@ class AdaAug_TS(AdaAug):
             idx_list,magnitude_i = idx_matrix,magnitudes
         for idx in idx_list:
             m_pi = perturb_param(magnitude_i[idx], self.delta).detach().cpu().numpy()
-            image = apply_augment(image, self.ops_names[idx], m_pi)
+            image = apply_augment(image, self.ops_names[idx], m_pi,**self.transfrom_dic)
         return self.after_transforms(image)
     def get_training_aug_images(self, images, magnitudes, weights):
         # visualization
@@ -398,7 +399,7 @@ class AdaAug_TS(AdaAug):
 class AdaAugkeep_TS(AdaAug):
     def __init__(self, after_transforms, n_class, gf_model, h_model, save_dir=None, visualize=False,
                     config=default_config,keepaug_config=default_config, multilabel=False, augselect='',class_adaptive=False,
-                    noaug_add=False):
+                    noaug_add=False,transfrom_dic={}):
         super(AdaAugkeep_TS, self).__init__(after_transforms, n_class, gf_model, h_model, save_dir, config)
         #other already define in AdaAug
         self.ops_names = TS_OPS_NAMES.copy()
@@ -415,6 +416,7 @@ class AdaAugkeep_TS(AdaAug):
         print('KeepAug Using ',self.keep_lens)
         print('Keep thres adapt: ',self.thres_adapt)
         self.n_ops = len(self.ops_names)
+        self.transfrom_dic = transfrom_dic
         self.n_keeplens = len(self.keep_lens)
         self.history = PolicyHistoryKeep(self.ops_names,self.keep_lens, self.save_dir, self.n_class)
         self.config = config
@@ -475,7 +477,7 @@ class AdaAugkeep_TS(AdaAug):
             self.history.add(k, mean_lambda, mean_p, mean_len, mean_thre, std_lambda, std_p, std_len, std_thre)
 
     def get_aug_valid_img(self, image, magnitudes,keep_thres,i=None,k=None,ops_name=None):
-        trans_image = apply_augment(image, ops_name, magnitudes[i][k].detach().cpu().numpy())
+        trans_image = apply_augment(image, ops_name, magnitudes[i][k].detach().cpu().numpy(),**self.transfrom_dic)
         trans_image = self.after_transforms(trans_image)
         #trans_image = stop_gradient_keep(trans_image.cuda(), magnitudes[i][k], keep_thres[i]) #add keep thres
         return trans_image
@@ -525,7 +527,7 @@ class AdaAugkeep_TS(AdaAug):
             idx_list,magnitude_i = idx_matrix,magnitudes
         for idx in idx_list:
             m_pi = perturb_param(magnitude_i[idx], self.delta).detach().cpu().numpy()
-            image = apply_augment(image, self.ops_names[idx], m_pi)
+            image = apply_augment(image, self.ops_names[idx], m_pi,**self.transfrom_dic)
         return self.after_transforms(image)
     def get_training_aug_images(self, images, magnitudes, weights, keeplen_ws, keep_thres):
         # visualization

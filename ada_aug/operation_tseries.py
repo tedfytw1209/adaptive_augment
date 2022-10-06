@@ -460,8 +460,9 @@ def info_Window_Slicing(X, magnitude,start,end, random_state=None, *args, **kwar
     new_x = torch.from_numpy(new_x).float().permute(0,2,1) #back
     return new_x
 
-def Window_Slicing_Circle(X, magnitude,window_size=1000, random_state=None, *args, **kwargs):
+def Window_Slicing_Circle(X, magnitude, random_state=None, *args, **kwargs):
     rng = check_random_state(random_state)
+    window_size = X.shape[2]
     x = X.detach().cpu().numpy()
     dup_x = np.concatenate([x,x],axis=2)
     window_start = rng.randint(0, dup_x.shape[2] - window_size)
@@ -494,13 +495,9 @@ def TS_Permutation(X, magnitude, random_state=None, *args, **kwargs):
 #Concat_Resample same as Window Slicing
 #Time Warp using generalize time-series module
 def time_warp(x,rng, sigma=0.2, knot=4): #ref (batch, time_steps, channel)
-    
     orig_steps = np.arange(x.shape[1])
-    
     random_warps = rng.normal(loc=1.0, scale=sigma, size=(x.shape[0], knot+2, 1)) #modify for same warp between channels
-
     warp_steps = (np.ones((x.shape[2],1))*(np.linspace(0, x.shape[1]-1., num=knot+2))).T
-    
     ret = np.zeros_like(x)
     for i, pat in enumerate(x):
         for dim in range(x.shape[2]):
@@ -543,14 +540,12 @@ def Scaling(X, magnitude, random_state=None, *args, **kwargs):
 #Adding Noise: low=>baseline wander
 def magnitude_warp(x, rng, sigma=0.2, knot=4): #ref (batch, time_steps, channel)
     orig_steps = np.arange(x.shape[1])
-    
     random_warps = rng.normal(loc=1.0, scale=sigma, size=(x.shape[0], knot+2, x.shape[2]))
     warp_steps = (np.ones((x.shape[2],1))*(np.linspace(0, x.shape[1]-1., num=knot+2))).T
     ret = np.zeros_like(x)
     for i, pat in enumerate(x):
         warper = np.array([CubicSpline(warp_steps[:,dim], random_warps[i,:,dim])(orig_steps) for dim in range(x.shape[2])]).T
         ret[i] = pat * warper
-
     return ret
 def Magnitude_Warp(X, magnitude, random_state=None, *args, **kwargs):
     rng = check_random_state(random_state)
@@ -729,17 +724,16 @@ SELECTIVE_DICT = {
 def get_augment(name):
     return AUGMENT_DICT[name]
 
-def apply_augment(img, name, level, rd_seed=None):
+def apply_augment(img, name, level, rd_seed=None,sfreq=100):
     augment_fn, low, high = get_augment(name)
     assert 0 <= level
     assert level <= 1
     #change tseries signal from (len,channel) to (batch,channel,len)
-    #print('Device: ',img.device)
     seq_len , channel = img.shape
     img = img.permute(1,0).view(1,channel,seq_len)
     aug_value = level * (high - low) + low
     #print('Device: ',aug_value.device)
-    aug_img = augment_fn(img, aug_value,random_state=rd_seed)
+    aug_img = augment_fn(img, aug_value,random_state=rd_seed,sfreq=sfreq)
     return aug_img.permute(0,2,1).detach().view(seq_len,channel) #back to (len,channel)
 
 def plot_line(t,x,title=None):
@@ -765,7 +759,7 @@ class ToTensor:
         return torch.tensor(img).float()
 
 class RandAugment:
-    def __init__(self, n, m, rd_seed=None,augselect=''):
+    def __init__(self, n, m, rd_seed=None,augselect='',sfreq=100):
         self.n = n
         self.m = m      # [0, 1]
         self.augment_list = TS_AUGMENT_LIST
@@ -777,6 +771,7 @@ class RandAugment:
             self.augment_list += ECG_AUGMENT_LIST
         self.augment_ids = [i for i in range(len(self.augment_list))]
         self.rng = check_random_state(rd_seed)
+        self.sfreq = sfreq
     def __call__(self, img):
         #print(img.shape)
         seq_len , channel = img.shape
@@ -786,12 +781,12 @@ class RandAugment:
             op, minval, maxval = self.augment_list[id]
             val = float(self.m) * float(maxval - minval) + minval
             #print(val)
-            img = op(img, val,random_state=self.rng)
+            img = op(img, val,random_state=self.rng,sfreq=self.sfreq)
 
         return img.permute(0,2,1).detach().view(seq_len,channel) #back to (len,channel)
 
 class TransfromAugment:
-    def __init__(self, names,m ,p=0.5,n=1, rd_seed=None):
+    def __init__(self, names,m ,p=0.5,n=1, rd_seed=None,sfreq=100):
         print(f'Using Fix transfroms {names}, m={m}, n={n}, p={p}')
         self.p = p
         if isinstance(m,list):
@@ -804,6 +799,7 @@ class TransfromAugment:
         self.n = n
         self.names = names
         self.rng = check_random_state(rd_seed)
+        self.sfreq = sfreq
     def __call__(self, img, **_kwargs): #ignore other args
         #print(img.shape)
         seq_len , channel = img.shape #(channel, seq_len)
@@ -815,13 +811,13 @@ class TransfromAugment:
             if use_op:
                 op, minval, maxval = augment
                 val = float(self.m_dic[name]) * float(maxval - minval) + minval
-                img = op(img, val,random_state=self.rng)
+                img = op(img, val,random_state=self.rng,sfreq=self.sfreq)
             else: #pass
                 pass
         return img.permute(0,2,1).detach().view(seq_len,channel) #back to (len,channel)
 
 class TransfromAugment_classwise:
-    def __init__(self, names,m ,p=0.5,n=1,num_class=None, rd_seed=None):
+    def __init__(self, names,m ,p=0.5,n=1,num_class=None, rd_seed=None,sfreq=100):
         print(f'Using Class-wise Fix transfroms {names}, m={m}, n={n}, p={p}')
         self.p = p
         assert len(m)==len(names)
@@ -832,6 +828,7 @@ class TransfromAugment_classwise:
         self.n = n
         self.names = names
         self.rng = check_random_state(rd_seed)
+        self.sfreq = sfreq
     def __call__(self, img, label):
         #print(img.shape)
         seq_len , channel = img.shape
@@ -845,7 +842,7 @@ class TransfromAugment_classwise:
             if use_op:
                 op, minval, maxval = augment
                 val = float(mag) * float(maxval - minval) + minval
-                img = op(img, val,random_state=self.rng)
+                img = op(img, val,random_state=self.rng,sfreq=self.sfreq)
             else: #pass
                 pass
         return img.permute(0,2,1).detach().view(seq_len,channel) #back to (len,channel)
@@ -919,7 +916,7 @@ class InfoRAugment:
                 if use_op:
                     op, minval, maxval = augment
                     val = float(self.m_dic[name]) * float(maxval - minval) + minval
-                    seg_list[i] = op(seg_list[i], val,start=seg_start,end=seg_end,random_state=self.rng)
+                    seg_list[i] = op(seg_list[i], val,start=seg_start,end=seg_end,random_state=self.rng,sfreq=self.sfreq)
                 else: #pass
                     pass
         new_x = torch.cat(seg_list,dim=2)
@@ -995,7 +992,7 @@ class BeatAugment:
                 if use_op:
                     op, minval, maxval = augment
                     val = float(self.m_dic[name]) * float(maxval - minval) + minval
-                    seg_list[i] = op(seg_list[i], val,random_state=self.rng)
+                    seg_list[i] = op(seg_list[i], val,random_state=self.rng,sfreq=self.sfreq)
         new_x = torch.cat(seg_list,dim=2)
         assert new_x.shape[2]==seq_len
         return new_x.permute(0,2,1).detach().view(seq_len,channel) #back to (len,channel)
@@ -1025,7 +1022,7 @@ class KeepAugment(object): #need fix
         self.length = length
         self.early = early
         self.low = low
-        self.sfreq = sfreq
+        self.sfreq = sfreq #transfroms sfreq add for adaptive_augmentor
         self.pw_len = pw_len
         self.tw_len = tw_len
         self.trans = transfrom
@@ -1274,7 +1271,7 @@ class AdaKeepAugment(KeepAugment): #need fix
         self.length = length #len is a list in this case
         self.early = early
         self.low = low
-        self.sfreq = sfreq
+        self.sfreq = sfreq #transfroms sfreq add for adaptive_augmentor
         self.pw_len = pw_len
         self.tw_len = tw_len
         self.trans = transfrom

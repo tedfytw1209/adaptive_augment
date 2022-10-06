@@ -105,7 +105,7 @@ if args.k_ops>0:
     Aug_type = 'AdaAug'
 else:
     Aug_type = 'NOAUG'
-Aug_type += args.augselect
+
 if args.diff_aug:
     description = 'diff2'
 else:

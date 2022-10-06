@@ -112,7 +112,7 @@ if args.k_ops>0:
     Aug_type = 'AdaAug'
 else:
     Aug_type = 'NOAUG'
-Aug_type += args.augselect
+
 if args.diff_aug:
     description = 'diff2'
     description += args.loss_type
@@ -131,7 +131,7 @@ if args.keep_aug:
 if args.teach_aug:
     description+=f'teach{args.ema_rate}'
 now_str = time.strftime("%Y%m%d-%H%M%S")
-args.save = '{}-{}-{}{}'.format(now_str, args.save,Aug_type,description)
+args.save = '{}-{}-{}{}'.format(now_str, args.save,Aug_type,description+args.augselect)
 if debug:
     args.save = os.path.join('debug', args.save)
 else:

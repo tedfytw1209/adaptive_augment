@@ -222,9 +222,46 @@ def ab_loss(ori_loss, aug_loss):
 def rel_loss(ori_loss, aug_loss):
     return aug_loss / ori_loss.detach()
 
+def cuc_loss(logits,target,criterion,multilabel,**kwargs):
+    if multilabel:
+        loss = criterion(logits, target.float(),**kwargs)
+    else:
+        loss = criterion(logits, target.long(),**kwargs)
+    return loss
+
+def embed_mix(gf_model,mixed_features,aug_weights,adv_criterion,target_trsearch,multilabel):
+    aug_logits = gf_model.classify(mixed_features) 
+    aug_loss = cuc_loss(aug_logits,target_trsearch,adv_criterion,multilabel)
+    return aug_loss, aug_logits
+
+def loss_mix(gf_model,mixed_features,aug_weights,adv_criterion,target_trsearch,multilabel):
+    # mixed_features=(batch, n_ops,keep_lens, n_hidden) or (batch, keep_lens, n_hidden) or (batch, n_ops, n_hidden)
+    if len(aug_weights)==2: #(batch, n_ops,keep_lens, n_hidden)
+        batch, n_ops,keep_lens, n_hidden = mixed_features.shape
+        weights, keeplen_ws = aug_weights[0], aug_weights[1]
+        mixed_features = mixed_features.reshape(batch*n_ops*keep_lens,n_hidden)
+        aug_logits = gf_model.classify(mixed_features)
+        aug_loss = cuc_loss(aug_logits,target_trsearch,adv_criterion,multilabel)
+        aug_loss = aug_loss.reshape(batch, n_ops,keep_lens).permute(0,2,1)
+        aug_loss = [w.matmul(feat) for w, feat in zip(weights, aug_loss)] #[(keep_lens, n_hidden)]
+        aug_loss = [len_w.matmul(feat) for len_w,feat in zip(keeplen_ws,mixed_features)] #[(1)]
+        aug_loss = torch.stack(aug_loss, dim=0).mean()
+        aug_logits = aug_logits.reshape(batch, n_ops,keep_lens).mean(dim=(1,2))
+    else:
+        batch, n_param, n_hidden = mixed_features.shape
+        weights = aug_weights[0]
+        mixed_features = mixed_features.reshape(batch*n_param,n_hidden)
+        aug_logits = gf_model.classify(mixed_features)
+        aug_loss = cuc_loss(aug_logits,target_trsearch,adv_criterion,multilabel)
+        aug_loss = aug_loss.reshape(batch, n_param)
+        aug_loss = [w.matmul(feat) for w, feat in zip(weights, aug_loss)] #[(1)]
+        aug_loss = torch.stack(aug_loss, dim=0).mean()
+        aug_logits = aug_logits.reshape(batch, n_param).mean(dim=1)
+    return aug_loss, aug_logits
+
 def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, adaaug, criterion, gf_optimizer,scheduler,
             grad_clip, h_optimizer, epoch, search_freq,search_round=1, multilabel=False,n_class=10,
-            difficult_aug=False,same_train=False,reweight=True,sim_reweight=False,mix_feature=True, warmup_epoch = 0
+            difficult_aug=False,same_train=False,reweight=True,sim_reweight=False,mix_type='embed', warmup_epoch = 0
             ,lambda_sim = 1.0,lambda_aug = 1.0,loss_type='minus',lambda_noaug = 0,train_perfrom = 0.0,
             class_adaptive=False,adv_criterion=None,sim_criterion=None,teacher_model=None,map_select=False):
     objs = utils.AvgrageMeter()
@@ -254,6 +291,15 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
         print('Unknown loss type for policy training')
         print(loss_type)
         print(adv_criterion)
+        raise
+    mix_feature = False
+    if mix_type=='embed':
+        mix_feature = True
+        mix_func = embed_mix
+    elif mix_type=='loss':
+        mix_func = loss_mix
+    else:
+        print('Unknown mix type')
         raise
     preds = []
     targets = []
@@ -353,13 +399,14 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                         else:
                             policy_y = target_trsearch.cuda().float()
                     mixed_features, aug_weights = adaaug(input_trsearch, seq_len, mode='explore',mix_feature=mix_feature,y=policy_y)
-                    aug_logits = gf_model.classify(mixed_features) 
+                    aug_loss, aug_logits = mix_func(gf_model,mixed_features,aug_weights,adv_criterion,target_trsearch,multilabel)
+                    ori_loss = cuc_loss(origin_logits,target_trsearch,adv_criterion,multilabel).mean() #!to assert loss mean reduce
+                    '''
                     if multilabel:
-                        aug_loss = adv_criterion(aug_logits, target_trsearch.float())
                         ori_loss = adv_criterion(origin_logits, target_trsearch.float())
                     else:
-                        aug_loss = adv_criterion(aug_logits, target_trsearch.long())
                         ori_loss = adv_criterion(origin_logits, target_trsearch.long())
+                    '''
                     aug_diff_loss += aug_loss.detach().item()
                     ori_diff_loss += ori_loss.detach().item()
                     loss_prepolicy = diff_loss_func(ori_loss=ori_loss,aug_loss=aug_loss,lambda_aug=lambda_aug)
@@ -392,7 +439,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                     else:
                         policy_y = target_search.cuda().float()
                 policy_y_list.append(policy_y)
-                mixed_features, aug_weights = adaaug(input_search, seq_len, mode='explore',y=policy_y)
+                mixed_features, aug_weights = adaaug(input_search, seq_len, mode='explore',mix_feature=mix_feature,y=policy_y)
                 #weight regular to NOAUG
                 aug_weight = aug_weights[0] # (bs, n_ops), 0 is NOAUG
                 noaug_target = torch.zeros(target_search.shape).cuda().long()
@@ -407,15 +454,14 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                     sim_model = gf_model
                 else:
                     sim_model = teacher_model.module
-                logits_search = sim_model.classify(mixed_features)
+                #sim mix if need, calculate loss
+                loss, logits_search = mix_func(gf_model,mixed_features,aug_weights,sim_criterion,target_search,multilabel)
                 origin_logits = sim_model(input_search, seq_len)
-                #calculate loss
-                if multilabel:
-                    loss = sim_criterion(logits_search, target_search.float())
+                ori_loss = cuc_loss(origin_logits,target_search,sim_criterion,multilabel).mean() #!to assert loss mean reduce
+                '''if multilabel:
                     ori_loss = sim_criterion(origin_logits, target_search.float())
                 else:
-                    loss = sim_criterion(logits_search, target_search.long())
-                    ori_loss = sim_criterion(origin_logits, target_search.long())
+                    ori_loss = sim_criterion(origin_logits, target_search.long())'''
                 #similar reweight?
                 aug_search_loss += loss.detach().item()
                 ori_search_loss += ori_loss.detach().item()

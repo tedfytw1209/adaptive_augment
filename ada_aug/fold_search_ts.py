@@ -82,7 +82,7 @@ parser.add_argument('--search_sampler', type=str, default='', help='for search s
 parser.add_argument('--diff_aug', action='store_true', default=False, help='use valid select')
 parser.add_argument('--same_train', action='store_true', default=False, help='use valid select')
 parser.add_argument('--mix_type', type=str, default='embed', help='add regular for noaugment ',
-        choices=['embed','out','loss'])
+        choices=['embed','loss'])
 parser.add_argument('--not_reweight', action='store_true', default=False, help='use diff reweight')
 parser.add_argument('--sim_rew', action='store_true', default=False, help='use sim reweight')
 parser.add_argument('--pwarmup', type=int, default=0, help="warmup epoch for policy")
@@ -242,8 +242,13 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         self.adv_criterion = None
         if args.loss_type=='adv':
             self.adv_criterion = NonSaturatingLoss(epsilon=0.1).cuda()
+        elif args.mix_type=='loss':
+            if not multilabel:
+                self.adv_criterion = nn.CrossEntropyLoss(reduction='none')
+            else:
+                self.adv_criterion = nn.BCEWithLogitsLoss(reduction='none')
         self.sim_criterion = None
-        if args.policy_loss=='classbal':
+        if args.policy_loss=='classbal': #bug!: can not with loss_mix
             search_labels = self.search_queue.dataset.dataset.label
             if not multilabel:
                 search_labels_count = [np.count_nonzero(search_labels == i) for i in range(n_class)] #formulticlass
@@ -253,12 +258,17 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             if multilabel:
                 sim_type = 'focal'
             self.sim_criterion = ClassBalLoss(search_labels_count,len(search_labels_count),loss_type=sim_type).cuda()
-        elif args.policy_loss=='classdiff':
+        elif args.policy_loss=='classdiff': #bug!: can not with loss_mix
             self.class_difficulty = np.ones(n_class)
             gamma = None
             if multilabel:
                 gamma = 2.0
             self.sim_criterion = ClassDiffLoss(class_difficulty=self.class_difficulty,focal_gamma=gamma).cuda() #default now
+        elif args.mix_type=='loss':
+            if not multilabel:
+                self.sim_criterion = nn.CrossEntropyLoss(reduction='none')
+            else:
+                self.sim_criterion = nn.BCEWithLogitsLoss(reduction='none')
 
         #  AdaAug settings for search
         ind_mix,sub_mix = False,False
@@ -335,7 +345,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         diff_dic = {'difficult_aug':self.diff_augment,'same_train':args.same_train,'reweight':self.diff_reweight,'lambda_aug':args.lambda_aug,
                 'lambda_sim':args.lambda_sim,'class_adaptive':args.class_adapt,'lambda_noaug':args.lambda_noaug,'train_perfrom':self.pre_train_acc,
                 'loss_type':args.loss_type, 'adv_criterion': self.adv_criterion, 'teacher_model':self.ema_model, 'sim_criterion':self.sim_criterion,
-                'sim_reweight':args.sim_rew,'warmup_epoch': args.pwarmup}
+                'sim_reweight':args.sim_rew,'warmup_epoch': args.pwarmup,'mix_type':args.mix_type}
         
         # searching
         train_acc, train_obj, train_dic = search_train(args,self.train_queue, self.search_queue, self.tr_search_queue, self.gf_model, self.adaaug,

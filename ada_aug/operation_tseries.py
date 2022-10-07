@@ -1300,7 +1300,7 @@ class AdaKeepAugment(KeepAugment): #
         self.all_stages = ['trans','keep']
         self.stage = 0
         #'torch.nn.functional.avg_pool1d' use this for segment
-        print(f'Apply InfoKeep Augment: mode={self.mode}, threshold={self.thres}, transfrom={self.trans}')
+        print(f'Apply InfoKeep Augment: mode={self.mode},target={self.adapt_target}, threshold={self.thres}, transfrom={self.trans}')
     #kwargs for apply_func, batch_inputs
     def __call__(self, t_series, model=None,selective='paste', apply_func=None,len_idx=None, keep_thres=None, **kwargs):
         b,w,c = t_series.shape
@@ -1319,12 +1319,15 @@ class AdaKeepAugment(KeepAugment): #
             use_reverse = None
             if self.adapt_target=='len':
                 total_len = self.length[len_idx[i]]
+                print('len ', total_len) #!!!tmp
             elif self.adapt_target=='way':
                 select_way = self.way[len_idx[i]]
                 selective = select_way[0]
                 use_reverse = select_way[1]
+                print('way ', select_way) #!!!tmp
             elif self.adapt_target=='seg':
                 seg_number = self.possible_segment[len_idx[i]]
+                print('seg ', seg_number) #!!!tmp
             else:
                 raise 
             info_aug, compare_func, info_bound, bound_func = self.get_selective(selective,thres=keep_thres[i],use_reverse=use_reverse)
@@ -1390,14 +1393,19 @@ class AdaKeepAugment(KeepAugment): #
             keepway_params = [(selective,self.reverse) for i in range(len(self.length))]
             keeplen_params = self.length
             keepseg_params = [seg_number for i in range(len(self.length))]
+            print('len ', self.length) #!!!tmp
         elif adapt_target=='way':
             keepway_params = self.way
             keeplen_params = [each_len for i in range(len(self.way))]
             keepseg_params = [seg_number for i in range(len(self.way))]
-        else:
+            print('way ', self.way) #!!!tmp
+        elif adapt_target=='seg':
             keepway_params = [(selective,self.reverse) for i in range(len(self.possible_segment))]
             keeplen_params = [each_len for i in range(len(self.possible_segment))]
             keepseg_params = self.possible_segment
+            print('seg ', self.possible_segment) #!!!tmp
+        else:
+            raise
         return keepway_params, keeplen_params, keepseg_params
     def Augment_search(self, t_series, model=None,selective='paste', apply_func=None,ops_names=None, keep_thres=None, **kwargs):
         b,w,c = t_series.shape

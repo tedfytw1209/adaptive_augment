@@ -406,29 +406,31 @@ class AdaAugkeep_TS(AdaAug):
             self.ops_names = self.ops_names + TS_ADD_NAMES.copy()
         if 'ecg' in augselect:
             self.ops_names = self.ops_names + ECG_OPS_NAMES.copy()
-        possible_segment = keepaug_config.get('possible_segment',[1])
+        self.possible_segment = keepaug_config.get('possible_segment',[1])
         self.keep_lens = keepaug_config['length']
         if keepaug_config['adapt_target'] == 'len': # adapt len
             self.adapt_len = len(self.keep_lens)
+            self.adapt_params = self.keep_lens
         elif keepaug_config['adapt_target'] == 'seg': #adapt segment
-            self.adapt_len = len(possible_segment)
+            self.adapt_len = len(self.possible_segment)
+            self.adapt_params = self.possible_segment
         elif keepaug_config['adapt_target'] == 'way': #adapt segment
             self.adapt_len = 4 #!!! const now
+            self.adapt_params = [('cut',False),('cut',True),('paste',False),('paste',True)] #(selective,reverse)
         else:
             print('KeepAdapt need multiple lens or segment to learn')
             exit()
         self.thres_adapt = keepaug_config.get('thres_adapt',True)
         self.ind_mix = ind_mix
         print('AdaAug Using ',self.ops_names)
+        print('Adapt target ',self.adapt_params)
+        print('KeepAug params using ',self.adapt_params)
         print('KeepAug lens using ',self.keep_lens)
         print('KeepAug segments using ',self.keep_lens)
         print('Keep thres adapt: ',self.thres_adapt)
         self.n_ops = len(self.ops_names)
         self.n_keeplens = len(self.keep_lens)
-        if keepaug_config['adapt_target']=='len':
-            self.history = PolicyHistoryKeep(self.ops_names,self.keep_lens, self.save_dir, self.n_class)
-        else:
-            self.history = PolicyHistoryKeep(self.ops_names,self.possible_segment, self.save_dir, self.n_class)
+        self.history = PolicyHistoryKeep(self.ops_names,self.adapt_params, self.save_dir, self.n_class)
         self.config = config
         self.use_keepaug = keepaug_config['keep_aug']
         self.adapt_target = keepaug_config['adapt_target']

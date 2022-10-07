@@ -1319,15 +1319,12 @@ class AdaKeepAugment(KeepAugment): #
             use_reverse = None
             if self.adapt_target=='len':
                 total_len = self.length[len_idx[i]]
-                print('len ', total_len) #!!!tmp
             elif self.adapt_target=='way':
                 select_way = self.way[len_idx[i]]
                 selective = select_way[0]
                 use_reverse = select_way[1]
-                print('way ', select_way) #!!!tmp
             elif self.adapt_target=='seg':
                 seg_number = self.possible_segment[len_idx[i]]
-                print('seg ', seg_number) #!!!tmp
             else:
                 raise 
             info_aug, compare_func, info_bound, bound_func = self.get_selective(selective,thres=keep_thres[i],use_reverse=use_reverse)
@@ -1393,17 +1390,14 @@ class AdaKeepAugment(KeepAugment): #
             keepway_params = [(selective,self.reverse) for i in range(len(self.length))]
             keeplen_params = self.length
             keepseg_params = [seg_number for i in range(len(self.length))]
-            print('len ', self.length) #!!!tmp
         elif adapt_target=='way':
             keepway_params = self.way
             keeplen_params = [each_len for i in range(len(self.way))]
             keepseg_params = [seg_number for i in range(len(self.way))]
-            print('way ', self.way) #!!!tmp
         elif adapt_target=='seg':
             keepway_params = [(selective,self.reverse) for i in range(len(self.possible_segment))]
             keeplen_params = [each_len for i in range(len(self.possible_segment))]
             keepseg_params = self.possible_segment
-            print('seg ', self.possible_segment) #!!!tmp
         else:
             raise
         return keepway_params, keeplen_params, keepseg_params

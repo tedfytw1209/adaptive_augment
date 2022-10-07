@@ -426,7 +426,7 @@ class AdaAugkeep_TS(AdaAug):
         print('Adapt target ',self.adapt_params)
         print('KeepAug params using ',self.adapt_params)
         print('KeepAug lens using ',self.keep_lens)
-        print('KeepAug segments using ',self.keep_lens)
+        print('KeepAug segments using ',self.possible_segment)
         print('Keep thres adapt: ',self.thres_adapt)
         self.n_ops = len(self.ops_names)
         self.n_keeplens = len(self.keep_lens)

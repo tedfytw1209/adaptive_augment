@@ -20,7 +20,7 @@ default_config = {'sampling': 'prob',
                     'temp': 1.0,
                     'search_d': 32,
                     'target_d': 32}
-defaultkeep_config = {'keep_aug':False,'mode':'auto','thres':0.6,'length':100} #tmp!!!
+defaultkeep_config = {'keep_aug':False,'mode':'auto','thres':0.6,'length':100}
 
 def perturb_param(param, delta):
     if delta <= 0:

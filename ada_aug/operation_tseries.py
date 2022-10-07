@@ -1068,6 +1068,7 @@ class KeepAugment(object): #need fix
             upper_bound = 1.0 - (1.0 - info_aug) * self.info_upper
         if use_reverse:
             com_idx = (com_idx+1)%2
+            upper_bound = 1.0 - upper_bound
         compare_func = self.compare_func_list[com_idx] #[lt, ge]
         bound_func = self.compare_func_list[(com_idx+1)%2] #[lt, ge]
         return info_aug, compare_func, upper_bound, bound_func
@@ -1132,8 +1133,12 @@ class KeepAugment(object): #need fix
                 inforegion_list.append(info_region)
             #augment & paste back
             if selective=='cut':
-                for info_region in inforegion_list:
-                    info_region = augment(info_region,i=i,**kwargs) #!! maybe not useful !!
+                t_s_aug = t_s.clone().detach().cpu()
+                t_s_aug = augment(t_s_aug,i=i,**kwargs) #maybe some error!!!
+                inforegion_list = [] #empty
+                for (x1,x2) in region_list:
+                    info_region = t_s_aug[x1: x2,:].clone().detach().cpu()
+                    inforegion_list.append(info_region)
             else:
                 t_s = augment(t_s,i=i,**kwargs) #some other augment if needed
                 
@@ -1192,8 +1197,12 @@ class KeepAugment(object): #need fix
                     inforegion_list.append(info_region)
                 #augment & paste back
                 if selective=='cut':
-                    for info_region in inforegion_list:
-                        info_region = augment(info_region,i=i,k=k,ops_name=ops_name,**kwargs) #!!! some error
+                    t_s_aug = t_s_tmp.clone().detach().cpu()
+                    t_s_aug = augment(t_s_aug,i=i,k=k,ops_name=ops_name,**kwargs) #maybe some error!!!
+                    inforegion_list = [] #empty
+                    for (x1,x2) in region_list:
+                        info_region = t_s_aug[x1: x2,:].clone().detach().cpu()
+                        inforegion_list.append(info_region)
                 else:
                     t_s_tmp = augment(t_s_tmp,i=i,k=k,ops_name=ops_name,**kwargs) #some other augment if needed
                     #print('Size compare: ',t_s[x1: x2, :].shape,info_region.shape)
@@ -1370,8 +1379,12 @@ class AdaKeepAugment(KeepAugment): #
                 inforegion_list.append(info_region)
             #augment & paste back
             if selective=='cut':
-                for info_region in inforegion_list: #augment segment
-                    info_region = augment(info_region,i=i,**kwargs) #some other augment if needed
+                t_s_aug = t_s.clone().detach().cpu()
+                t_s_aug = augment(t_s_aug,i=i,**kwargs) #maybe some error!!!
+                inforegion_list = [] #empty
+                for (x1,x2) in region_list:
+                    info_region = t_s_aug[x1: x2,:].clone().detach().cpu()
+                    inforegion_list.append(info_region)
             else:
                 t_s = augment(t_s,i=i,**kwargs) #some other augment if needed
             #paste back
@@ -1400,6 +1413,7 @@ class AdaKeepAugment(KeepAugment): #
             keepseg_params = self.possible_segment
         else:
             raise
+
         return keepway_params, keeplen_params, keepseg_params
     def Augment_search(self, t_series, model=None,selective='paste', apply_func=None,ops_names=None, keep_thres=None, **kwargs):
         b,w,c = t_series.shape
@@ -1412,6 +1426,7 @@ class AdaKeepAugment(KeepAugment): #
         keepway_params, keeplen_params, keepseg_params = self.make_params(self.adapt_target,each_len,seg_number,selective)
         for i,(t_s, slc) in enumerate(zip(t_series_, slc_)):
             for (each_way,each_len, seg_number) in zip(keepway_params,keeplen_params,keepseg_params):
+
                 (selective, use_reverse) = each_way
                 info_aug, compare_func, info_bound, bound_func = self.get_selective(selective,thres=keep_thres[i],use_reverse=use_reverse)
                 #select a segment number
@@ -1451,8 +1466,14 @@ class AdaKeepAugment(KeepAugment): #
                         inforegion_list.append(info_region)
                     #augment & paste back
                     if selective=='cut':
-                        for info_region in inforegion_list:
-                            info_region = augment(info_region,i=i,k=k,ops_name=ops_name,keep_thres=keep_thres,**kwargs) #some error
+                        t_s_aug = t_s_tmp.clone().detach().cpu()
+                        t_s_aug = augment(t_s_aug,i=i,k=k,ops_name=ops_name,keep_thres=keep_thres,**kwargs) #maybe some error!!!
+                        inforegion_list = [] #empty
+                        for (x1,x2) in region_list:
+                            info_region = t_s_aug[x1: x2,:].clone().detach().cpu()
+                            inforegion_list.append(info_region)
+                        #for info_region in inforegion_list:
+                        #    info_region = augment(info_region,i=i,k=k,ops_name=ops_name,keep_thres=keep_thres,**kwargs)
                     else:
                         t_s_tmp = augment(t_s_tmp,i=i,k=k,ops_name=ops_name,keep_thres=keep_thres,**kwargs) #some other augment if needed
                         #print('Size compare: ',t_s[x1: x2, :].shape,info_region.shape)
@@ -1535,8 +1556,12 @@ class AdaKeepAugment(KeepAugment): #
                         inforegion_list.append(info_region)
                     #augment & paste back
                     if selective=='cut':
-                        for info_region in inforegion_list:
-                            info_region = augment(info_region,i=i,k=k,ops_name=ops_name,keep_thres=keep_thres,**kwargs) #some error
+                        t_s_aug = t_s_tmp.clone().detach().cpu()
+                        t_s_aug = augment(t_s_aug,i=i,k=k,ops_name=ops_name,keep_thres=keep_thres,**kwargs) #maybe some error!!!
+                        inforegion_list = [] #empty
+                        for (x1,x2) in region_list:
+                            info_region = t_s_aug[x1: x2,:].clone().detach().cpu()
+                            inforegion_list.append(info_region)
                     else:
                         t_s_tmp = augment(t_s_tmp,i=i,k=k,ops_name=ops_name,keep_thres=keep_thres,**kwargs) #some other augment if needed
                         #print('Size compare: ',t_s[x1: x2, :].shape,info_region.shape)
@@ -1550,7 +1575,8 @@ class AdaKeepAugment(KeepAugment): #
             model.train()
             for param in model.parameters():
                 param.requires_grad = True
-        return torch.stack(aug_t_s_list, dim=0) #(b*lens,seq,ch) or (b*ops,seq,ch)
+        out_ts = torch.stack(aug_t_s_list, dim=0)
+        return out_ts #(b*lens,seq,ch) or (b*ops,seq,ch)
     
     def change_stage(self):
         #stage change

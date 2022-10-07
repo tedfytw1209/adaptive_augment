@@ -1033,6 +1033,8 @@ class KeepAugment(object): #need fix
         self.thres = thres
         self.possible_segment = possible_segment
         self.grid_region = grid_region
+        # normal, paste=> paste back important score higher then, cut=> not augment important region
+        # when reverse, paste=> paste back important score lower then, cut=> augment important region
         self.reverse = reverse
         self.info_upper = info_upper
         self.detectors = Detectors(sfreq) #need input ecg: (seq_len)
@@ -1041,7 +1043,7 @@ class KeepAugment(object): #need fix
         ##self.m_pool = torch.nn.AvgPool1d(kernel_size=self.length, stride=1, padding=0) #for winodow sum
         print(f'Apply InfoKeep Augment: mode={self.mode}, threshold={self.thres}, transfrom={self.trans}')
     #func
-    def get_augment(self,apply_func,selective):
+    def get_augment(self,apply_func=None,selective='paste'):
         if apply_func!=None:
             augment = apply_func
         elif self.trans!=None:
@@ -1049,10 +1051,12 @@ class KeepAugment(object): #need fix
             if self.default_select:
                 selective = self.default_select
         return augment, selective
-    def get_selective(self,selective,thres=None):
+    def get_selective(self,selective,thres=None,use_reverse=None):
         #cut or paste
         if thres==None:
             thres = self.thres
+        if use_reverse==None:
+            use_reverse = self.reverse
         assert selective in ['cut','paste']
         if selective=='cut':
             info_aug = thres
@@ -1062,11 +1066,10 @@ class KeepAugment(object): #need fix
             info_aug = 1.0 - thres
             com_idx = 1
             upper_bound = 1.0 - (1.0 - info_aug) * self.info_upper
-        if self.reverse:
+        if use_reverse:
             com_idx = (com_idx+1)%2
         compare_func = self.compare_func_list[com_idx] #[lt, ge]
         bound_func = self.compare_func_list[(com_idx+1)%2] #[lt, ge]
-        
         return info_aug, compare_func, upper_bound, bound_func
     def get_slc(self,t_series,model):
         t_series_ = t_series.clone().detach()
@@ -1130,7 +1133,7 @@ class KeepAugment(object): #need fix
             #augment & paste back
             if selective=='cut':
                 for info_region in inforegion_list:
-                    info_region = augment(info_region,i=i,**kwargs) #some other augment if needed
+                    info_region = augment(info_region,i=i,**kwargs) #!! maybe not useful !!
             else:
                 t_s = augment(t_s,i=i,**kwargs) #some other augment if needed
                 
@@ -1275,7 +1278,9 @@ class AdaKeepAugment(KeepAugment): #
             self.start_s,self.end_s = -0.2*sfreq,0.4*sfreq
         elif self.mode=='t':
             self.start_s,self.end_s = 0,0.4*sfreq
+        assert adapt_target in ['len','seg','way']
         self.adapt_target = adapt_target
+        self.way = [('cut',False),('cut',True),('paste',False),('paste',True)] #(selective,reverse)
         self.length = length #len is a list if adapt target 
         self.early = early
         self.low = low
@@ -1311,11 +1316,18 @@ class AdaKeepAugment(KeepAugment): #
         start, end = 0,w
         for i,(t_s, slc) in enumerate(zip(t_series_, slc_)):
             #len choose
-            info_aug, compare_func, info_bound, bound_func = self.get_selective(selective,thres=keep_thres[i])
+            use_reverse = None
             if self.adapt_target=='len':
                 total_len = self.length[len_idx[i]]
-            else:
+            elif self.adapt_target=='way':
+                select_way = self.way[len_idx[i]]
+                selective = select_way[0]
+                use_reverse = select_way[1]
+            elif self.adapt_target=='seg':
                 seg_number = self.possible_segment[len_idx[i]]
+            else:
+                raise 
+            info_aug, compare_func, info_bound, bound_func = self.get_selective(selective,thres=keep_thres[i],use_reverse=use_reverse)
             info_len = int(total_len/seg_number)
             windowed_slc = torch.nn.functional.avg_pool1d(slc.view(1,1,w),kernel_size=info_len, stride=1, padding=0).view(1,-1)
             windowed_w = windowed_slc.shape[1]
@@ -1373,6 +1385,20 @@ class AdaKeepAugment(KeepAugment): #
             for param in model.parameters():
                 param.requires_grad = True
         return torch.stack(aug_t_s_list, dim=0) #(b,seq,ch)
+    def make_params(self,adapt_target,each_len=None,seg_number=None,selective=None):
+        if adapt_target=='len': #search over keep len or keep segment
+            keepway_params = [(selective,self.reverse) for i in range(len(self.length))]
+            keeplen_params = self.length
+            keepseg_params = [seg_number for i in range(len(self.length))]
+        elif adapt_target=='way':
+            keepway_params = self.way
+            keeplen_params = [each_len for i in range(len(self.way))]
+            keepseg_params = [seg_number for i in range(len(self.way))]
+        else:
+            keepway_params = [(selective,self.reverse) for i in range(len(self.possible_segment))]
+            keeplen_params = [each_len for i in range(len(self.possible_segment))]
+            keepseg_params = self.possible_segment
+        return keepway_params, keeplen_params, keepseg_params
     def Augment_search(self, t_series, model=None,selective='paste', apply_func=None,ops_names=None, keep_thres=None, **kwargs):
         b,w,c = t_series.shape
         augment, selective = self.get_augment(apply_func,selective)
@@ -1380,15 +1406,12 @@ class AdaKeepAugment(KeepAugment): #
         magnitudes = kwargs['magnitudes']
         t_series_ = t_series_.detach().cpu()
         aug_t_s_list = []
-        if self.adapt_target=='len': #search over keep len or keep segment
-            keeplen_params = self.length
-            keepseg_params = [seg_number for i in range(len(self.length))]
-        else:
-            keeplen_params = [each_len for i in range(len(self.possible_segment))]
-            keepseg_params = self.possible_segment
+        each_len, seg_number = self.length[0], self.possible_segment[0]
+        keepway_params, keeplen_params, keepseg_params = self.make_params(self.adapt_target,each_len,seg_number,selective)
         for i,(t_s, slc) in enumerate(zip(t_series_, slc_)):
-            info_aug, compare_func, info_bound, bound_func = self.get_selective(selective,thres=keep_thres[i])
-            for (each_len, seg_number) in zip(keeplen_params,keepseg_params):
+            for (each_way,each_len, seg_number) in zip(keepway_params,keeplen_params,keepseg_params):
+                (selective, use_reverse) = each_way
+                info_aug, compare_func, info_bound, bound_func = self.get_selective(selective,thres=keep_thres[i],use_reverse=use_reverse)
                 #select a segment number
                 info_len = int(each_len/seg_number)
                 windowed_slc = torch.nn.functional.avg_pool1d(slc.view(1,1,w),kernel_size=info_len, stride=1, padding=0).view(1,-1)
@@ -1442,6 +1465,7 @@ class AdaKeepAugment(KeepAugment): #
             for param in model.parameters():
                 param.requires_grad = True
         return torch.stack(aug_t_s_list, dim=0) #(b*lens*ops,seq,ch)
+    
     #independent search, ops_names is this turn params and fix_idx is this turn fixs
     ###!!!Not a good implement!!!###
     def Augment_search_ind(self, t_series, model=None,selective='paste', apply_func=None,ops_names=None,fix_idx=None, keep_thres=None, **kwargs):
@@ -1456,20 +1480,18 @@ class AdaKeepAugment(KeepAugment): #
         if stage_name=='trans':
             keeplen_params = fix_idx
         #keep len or segment
-        if self.adapt_target=='len': #search over keep len or keep segment
-            keeplen_params = self.length
-            keepseg_params = [seg_number for i in range(len(self.length))]
-        else:
-            keeplen_params = [each_len for i in range(len(self.possible_segment))]
-            keepseg_params = self.possible_segment
+        each_len, seg_number = self.length[0], self.possible_segment[0]
+        keepway_params, keeplen_params, keepseg_params = self.make_params(self.adapt_target,each_len,seg_number,selective)
         for i,(t_s, slc) in enumerate(zip(t_series_, slc_)):
-            info_aug, compare_func, info_bound, bound_func = self.get_selective(selective,thres=keep_thres[i])
             if stage_name=='trans': #from all possible to a fix number
+                keepway_params_l = [keepway_params[fix_idx[i]]]
                 keeplen_params_l = [keeplen_params[fix_idx[i]]]
                 keepseg_params_l = [keepseg_params[fix_idx[i]]]
             else:
-                keeplen_params_l,keepseg_params_l = keeplen_params,keepseg_params
-            for (each_len, seg_number) in zip(keeplen_params_l,keepseg_params_l):
+                keepway_params_l,keeplen_params_l,keepseg_params_l = keepway_params,keeplen_params,keepseg_params
+            for (each_way,each_len, seg_number) in zip(keepway_params_l,keeplen_params_l,keepseg_params_l):
+                (selective, use_reverse) = each_way
+                info_aug, compare_func, info_bound, bound_func = self.get_selective(selective,thres=keep_thres[i],use_reverse=use_reverse)
                 #select a segment number
                 info_len = int(each_len/seg_number)
                 windowed_slc = torch.nn.functional.avg_pool1d(slc.view(1,1,w),kernel_size=info_len, stride=1, padding=0).view(1,-1)

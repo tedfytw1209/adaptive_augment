@@ -407,14 +407,13 @@ class AdaAugkeep_TS(AdaAug):
         if 'ecg' in augselect:
             self.ops_names = self.ops_names + ECG_OPS_NAMES.copy()
         possible_segment = keepaug_config.get('possible_segment',[1])
-        if len(keepaug_config['length'])>1: # adapt len
-            self.keep_lens = keepaug_config['length']
-            self.possible_segment = [1]
-            keepaug_config['adapt_target'] = 'len'
-        elif len(possible_segment)>1: #adapt segment
-            self.keep_lens = keepaug_config['length']
-            self.possible_segment = possible_segment
-            keepaug_config['adapt_target'] = 'seg'
+        self.keep_lens = keepaug_config['length']
+        if keepaug_config['adapt_target'] == 'len': # adapt len
+            self.adapt_len = len(self.keep_lens)
+        elif keepaug_config['adapt_target'] == 'seg': #adapt segment
+            self.adapt_len = len(possible_segment)
+        elif keepaug_config['adapt_target'] == 'way': #adapt segment
+            self.adapt_len = 4 #!!! const now
         else:
             print('KeepAdapt need multiple lens or segment to learn')
             exit()
@@ -463,8 +462,7 @@ class AdaAugkeep_TS(AdaAug):
             T = 1.0
         a_params = self.h_model(self.gf_model.extract_features(X.cuda(),seq_len),y=y)
         #mags: mag for ops, weights: weight for ops, keeplen_ws: keeplen weights, keep_thres: keep threshold
-        adapt_len = max(self.n_keeplens,self.possible_segment)
-        magnitudes, weights, keeplen_ws, keep_thres = torch.split(a_params, [self.n_ops, self.n_ops, adapt_len, 1], dim=1)
+        magnitudes, weights, keeplen_ws, keep_thres = torch.split(a_params, [self.n_ops, self.n_ops, self.adapt_len, 1], dim=1)
         magnitudes = torch.sigmoid(magnitudes)
         weights = torch.nn.functional.softmax(weights/T, dim=-1)
         keeplen_ws = torch.nn.functional.softmax(keeplen_ws/T, dim=-1)
@@ -529,14 +527,13 @@ class AdaAugkeep_TS(AdaAug):
         magnitudes, weights, keeplen_ws, keep_thres = self.predict_aug_params(images, seq_len,'explore',y=y)
         a_imgs = self.get_aug_valid_imgs(images, magnitudes,weights, keeplen_ws, keep_thres) #(b*lens*ops,seq,ch)
         a_features = self.gf_model.extract_features(a_imgs) #(b*keep_len*n_ops, n_hidden)
-        adapt_len = max(self.n_keeplens,self.possible_segment)
         stage_name = self.Augment_wrapper.all_stages[self.Augment_wrapper.stage] #
         if self.ind_mix:
             if stage_name=='trans':
                 ba_features = a_features.reshape(len(images), self.n_ops, -1)# batch, n_ops, n_hidden
                 out_w = weights
             elif stage_name=='keep':
-                ba_features = a_features.reshape(len(images), adapt_len, -1)# batch, keep_lens, n_hidden
+                ba_features = a_features.reshape(len(images), self.adapt_len, -1)# batch, keep_lens, n_hidden
                 out_w = keeplen_ws
             self.Augment_wrapper.change_stage() #finish
             if mix_feature:
@@ -546,7 +543,7 @@ class AdaAugkeep_TS(AdaAug):
             else:
                 return ba_features, [out_w]
         else:
-            ba_features = a_features.reshape(len(images), self.n_ops, adapt_len, -1).permute(0,2,1,3) # batch, n_ops,keep_lens, n_hidden
+            ba_features = a_features.reshape(len(images), self.n_ops, self.adapt_len, -1).permute(0,2,1,3) # batch, n_ops,keep_lens, n_hidden
             if mix_feature:
                 mixed_features = [w.matmul(feat) for w, feat in zip(weights, ba_features)] #[(keep_lens, n_hidden)]
                 mixed_features = [len_w.matmul(feat) for len_w,feat in zip(keeplen_ws,mixed_features)] #[(n_hidden)]

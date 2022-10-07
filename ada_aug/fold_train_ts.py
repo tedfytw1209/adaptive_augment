@@ -91,7 +91,7 @@ parser.add_argument('--noaug_reg', type=str, default='', help='add regular for n
         choices=['cadd','add',''])
 parser.add_argument('--keep_aug', action='store_true', default=False, help='info keep augment')
 parser.add_argument('--keep_mode', type=str, default='auto', help='info keep mode',choices=['auto','adapt','b','p','t'])
-parser.add_argument('--adapt_target', type=str, default='len', help='info keep mode',choices=['len','seg'])
+parser.add_argument('--adapt_target', type=str, default='len', help='info keep mode',choices=['len','seg','way'])
 parser.add_argument('--keep_seg', type=int, nargs='+', default=[1], help='info keep segment mode')
 parser.add_argument('--keep_grid', action='store_true', default=False, help='info keep augment grid')
 parser.add_argument('--keep_thres', type=float, default=0.6, help="keep augment weight (lower protect more)")
@@ -213,10 +213,15 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             h_input = h_input + label_embed
         elif args.class_adapt:
             h_input =h_input + n_class
-        #keep aug
+        #keep aug, need improve!!
         proj_add = 0
         if args.keep_mode=='adapt':
-            proj_add = max(len(args.keep_len),len(args.keep_seg)) + 1
+            if args.adapt_target=='len':
+                proj_add = len(args.keep_len) + 1
+            elif args.adapt_target=='seg':
+                proj_add = len(args.keep_seg) + 1
+            elif args.adapt_target=='way':
+                proj_add = 4 + 1
         self.h_model = Projection_TSeries(in_features=h_input,label_num=label_num,label_embed=label_embed,
             n_layers=args.n_proj_layer, n_hidden=args.n_proj_hidden, augselect=args.augselect, proj_addition=proj_add).cuda()
         utils.load_model(self.gf_model, os.path.join(self.config['BASE_PATH'],f'{args.gf_model_path}',f'fold{test_fold_idx}', 'gf_weights.pt'), location=0)

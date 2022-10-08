@@ -396,7 +396,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
             input_search_list,seq_len_list,target_search_list,policy_y_list = [],[],[],[]
             for r in range(search_round): #grad accumulation
                 if difficult_aug:
-                    if r % search_repeat:
+                    if r % search_repeat==0:
                         input_trsearch, seq_len, target_trsearch = next(iter(tr_search_queue))
                     input_trsearch = input_trsearch.float().cuda()
                     target_trsearch = target_trsearch.cuda()
@@ -438,7 +438,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                     difficult_loss += loss_policy.detach().item()
                     torch.cuda.empty_cache()
                 #similar
-                if r % search_repeat:
+                if r % search_repeat==0:
                     input_search, seq_len, target_search = next(iter(search_queue))
                 input_search = input_search.float().cuda()
                 target_search = target_search.cuda()

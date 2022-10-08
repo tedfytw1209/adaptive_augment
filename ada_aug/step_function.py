@@ -245,8 +245,9 @@ def loss_mix(gf_model,mixed_features,aug_weights,adv_criterion,target_trsearch,m
         aug_logits = gf_model.classify(mixed_features)
         aug_loss = cuc_loss(aug_logits,target_trsearch,adv_criterion,multilabel)
         aug_loss = aug_loss.reshape(batch, n_ops,keep_lens).permute(0,2,1)
-        aug_loss = [w.matmul(feat) for w, feat in zip(weights, aug_loss)] #[(keep_lens, n_hidden)]
-        aug_loss = torch.stack([len_w.matmul(feat) for len_w,feat in zip(keeplen_ws,mixed_features)], dim=0) #[(1)]
+        # weights = (bs,n_ops), aug_loss = (batch,keep_lens,n_ops)
+        aug_loss = [w.matmul(feat) for w, feat in zip(weights, aug_loss)] #[(keep_lens)]
+        aug_loss = torch.stack([len_w.matmul(feat) for len_w,feat in zip(keeplen_ws,aug_loss)], dim=0) #[(1)]
         #print('Loss mix aug_loss: ',aug_loss.shape,aug_loss)
         aug_loss = aug_loss.mean()
         aug_logits = aug_logits.reshape(batch, n_ops,keep_lens,-1).mean(dim=(1,2))

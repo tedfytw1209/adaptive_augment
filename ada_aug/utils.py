@@ -229,7 +229,7 @@ class PolicyHistoryKeep(object):
         os.makedirs(path, exist_ok=True)
         os.makedirs(vis_path, exist_ok=True)
         header = ','.join(self.op_names)
-        lens_header = ','.join([str(l) for l in self.keep_lens])
+        lens_header = ','.join([str(l).replace(',','_') for l in self.keep_lens])
         thres_header = ','.join(['threshold'])
         for i, history in enumerate(self.history):
             k = i if class2label is None else class2label[i]

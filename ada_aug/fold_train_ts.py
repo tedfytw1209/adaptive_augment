@@ -83,7 +83,6 @@ parser.add_argument('--valselect', action='store_true', default=False, help='use
 parser.add_argument('--notwarmup', action='store_true', default=False, help='use valid select')
 parser.add_argument('--augselect', type=str, default='', help="augmentation selection")
 parser.add_argument('--diff_aug', action='store_true', default=False, help='use valid select')
-parser.add_argument('--not_mix', action='store_true', default=False, help='use valid select')
 parser.add_argument('--not_reweight', action='store_true', default=False, help='use valid select')
 parser.add_argument('--lambda_aug', type=float, default=1.0, help="augment sample weight")
 parser.add_argument('--class_adapt', action='store_true', default=False, help='class adaptive')
@@ -92,6 +91,7 @@ parser.add_argument('--noaug_reg', type=str, default='', help='add regular for n
         choices=['cadd','add',''])
 parser.add_argument('--keep_aug', action='store_true', default=False, help='info keep augment')
 parser.add_argument('--keep_mode', type=str, default='auto', help='info keep mode',choices=['auto','adapt','b','p','t'])
+parser.add_argument('--adapt_target', type=str, default='len', help='info keep mode',choices=['len','seg','way'])
 parser.add_argument('--keep_seg', type=int, nargs='+', default=[1], help='info keep segment mode')
 parser.add_argument('--keep_grid', action='store_true', default=False, help='info keep augment grid')
 parser.add_argument('--keep_thres', type=float, default=0.6, help="keep augment weight (lower protect more)")
@@ -215,10 +215,15 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             h_input = h_input + label_embed
         elif args.class_adapt:
             h_input =h_input + n_class
-        #keep aug
+        #keep aug, need improve!!
         proj_add = 0
         if args.keep_mode=='adapt':
-            proj_add = len(args.keep_len) + 1
+            if args.adapt_target=='len':
+                proj_add = len(args.keep_len) + 1
+            elif args.adapt_target=='seg':
+                proj_add = len(args.keep_seg) + 1
+            elif args.adapt_target=='way':
+                proj_add = 4 + 1
         self.h_model = Projection_TSeries(in_features=h_input,label_num=label_num,label_embed=label_embed,
             n_layers=args.n_proj_layer, n_hidden=args.n_proj_hidden, augselect=args.augselect, proj_addition=proj_add).cuda()
         utils.load_model(self.gf_model, os.path.join(self.config['BASE_PATH'],f'{args.gf_model_path}',f'fold{test_fold_idx}', 'gf_weights.pt'), location=0)
@@ -237,7 +242,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                     'target_d': get_dataset_dimension(args.dataset),
                     'gf_model_name': args.gf_model_name}
         keepaug_config = {'keep_aug':args.keep_aug,'mode':args.keep_mode,'thres':args.keep_thres,'length':args.keep_len,
-            'grid_region':args.keep_grid, 'possible_segment': args.keep_seg, 'info_upper': args.keep_bound, 'sfreq':self.sfreq}
+            'grid_region':args.keep_grid, 'possible_segment': args.keep_seg, 'info_upper': args.keep_bound, 'sfreq':self.sfreq, 'adapt_target':args.adapt_target}
         trans_config = {'sfreq':self.sfreq}
         if args.keep_mode=='adapt':
             keepaug_config['mode'] = 'auto'

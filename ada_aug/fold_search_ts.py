@@ -81,7 +81,8 @@ parser.add_argument('--search_sampler', type=str, default='', help='for search s
         choices=['weight',''])
 parser.add_argument('--diff_aug', action='store_true', default=False, help='use valid select')
 parser.add_argument('--same_train', action='store_true', default=False, help='use valid select')
-parser.add_argument('--not_mix', action='store_true', default=False, help='use valid select')
+parser.add_argument('--mix_type', type=str, default='embed', help='add regular for noaugment ',
+        choices=['embed','loss'])
 parser.add_argument('--not_reweight', action='store_true', default=False, help='use diff reweight')
 parser.add_argument('--sim_rew', action='store_true', default=False, help='use sim reweight')
 parser.add_argument('--pwarmup', type=int, default=0, help="warmup epoch for policy")
@@ -97,6 +98,9 @@ parser.add_argument('--loss_type', type=str, default='minus', help="loss type fo
 parser.add_argument('--policy_loss', type=str, default='', help="loss type for simular policy training")
 parser.add_argument('--keep_aug', action='store_true', default=False, help='info keep augment')
 parser.add_argument('--keep_mode', type=str, default='auto', help='info keep mode',choices=['auto','adapt','b','p','t'])
+parser.add_argument('--adapt_target', type=str, default='len', help='info keep mode',choices=['len','seg','way'])
+parser.add_argument('--mix_method', type=str, default='', help='who search mix params',
+        choices=['ind','sub','indsub',''])
 parser.add_argument('--keep_seg', type=int, nargs='+', default=[1], help='info keep segment mode')
 parser.add_argument('--keep_grid', action='store_true', default=False, help='info keep augment grid')
 parser.add_argument('--keep_thres', type=float, default=0.6, help="keep augment weight (lower protect more)")
@@ -163,7 +167,6 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         self.time_s = TimeS_dict[args.dataset]
         multilabel = args.multilabel
         diff_augment = args.diff_aug
-        diff_mix = not args.not_mix
         diff_reweight = not args.not_reweight
         self.class_noaug, self.noaug_add = False, False
         if args.noaug_reg=='cadd':
@@ -217,10 +220,15 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             h_input = h_input + label_embed
         elif args.class_adapt:
             h_input =h_input + n_class
-        #keep aug
+        #keep aug, need improve!!
         proj_add = 0
         if args.keep_mode=='adapt':
-            proj_add = len(args.keep_len) + 1
+            if args.adapt_target=='len':
+                proj_add = len(args.keep_len) + 1
+            elif args.adapt_target=='seg':
+                proj_add = len(args.keep_seg) + 1
+            elif args.adapt_target=='way':
+                proj_add = 4 + 1
         self.h_model = Projection_TSeries(in_features=h_input,label_num=label_num,label_embed=label_embed,
             n_layers=args.n_proj_layer, n_hidden=args.n_proj_hidden, augselect=args.augselect, proj_addition=proj_add).cuda()
         #  training settings
@@ -241,8 +249,13 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         self.adv_criterion = None
         if args.loss_type=='adv':
             self.adv_criterion = NonSaturatingLoss(epsilon=0.1).cuda()
+        elif args.mix_type=='loss':
+            if not multilabel:
+                self.adv_criterion = nn.CrossEntropyLoss(reduction='none')
+            else:
+                self.adv_criterion = nn.BCEWithLogitsLoss(reduction='none')
         self.sim_criterion = None
-        if args.policy_loss=='classbal':
+        if args.policy_loss=='classbal': #bug!: can not with loss_mix
             search_labels = self.search_queue.dataset.dataset.label
             if not multilabel:
                 search_labels_count = [np.count_nonzero(search_labels == i) for i in range(n_class)] #formulticlass
@@ -252,14 +265,22 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             if multilabel:
                 sim_type = 'focal'
             self.sim_criterion = ClassBalLoss(search_labels_count,len(search_labels_count),loss_type=sim_type).cuda()
-        elif args.policy_loss=='classdiff':
+        elif args.policy_loss=='classdiff': #bug!: can not with loss_mix
             self.class_difficulty = np.ones(n_class)
             gamma = None
             if multilabel:
                 gamma = 2.0
             self.sim_criterion = ClassDiffLoss(class_difficulty=self.class_difficulty,focal_gamma=gamma).cuda() #default now
+        elif args.mix_type=='loss':
+            if not multilabel:
+                self.sim_criterion = nn.CrossEntropyLoss(reduction='none')
+            else:
+                self.sim_criterion = nn.BCEWithLogitsLoss(reduction='none')
 
         #  AdaAug settings for search
+        ind_mix,sub_mix = False,False
+        if 'ind' in args.mix_method:
+            ind_mix = True
         after_transforms = self.train_queue.dataset.after_transforms
         adaaug_config = {'sampling': 'prob',
                     'k_ops': self.config['k_ops'], #as paper
@@ -269,7 +290,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                     'target_d': get_dataset_dimension(args.dataset),
                     'gf_model_name': args.model_name}
         keepaug_config = {'keep_aug':args.keep_aug,'mode':args.keep_mode,'thres':args.keep_thres,'length':args.keep_len,
-            'grid_region':args.keep_grid, 'possible_segment': args.keep_seg, 'info_upper': args.keep_bound, 'sfreq':self.sfreq}
+            'grid_region':args.keep_grid, 'possible_segment': args.keep_seg, 'info_upper': args.keep_bound, 'sfreq':self.sfreq, 'adapt_target':args.adapt_target}
         trans_config = {'sfreq':self.sfreq}
         if args.keep_mode=='adapt':
             keepaug_config['mode'] = 'auto'
@@ -284,6 +305,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 multilabel=multilabel,
                 augselect=args.augselect,
                 class_adaptive=self.class_noaug,
+                ind_mix=ind_mix,
                 noaug_add=self.noaug_add,
                 transfrom_dic=trans_config)
         else:
@@ -333,7 +355,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         diff_dic = {'difficult_aug':self.diff_augment,'same_train':args.same_train,'reweight':self.diff_reweight,'lambda_aug':args.lambda_aug,
                 'lambda_sim':args.lambda_sim,'class_adaptive':args.class_adapt,'lambda_noaug':args.lambda_noaug,'train_perfrom':self.pre_train_acc,
                 'loss_type':args.loss_type, 'adv_criterion': self.adv_criterion, 'teacher_model':self.ema_model, 'sim_criterion':self.sim_criterion,
-                'sim_reweight':args.sim_rew,'warmup_epoch': args.pwarmup}
+                'sim_reweight':args.sim_rew,'warmup_epoch': args.pwarmup,'mix_type':args.mix_type}
         
         # searching
         train_acc, train_obj, train_dic = search_train(args,self.train_queue, self.search_queue, self.tr_search_queue, self.gf_model, self.adaaug,

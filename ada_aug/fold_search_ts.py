@@ -281,6 +281,9 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         ind_mix,sub_mix = False,False
         if 'ind' in args.mix_method:
             ind_mix = True
+            self.search_repeat = 2 #tmp for (n_ops,keep_params)
+        else:
+            self.search_repeat = 1
         after_transforms = self.train_queue.dataset.after_transforms
         adaaug_config = {'sampling': 'prob',
                     'k_ops': self.config['k_ops'], #as paper
@@ -360,7 +363,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         # searching
         train_acc, train_obj, train_dic = search_train(args,self.train_queue, self.search_queue, self.tr_search_queue, self.gf_model, self.adaaug,
             self.criterion, self.gf_optimizer,self.scheduler, args.grad_clip, self.h_optimizer, self._iteration, args.search_freq, 
-            search_round=args.search_round,multilabel=self.multilabel,n_class=self.n_class,map_select=self.mapselect, **diff_dic)
+            search_round=args.search_round,search_repeat=self.search_repeat,multilabel=self.multilabel,n_class=self.n_class,map_select=self.mapselect, **diff_dic)
         if self.noaug_add:
             class_acc = train_acc / 100.0
             if self.class_noaug:

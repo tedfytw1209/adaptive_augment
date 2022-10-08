@@ -267,7 +267,7 @@ def loss_mix(gf_model,mixed_features,aug_weights,adv_criterion,target_trsearch,m
     return aug_loss, aug_logits
 
 def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, adaaug, criterion, gf_optimizer,scheduler,
-            grad_clip, h_optimizer, epoch, search_freq,search_round=1, multilabel=False,n_class=10,
+            grad_clip, h_optimizer, epoch, search_freq,search_round=1,search_repeat=1, multilabel=False,n_class=10,
             difficult_aug=False,same_train=False,reweight=True,sim_reweight=False,mix_type='embed', warmup_epoch = 0
             ,lambda_sim = 1.0,lambda_aug = 1.0,loss_type='minus',lambda_noaug = 0,train_perfrom = 0.0,
             class_adaptive=False,adv_criterion=None,sim_criterion=None,teacher_model=None,map_select=False):
@@ -396,7 +396,8 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
             input_search_list,seq_len_list,target_search_list,policy_y_list = [],[],[],[]
             for r in range(search_round): #grad accumulation
                 if difficult_aug:
-                    input_trsearch, seq_len, target_trsearch = next(iter(tr_search_queue))
+                    if r % search_repeat:
+                        input_trsearch, seq_len, target_trsearch = next(iter(tr_search_queue))
                     input_trsearch = input_trsearch.float().cuda()
                     target_trsearch = target_trsearch.cuda()
                     batch_size = target_trsearch.shape[0]
@@ -437,7 +438,8 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                     difficult_loss += loss_policy.detach().item()
                     torch.cuda.empty_cache()
                 #similar
-                input_search, seq_len, target_search = next(iter(search_queue))
+                if r % search_repeat:
+                    input_search, seq_len, target_search = next(iter(search_queue))
                 input_search = input_search.float().cuda()
                 target_search = target_search.cuda()
                 search_bs = target_search.shape[0]

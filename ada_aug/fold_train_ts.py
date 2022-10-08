@@ -379,7 +379,7 @@ def main():
     #wandb
     group_name = f'{Aug_type}_train{args.augselect}_{args.dataset}{args.labelgroup}_{args.model_name}_hmodel{h_model_dir}'
     if args.search_size>0: #reduce train
-        reduce_train = 1.0 - args.seaarch_size
+        reduce_train = 1.0 - args.search_size
         data_add = '_r' + str(round(reduce_train,3))
     else:
         data_add = ''

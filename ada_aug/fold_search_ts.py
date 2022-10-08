@@ -500,10 +500,6 @@ def main():
         num_samples=1, #grid search no need
     )
     
-    print("Best hyperparameters found were: ")
-    print(analysis.best_config)
-    print(analysis.best_trial)
-    
     wandb.finish()
     
 

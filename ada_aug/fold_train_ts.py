@@ -37,7 +37,7 @@ parser.add_argument('--dataroot', type=str, default='./', help='location of the 
 parser.add_argument('--dataset', type=str, default='cifar10', help='name of dataset')
 parser.add_argument('--labelgroup', default='')
 parser.add_argument('--test_size', type=float, default=0.2, help='test size')
-parser.add_argument('--search_size', type=float, default=0.5, help='test size')
+parser.add_argument('--search_size', type=float, default=0, help='use search size to reduce train data')
 parser.add_argument('--batch_size', type=int, default=512, help='batch size')
 parser.add_argument('--learning_rate', type=float, default=0.400, help='init learning rate')
 parser.add_argument('--learning_rate_min', type=float, default=0.001, help='min learning rate')
@@ -173,7 +173,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         self.train_queue, self.valid_queue, self.search_queue, self.test_queue, self.tr_search_queue = get_ts_dataloaders(
             args.dataset, args.batch_size, args.num_workers,
             args.dataroot, args.cutout, args.cutout_length,
-            split=args.train_portion, split_idx=0, target_lb=-1,
+            split=args.train_portion, split_idx=0, target_lb=-1,search_size=args.search_size, #!use search size to reduce training dataset
             search=False,test_size=args.test_size,multilabel=args.multilabel,default_split=args.default_split,
             fold_assign=train_val_test_folds,labelgroup=args.labelgroup)
         #  task model settings
@@ -378,7 +378,12 @@ def main():
     h_model_dir = h_model_dir.strip('/').split('/')[-1][:16]
     #wandb
     group_name = f'{Aug_type}_train{args.augselect}_{args.dataset}{args.labelgroup}_{args.model_name}_hmodel{h_model_dir}'
-    experiment_name = f'{Aug_type}{args.k_ops}{description}_train{args.augselect}_{args.dataset}{args.labelgroup}_{args.model_name}_{h_model_dir}'
+    if args.search_size>0: #reduce train
+        reduce_train = 1.0 - args.seaarch_size
+        data_add = '_r' + str(round(reduce_train,3))
+    else:
+        data_add = ''
+    experiment_name = f'{Aug_type}{args.k_ops}{description}_train{args.augselect}_{args.dataset}{args.labelgroup}{data_add}_{args.model_name}_{h_model_dir}'
     '''run_log = wandb.init(config=args, 
                   project='AdaAug',
                   group=experiment_name,
@@ -432,10 +437,6 @@ def main():
         local_dir=args.ray_dir,
         num_samples=1, #grid search no need
     )
-    
-    print("Best hyperparameters found were: ")
-    print(analysis.best_config)
-    print(analysis.best_trial)
     
     wandb.finish()
     

@@ -18,7 +18,7 @@ rhythm_classes_ori = ['SB', 'SR', 'AFIB', 'ST', 'AF', 'SI', 'SVT', 'AT', 'AVNRT'
 rhythm_sup = ['AFIB','GSVT','SB','SR']
 rhythm_sup_dic = {'SB':'SB', 'SR':'SR', 'AFIB':'AFIB', 'ST':'GSVT', 'AF':'AFIB', 'SI':'SR', 'SVT':'GSVT', 'AT':'GSVT', 'AVNRT':'GSVT', 'SAAWR':'GSVT'}
 rhythm_dic = {k:v for (k,v) in zip(rhythm_classes_cinc,rhythm_classes_ori)}
-LABEL_GROUPS = {"all":11, "rhythm":6, 'superrhythm':4}
+LABEL_GROUPS = {"yuall":12,"all":11, "rhythm":6, 'superrhythm':4}
 
 class Chapman(BaseDataset):
     def __init__(self, dataset_path,labelgroup='all',mode='all',seed=42,multilabel=False,transfroms=[],augmentations=[],label_transfroms=[],**_kwargs):
@@ -101,12 +101,16 @@ class Chapman(BaseDataset):
             select = rhythm_classes_cinc
             trans_dic = None
             outlabel = rhythm_classes_ori
+            cinc_sel = True
         elif self.labelgroup=='superrhythm':
             select = rhythm_classes_cinc
             trans_dic = rhythm_sup_dic
             outlabel = rhythm_sup
+            cinc_sel = True
         elif self.labelgroup=='all':
-            pass
+            cinc_sel = True
+        elif self.labelgroup=='yuall':
+            cinc_sel = False
         else:
             print('label group error')
             exit()
@@ -127,7 +131,10 @@ class Chapman(BaseDataset):
                     abb_names = []
                     for entry in entries:
                         #print(entry)
-                        abb_name = dx_dic.get(entry,None)
+                        if cinc_sel:
+                            abb_name = dx_dic.get(entry,None)
+                        else:
+                            abb_name = str(entry)
                         if abb_name != None:
                             if select!=None and abb_name not in select:
                                 continue
@@ -140,6 +147,8 @@ class Chapman(BaseDataset):
                             df.loc[i, 'filename'] = 'WFDB_ChapmanShaoxing/raw/JS%05d'%i
                             labels.add(abb_name.strip())
                             abb_names.append(abb_name)
+                        else:
+                            print(entries)
                     #print(entry.strip(), end=' ')
                     df.loc[i, 'count'] = len(abb_names)
             #break
@@ -184,6 +193,10 @@ class Chapman(BaseDataset):
             input_data = input_data[(label_sum==1)]
             labels = labels[(label_sum==1)]
             labels = np.argmax(labels, axis=1)
+            final_df = df[(label_sum==1)]
+        else:
+            final_df = df
+        final_df.to_csv(f'final_test{self.labelgroup}_{self.lb}.csv')
         print('Data shape: ',input_data.shape)
         print('Labels shape: ',labels.shape)
         np.save(os.path.join(self.dataset_path,f'X_{self.labelgroup}data_{self.lb}.npy'),input_data)

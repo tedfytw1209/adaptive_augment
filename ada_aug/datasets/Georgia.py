@@ -57,6 +57,9 @@ class Georgia(BaseDataset):
         self.input_data = np.load(os.path.join(self.dataset_path,f'X_{self.labelgroup}data_{self.lb}.npy'),allow_pickle=True)
         if len(self.input_data.shape)==1:
             self.input_data = input_resizeing(self.input_data)
+        print('Shape: ',self.input_data.shape)
+        print('Input sample mean: ',self.input_data[0].mean())
+        print('Input mean: ',self.input_data.mean())
         self.label = np.load(os.path.join(self.dataset_path,f'y_{self.labelgroup}data_{self.lb}.npy'),allow_pickle=True)
         print('Label counts:')
         unique, counts = np.unique(self.label, return_counts=True)

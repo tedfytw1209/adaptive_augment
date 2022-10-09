@@ -129,6 +129,7 @@ def get_num_class(dataset,labelgroup=''):
         'ptbxlrhythm':12,
         'wisdm': 18,
         'chapman': 12,
+        'chapmanyuall':12,
         'chapmanall':11,
         'chapmanrhythm':6,
         'chapmansuperrhythm':4,

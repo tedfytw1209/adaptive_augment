@@ -104,7 +104,7 @@ parser.add_argument('--mix_method', type=str, default='', help='who search mix p
 parser.add_argument('--keep_seg', type=int, nargs='+', default=[1], help='info keep segment mode')
 parser.add_argument('--keep_grid', action='store_true', default=False, help='info keep augment grid')
 parser.add_argument('--keep_thres', type=float, default=0.6, help="keep augment weight (lower protect more)")
-parser.add_argument('--thres_adapt', action='store_true', default=False, help="keep augment thres adapt")
+parser.add_argument('--thres_adapt', action='store_false', default=True, help="keep augment thres adapt")
 parser.add_argument('--keep_len', type=int, nargs='+', default=[100], help="info keep seq len")
 parser.add_argument('--keep_bound', type=float, default=0.0, help="info keep bound %")
 parser.add_argument('--teach_aug', action='store_true', default=False, help='teacher augment')

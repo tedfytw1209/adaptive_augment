@@ -317,7 +317,7 @@ class AdaAug_TS(AdaAug):
             return mixed_features, [weights]
         else:
             return ba_features, [weights]
-    def get_training_aug_image(self, image, magnitudes, idx_matrix,i=None):
+    def get_training_aug_image(self, image, magnitudes, idx_matrix,i=None, seq_len=None):
         if i!=None:
             idx_list = idx_matrix[i]
             magnitude_i = magnitudes[i]
@@ -325,9 +325,9 @@ class AdaAug_TS(AdaAug):
             idx_list,magnitude_i = idx_matrix,magnitudes
         for idx in idx_list:
             m_pi = perturb_param(magnitude_i[idx], self.delta).detach().cpu().numpy()
-            image = apply_augment(image, self.ops_names[idx], m_pi,**self.transfrom_dic)
+            image = apply_augment(image, self.ops_names[idx], m_pi,seq_len=seq_len,**self.transfrom_dic)
         return self.after_transforms(image)
-    def get_training_aug_images(self, images, magnitudes, weights):
+    def get_training_aug_images(self, images, magnitudes, weights, seq_len=None):
         # visualization
         if self.k_ops > 0:
             trans_images = []
@@ -343,7 +343,8 @@ class AdaAug_TS(AdaAug):
                     pil_image = apply_augment(pil_image, self.ops_names[idx], m_pi)
 
                 trans_images.append(self.after_transforms(pil_image))'''
-            aug_imgs = self.Augment_wrapper(images, model=self.gf_model,apply_func=self.get_training_aug_image,magnitudes=magnitudes,idx_matrix=idx_matrix,selective='paste')
+            aug_imgs = self.Augment_wrapper(images, model=self.gf_model,apply_func=self.get_training_aug_image,
+                    magnitudes=magnitudes,idx_matrix=idx_matrix,selective='paste',seq_len=seq_len)
         else:
             trans_images = []
             for i, image in enumerate(images):
@@ -362,7 +363,7 @@ class AdaAug_TS(AdaAug):
             resize_imgs = images
         #resize_imgs = F.interpolate(images, size=self.search_d) if self.resize else images
         magnitudes, weights = self.predict_aug_params(resize_imgs, seq_len, 'exploit',y=y)
-        aug_imgs = self.get_training_aug_images(images, magnitudes, weights)
+        aug_imgs = self.get_training_aug_images(images, magnitudes, weights,seq_len=seq_len)
         if self.visualize:
             print('Visualize for Debug')
             self.print_imgs(imgs=images,title='id')
@@ -491,12 +492,12 @@ class AdaAugkeep_TS(AdaAug):
             mean_thre, std_thre = cuc_meanstd(keep_thres,idxs)
             self.history.add(k, mean_lambda, mean_p, mean_len, mean_thre, std_lambda, std_p, std_len, std_thre)
 
-    def get_aug_valid_img(self, image, magnitudes,keep_thres,i=None,k=None,ops_name=None):
-        trans_image = apply_augment(image, ops_name, magnitudes[i][k].detach().cpu().numpy(),**self.transfrom_dic)
+    def get_aug_valid_img(self, image, magnitudes,keep_thres,i=None,k=None,ops_name=None, seq_len=None):
+        trans_image = apply_augment(image, ops_name, magnitudes[i][k].detach().cpu().numpy(),seq_len=seq_len,**self.transfrom_dic)
         trans_image = self.after_transforms(trans_image)
         #trans_image = stop_gradient_keep(trans_image.cuda(), magnitudes[i][k], keep_thres[i]) #add keep thres
         return trans_image
-    def get_aug_valid_imgs(self, images, magnitudes,weights, keeplen_ws, keep_thres):
+    def get_aug_valid_imgs(self, images, magnitudes,weights, keeplen_ws, keep_thres, seq_len=None):
         """Return the mixed latent feature
         Args:
             images ([Tensor]): [description]
@@ -514,10 +515,10 @@ class AdaAugkeep_TS(AdaAug):
             elif stage_name=='keep':
                 fix_idx = idx_matrix
             aug_imgs = self.Search_wrapper(images, model=self.gf_model,apply_func=self.get_aug_valid_img, keep_thres=keep_thres,
-                magnitudes=magnitudes,ops_names=self.ops_names,fix_idx=fix_idx,selective='paste')
+                magnitudes=magnitudes,ops_names=self.ops_names,fix_idx=fix_idx,selective='paste',seq_len=seq_len)
         else:
             aug_imgs = self.Search_wrapper(images, model=self.gf_model,apply_func=self.get_aug_valid_img, keep_thres=keep_thres,
-                magnitudes=magnitudes,ops_names=self.ops_names,selective='paste')
+                magnitudes=magnitudes,ops_names=self.ops_names,selective='paste',seq_len=seq_len)
         #(b*lens*ops,seq,ch) or 
         return aug_imgs
     def explore(self, images, seq_len, mix_feature=True,y=None):
@@ -528,7 +529,7 @@ class AdaAugkeep_TS(AdaAug):
             [Tensor]: return a batch of mixed features
         """
         magnitudes, weights, keeplen_ws, keep_thres = self.predict_aug_params(images, seq_len,'explore',y=y)
-        a_imgs = self.get_aug_valid_imgs(images, magnitudes,weights, keeplen_ws, keep_thres) #(b*lens*ops,seq,ch)
+        a_imgs = self.get_aug_valid_imgs(images, magnitudes,weights, keeplen_ws, keep_thres,seq_len=seq_len) #(b*lens*ops,seq,ch)
         a_features = self.gf_model.extract_features(a_imgs) #(b*keep_len*n_ops, n_hidden)
         stage_name = self.Augment_wrapper.all_stages[self.Augment_wrapper.stage] #
         if self.ind_mix:
@@ -562,7 +563,7 @@ class AdaAugkeep_TS(AdaAug):
             idx_matrix = torch.topk(weights, self.k_ops, dim=1)[1] #where op index the highest weight
             len_idx = torch.topk(keeplen_ws, 1, dim=1)[1].view(-1).detach().cpu().numpy()
         return idx_matrix,len_idx
-    def get_training_aug_image(self, image, magnitudes, idx_matrix,i=None):
+    def get_training_aug_image(self, image, magnitudes, idx_matrix,i=None, seq_len=None):
         if i!=None:
             idx_list = idx_matrix[i]
             magnitude_i = magnitudes[i]
@@ -570,16 +571,16 @@ class AdaAugkeep_TS(AdaAug):
             idx_list,magnitude_i = idx_matrix,magnitudes
         for idx in idx_list:
             m_pi = perturb_param(magnitude_i[idx], self.delta).detach().cpu().numpy()
-            image = apply_augment(image, self.ops_names[idx], m_pi,**self.transfrom_dic)
+            image = apply_augment(image, self.ops_names[idx], m_pi,seq_len=seq_len,**self.transfrom_dic)
         return self.after_transforms(image)
-    def get_training_aug_images(self, images, magnitudes, weights, keeplen_ws, keep_thres):
+    def get_training_aug_images(self, images, magnitudes, weights, keeplen_ws, keep_thres, seq_len=None):
         # visualization
         if self.k_ops > 0:
             trans_images = []
             idx_matrix,len_idx = self.select_params(weights,keeplen_ws)
             keep_thres = keep_thres.view(-1).detach().cpu().numpy()
             aug_imgs = self.Augment_wrapper(images, model=self.gf_model,apply_func=self.get_training_aug_image,magnitudes=magnitudes,
-            idx_matrix=idx_matrix,len_idx=len_idx,keep_thres=keep_thres,selective='paste')
+            idx_matrix=idx_matrix,len_idx=len_idx,keep_thres=keep_thres,selective='paste',seq_len=seq_len)
         else:
             trans_images = []
             for i, image in enumerate(images):
@@ -598,7 +599,7 @@ class AdaAugkeep_TS(AdaAug):
         #resize_imgs = F.interpolate(images, size=self.search_d) if self.resize else images
         magnitudes, weights, keeplen_ws, keep_thres = self.predict_aug_params(resize_imgs, seq_len, 'exploit',y=y)
         #print(magnitudes.shape, weights.shape, keeplen_ws.shape, keep_thres.shape)
-        aug_imgs = self.get_training_aug_images(images, magnitudes, weights, keeplen_ws, keep_thres)
+        aug_imgs = self.get_training_aug_images(images, magnitudes, weights, keeplen_ws, keep_thres,seq_len=seq_len)
         if self.visualize:
             print('Visualize for Debug')
             self.print_imgs(imgs=images,title='id')

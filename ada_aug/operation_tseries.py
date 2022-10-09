@@ -1011,7 +1011,7 @@ class KeepAugment(object): #need fix
     def __init__(self, mode, length,thres=0.6,transfrom=None,default_select=None, early=False, low = False,
         possible_segment=[1],grid_region=False, reverse=False,info_upper = 0.0,
         sfreq=100,pw_len=0.2,tw_len=0.4,**_kwargs):
-        assert mode in ['auto','b','p','t'] #auto: all, b: heart beat(-0.2,0.4), p: p-wave(-0.2,0), t: t-wave(0,0.4)
+        assert mode in ['auto','b','p','t','rand'] #auto: all, b: heart beat(-0.2,0.4), p: p-wave(-0.2,0), t: t-wave(0,0.4)
         self.mode = mode
         if self.mode=='p':
             self.start_s,self.end_s = -0.2*sfreq,0
@@ -1074,6 +1074,8 @@ class KeepAugment(object): #need fix
         if self.mode=='auto':
             t_series_.requires_grad = True
             slc_ = self.get_importance(model,t_series_)
+        elif self.mode=='rand':
+            slc_ = self.get_rand(t_series)
         else:
             slc_ = self.get_heartbeat(t_series)
         t_series_.requires_grad = False #no need gradient now
@@ -1256,6 +1258,13 @@ class KeepAugment(object): #need fix
             imp_map = torch.from_numpy(imp_map)
             imp_map_list.append(imp_map)
         return torch.stack(imp_map_list, dim=0) #(b,seq)
+    def get_rand(self,x):
+        b, seq_len , channel = x.shape
+        imp_map_list = []
+        for x_each in x:
+            imp_map = torch.rand(seq_len)
+            imp_map_list.append(imp_map)
+        return torch.stack(imp_map_list, dim=0) #(b,seq)
 #segment gradient
 def stop_gradient_keep(trans_image, magnitude, keep_thre, region_list):
     x1, x2 = region_list[0][0], region_list[0][1]
@@ -1276,7 +1285,7 @@ class AdaKeepAugment(KeepAugment): #
     def __init__(self, mode, length,thres=0.6,transfrom=None,default_select=None, early=False, low = False,
         possible_segment=[1],grid_region=False, reverse=False,info_upper = 0.0, thres_adapt=True, adapt_target='len',
         sfreq=100,pw_len=0.2,tw_len=0.4,**_kwargs):
-        assert mode in ['auto','b','p','t'] #auto: all, b: heart beat(-0.2,0.4), p: p-wave(-0.2,0), t: t-wave(0,0.4)
+        assert mode in ['auto','b','p','t','rand'] #auto: all, b: heart beat(-0.2,0.4), p: p-wave(-0.2,0), t: t-wave(0,0.4)
         self.mode = mode
         if self.mode=='p':
             self.start_s,self.end_s = -0.2*sfreq,0

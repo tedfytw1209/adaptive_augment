@@ -732,6 +732,8 @@ def apply_augment(img, name, level, rd_seed=None,sfreq=100,seq_len=None):
     #change tseries signal from (len,channel) to (batch,channel,len)
     if seq_len==None: #assume aug_img != img
         seq_len = max_seq_len
+    if max_seq_len!=seq_len:
+        print(f'max len {seq_len}, seq len {seq_len}')
     max_seq_len , channel = img.shape
     img = img.permute(1,0).view(1,channel,max_seq_len)
     tmp_img = img[:,:,:seq_len]

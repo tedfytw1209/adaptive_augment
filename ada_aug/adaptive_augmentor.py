@@ -54,22 +54,22 @@ def stop_gradient_keep(trans_image, magnitude, keep_thre):
     images = images.detach() + adds
     return images
 
-def Normal_augment(t_series, model=None,selective='paste', apply_func=None, **kwargs):
+def Normal_augment(t_series, model=None,selective='paste', apply_func=None, seq_len=None, **kwargs):
     trans_t_series=[]
-    for i, t_s in enumerate(t_series):
+    for i, (t_s,each_seq_len) in enumerate(zip(t_series,seq_len)):
         t_s = t_s.detach().cpu()
-        trans_t_s = apply_func(t_s,i=i,**kwargs)
+        trans_t_s = apply_func(t_s,i=i,seq_len=each_seq_len,**kwargs)
         trans_t_series.append(trans_t_s)
     aug_t_s = torch.stack(trans_t_series, dim=0)
     return aug_t_s
-def Normal_search(t_series, model=None,selective='paste', apply_func=None,ops_names=None, **kwargs):
+def Normal_search(t_series, model=None,selective='paste', apply_func=None,ops_names=None, seq_len=None, **kwargs):
     trans_t_series=[]
-    for i, t_s in enumerate(t_series):
+    for i, (t_s,each_seq_len) in enumerate(zip(t_series,seq_len)):
         t_s = t_s.detach().cpu()
         #e_len = seq_len[i]
         # Prepare transformed image for mixing
         for k, ops_name in enumerate(ops_names):
-            trans_t_s = apply_func(t_s,i=i,k=k,ops_name=ops_name,**kwargs)
+            trans_t_s = apply_func(t_s,i=i,k=k,ops_name=ops_name,seq_len=each_seq_len,**kwargs)
             trans_t_series.append(trans_t_s)
             #trans_seqlen_list.append(e_len)
     return torch.stack(trans_t_series, dim=0) #, torch.stack(trans_seqlen_list, dim=0) #(b*k_ops, seq, ch)
@@ -267,12 +267,12 @@ class AdaAug_TS(AdaAug):
             std_p = weights[idxs].std(0).detach().cpu().tolist()
             self.history.add(k, mean_lambda, mean_p, std_lambda, std_p)
 
-    def get_aug_valid_img(self, image, magnitudes,i=None,k=None,ops_name=None):
-        trans_image = apply_augment(image, ops_name, magnitudes[i][k].detach().cpu().numpy(),**self.transfrom_dic)
+    def get_aug_valid_img(self, image, magnitudes,i=None,k=None,ops_name=None, seq_len=None):
+        trans_image = apply_augment(image, ops_name, magnitudes[i][k].detach().cpu().numpy(),seq_len=seq_len,**self.transfrom_dic)
         trans_image = self.after_transforms(trans_image)
         trans_image = stop_gradient(trans_image.cuda(), magnitudes[i][k])
         return trans_image
-    def get_aug_valid_imgs(self, images, magnitudes):
+    def get_aug_valid_imgs(self, images, magnitudes, seq_len=None):
         """Return the mixed latent feature
 
         Args:
@@ -293,7 +293,7 @@ class AdaAug_TS(AdaAug):
                 trans_image = stop_gradient(trans_image.cuda(), magnitudes[i][k])
                 trans_image_list.append(trans_image)
                 #trans_seqlen_list.append(e_len)'''
-        aug_imgs = self.Search_wrapper(images, model=self.gf_model,apply_func=self.get_aug_valid_img,magnitudes=magnitudes,ops_names=self.ops_names,selective='paste')
+        aug_imgs = self.Search_wrapper(images, model=self.gf_model,apply_func=self.get_aug_valid_img,magnitudes=magnitudes,ops_names=self.ops_names,selective='paste',seq_len=seq_len)
         #return torch.stack(trans_image_list, dim=0) #, torch.stack(trans_seqlen_list, dim=0) #(b*k_ops, seq, ch)
         return aug_imgs
 
@@ -306,7 +306,7 @@ class AdaAug_TS(AdaAug):
             [Tensor]: return a batch of mixed features
         """
         magnitudes, weights = self.predict_aug_params(images, seq_len,'explore',y=y)
-        a_imgs = self.get_aug_valid_imgs(images, magnitudes)
+        a_imgs = self.get_aug_valid_imgs(images, magnitudes,seq_len=seq_len)
         #a_imgs = self.Augment_wrapper(images, model=self.gf_model,apply_func=self.get_aug_valid_imgs,magnitudes=magnitudes,selective='paste')
         #a_features = self.gf_model.extract_features(a_imgs, a_seq_len)
         a_features = self.gf_model.extract_features(a_imgs)

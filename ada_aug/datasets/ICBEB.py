@@ -16,9 +16,11 @@ LABEL_GROUPS = {"all":9}
 
 def input_resizeing(raw_data,ratio=1):
     input_data = np.zeros((len(raw_data),int(MAX_LENGTH*ratio),12))
+    seq_lens = np.zeros(len(raw_data))
     for idx, data in enumerate(raw_data):
         input_data[idx,:data.shape[0],:data.shape[1]] = tools.normalize(data[0:int(MAX_LENGTH*ratio),:])['signal']
-    return input_data
+        seq_lens[idx] = data.shape[0]
+    return input_data, seq_lens
 
 def make_split_indices(test_k,each_lens,sub_tr_ratio):
     tot_k = len(each_lens)
@@ -83,50 +85,56 @@ class ICBEB(BaseDataset):
             y_from = 'y_%s_single.npy'
         if mode=='all':
             datas,labels = [0,0,0],[0,0,0]
+            seq_lens = [0,0,0]
             start = 0
             for i,type in enumerate(['train','val','test']):
                 datas[i] = np.load(os.path.join(self.dataset_path,self.labelgroup,X_from%type),allow_pickle=True)
                 label = np.load(os.path.join(self.dataset_path,self.labelgroup,y_from%type),allow_pickle=True)
-                datas[i] = input_resizeing(datas[i])
+                datas[i],seq_lens[i] = input_resizeing(datas[i])
                 labels[i] = label
                 each_len = len(label)
                 self.split_indices[0][i+2] = np.arange(each_len) + start
                 start += each_len
             self.input_data = np.concatenate(datas,axis=0).astype(float)
             self.label = np.concatenate(labels,axis=0).astype(int)
+            self.seq_lens = np.concatenate(seq_lens,axis=0).astype(int)
         elif mode=='foldall':
             X_from = 'X_fold%d_fix.npy'
             if self.multilabel:
                 y_from = 'y_fold%d_ml.npy'
             else:
                 y_from = 'y_fold%d_single.npy'
-            datas,labels = [],[]
+            datas,labels,seq_lens = [],[],[]
             each_lens = []
             for f in range(1,11):
                 data = np.load(os.path.join(self.dataset_path,self.labelgroup,X_from%f),allow_pickle=True)
                 data = input_resizeing(data)
-                label = np.load(os.path.join(self.dataset_path,self.labelgroup,y_from%f),allow_pickle=True)
+                label,seq_len = np.load(os.path.join(self.dataset_path,self.labelgroup,y_from%f),allow_pickle=True)
                 datas.append(data)
                 labels.append(label)
                 each_len = len(label)
                 each_lens.append(each_len)
+                seq_lens.append(seq_len)
             self.input_data = np.concatenate(datas,axis=0).astype(float)
             self.label = np.concatenate(labels,axis=0).astype(int)
+            self.seq_lens = np.concatenate(seq_lens,axis=0).astype(int)
             self.split_indices = [] #k, ratio, sub_tr_idx, valid_idx, test_idx
             for k in range(10): #10folds
                 each_split = make_split_indices(k,each_lens,self.sub_tr_ratio)
                 self.split_indices.append(each_split)
         elif mode=='tottrain':
             datas,labels = [0,0],[0,0]
+            seq_lens = [0,0]
             for i,type in enumerate(['train','test']):
                 datas[i] = np.load(os.path.join(self.dataset_path,self.labelgroup,X_from%type),allow_pickle=True)
-                datas[i] = input_resizeing(datas[i])
+                datas[i],seq_lens[i] = input_resizeing(datas[i])
                 labels[i] = np.load(os.path.join(self.dataset_path,self.labelgroup,y_from%type),allow_pickle=True)
             self.input_data = np.concatenate(datas,axis=0).astype(float)
             self.label = np.concatenate(labels,axis=0).astype(int)
+            self.seq_lens = np.concatenate(seq_lens,axis=0).astype(int)
         else:
             self.input_data = np.load(os.path.join(self.dataset_path,self.labelgroup,X_from%mode),allow_pickle=True).astype(float)
-            self.input_data = input_resizeing(self.input_data)
+            self.input_data, self.seq_lens = input_resizeing(self.input_data)
             self.label = np.load(os.path.join(self.dataset_path,self.labelgroup,y_from%mode),allow_pickle=True).astype(int)
 
     def _get_data_fold(self,folds):
@@ -150,6 +158,19 @@ class ICBEB(BaseDataset):
 
     def get_split_indices(self):
         return self.split_indices
+    #for dyn lens
+    def __getitem__(self, index):
+        input_data, label = self.input_data[index], self.label[index]
+        seq_len = self.seq_lens[index]
+        for transfrom in self.transfroms:
+            input_data = transfrom(input_data)
+        for augmentation in self.augmentations:
+            input_data = augmentation(input_data)
+        for augmentation in self.class_augmentations:
+            input_data = augmentation(input_data,label)
+        for label_trans in self.label_transfroms:
+            label = label_trans(label)
+        return input_data,seq_len, label
     #ICBEB special, no need for preprocess
     def fit_preprocess(self,preprocessor, indexs=[]):
         '''

@@ -38,9 +38,9 @@ class BaseDataset(Dataset):
             input_data = augmentation(input_data,label)
         for label_trans in self.label_transfroms:
             label = label_trans(label)
-        input_data_tmp = torch.zeros(self.max_len, input_data.shape[1])
-        input_data_tmp = input_data[0:self.max_len]
-        return input_data_tmp,len(input_data), label
+        #input_data_tmp = torch.zeros(self.max_len, input_data.shape[1])
+        #input_data_tmp = input_data[0:self.max_len]
+        return input_data,len(input_data), label
     
     def _get_data(self):
         return

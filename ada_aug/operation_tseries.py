@@ -201,12 +201,12 @@ def permute_channels(X, permutation, *args, **kwargs):
     return X[..., permutation, :]
 
 
-def _sample_mask_start(X, mask_len_samples, random_state):
+def _sample_mask_start(X, mask_len_samples, random_state, seq_len=None):
     rng = check_random_state(random_state)
-    seq_length = torch.as_tensor(X.shape[-1], device=X.device)
+    #seq_length = torch.as_tensor(X.shape[-1], device=X.device)
     mask_start = torch.as_tensor(rng.uniform(
         low=0, high=1, size=X.shape[0],
-    ), device=X.device) * (seq_length - mask_len_samples)
+    ), device=X.device) * (seq_len - mask_len_samples)
     return mask_start
 def _mask_time(X, mask_start_per_sample, mask_len_samples):
     mask = torch.ones_like(X)
@@ -224,13 +224,14 @@ def _relaxed_mask_time(X, mask_start_per_sample, mask_len_samples):
         torch.sigmoid(s * -(t - mask_start_per_sample - mask_len_samples))
     ).float().to(X.device)
     return X * mask
-def random_time_mask(X, mask_len_samples, random_state=None, *args, **kwargs):
-    mask_start = _sample_mask_start(X, mask_len_samples, random_state)
+def random_time_mask(X, mask_len_samples, random_state=None,seq_len=None,sfreq=100, *args, **kwargs):
+    mask_len_samples = mask_len_samples * sfreq
+    mask_start = _sample_mask_start(X, mask_len_samples, random_state,seq_len=seq_len)
     return _relaxed_mask_time(X, mask_start, mask_len_samples)
-def exp_time_mask(X, mask_len_samples, random_state=None, *args, **kwargs):
-    seq_len = X.shape[2]
+def exp_time_mask(X, mask_len_samples, random_state=None,seq_len=None, *args, **kwargs):
+    #seq_len = X.shape[2]
     all_mask_len_samples = int(seq_len * mask_len_samples / 100.0)
-    mask_start = _sample_mask_start(X, all_mask_len_samples, random_state)
+    mask_start = _sample_mask_start(X, all_mask_len_samples, random_state,seq_len=seq_len)
     return _mask_time(X, mask_start, all_mask_len_samples)
 def _sample_mask_start_info(X, mask_len_samples,start,end, random_state):
     rng = check_random_state(random_state)
@@ -621,7 +622,7 @@ TS_AUGMENT_LIST = [
         (fft_surrogate, 0, 1),  # 2
         (channel_dropout, 0, 1),  # 3
         (channel_shuffle, 0, 1),  # 4
-        (random_time_mask, 0, 100),  # 5 impl
+        (random_time_mask, 0, 1),  # 5 impl
         (add_gaussian_noise, 0, 0.2),  # 6
         (random_bandstop, 0, 2),  # 7
         (sign_flip, 0, 1),  # 8
@@ -724,17 +725,21 @@ SELECTIVE_DICT = {
 def get_augment(name):
     return AUGMENT_DICT[name]
 
-def apply_augment(img, name, level, rd_seed=None,sfreq=100):
+def apply_augment(img, name, level, rd_seed=None,sfreq=100,seq_len=None):
     augment_fn, low, high = get_augment(name)
     assert 0 <= level
     assert level <= 1
     #change tseries signal from (len,channel) to (batch,channel,len)
-    seq_len , channel = img.shape
-    img = img.permute(1,0).view(1,channel,seq_len)
+    if seq_len==None: #assume aug_img != img
+        seq_len = max_seq_len
+    max_seq_len , channel = img.shape
+    img = img.permute(1,0).view(1,channel,max_seq_len)
+    tmp_img = img[:,:,:seq_len]
     aug_value = level * (high - low) + low
     #print('Device: ',aug_value.device)
-    aug_img = augment_fn(img, aug_value,random_state=rd_seed,sfreq=sfreq)
-    return aug_img.permute(0,2,1).detach().view(seq_len,channel) #back to (len,channel)
+    aug_img = augment_fn(tmp_img, aug_value,random_state=rd_seed,sfreq=sfreq,seq_len=seq_len)
+    img[:,:,:seq_len] = aug_img #tmp fix, may become slower
+    return img.permute(0,2,1).detach().view(max_seq_len,channel) #back to (len,channel)
 
 def plot_line(t,x,title=None):
     plt.clf()
@@ -1089,7 +1094,7 @@ class KeepAugment(object): #need fix
             windowed_accum = [window_w for i in range(seg_number+1)]
         return seg_accum,windowed_accum
     #kwargs for apply_func, batch_inputs
-    def __call__(self, t_series, model=None,selective='paste', apply_func=None, **kwargs):
+    def __call__(self, t_series, model=None,selective='paste', apply_func=None, seq_len=None, **kwargs):
         b,w,c = t_series.shape
         augment, selective = self.get_augment(apply_func,selective)
         slc_, t_series_ = self.get_slc(t_series,model)
@@ -1109,7 +1114,7 @@ class KeepAugment(object): #need fix
         aug_t_s_list = []
         start, end = 0,w
         win_start, win_end = 0,windowed_w
-        for i,(t_s, slc, windowed_slc_each) in enumerate(zip(t_series_, slc_, windowed_slc)):
+        for i,(t_s, slc, windowed_slc_each, each_seq_len) in enumerate(zip(t_series_, slc_, windowed_slc, seq_len)):
             #find region for each segment
             region_list,inforegion_list = [],[]
             for seg_idx in range(seg_number):
@@ -1131,13 +1136,13 @@ class KeepAugment(object): #need fix
             #augment & paste back
             if selective=='cut':
                 t_s_aug = t_s.clone().detach().cpu()
-                t_s_aug = augment(t_s_aug,i=i,**kwargs) #maybe some error!!!
+                t_s_aug = augment(t_s_aug,i=i,seq_len=each_seq_len,**kwargs) #maybe some error!!!
                 inforegion_list = [] #empty
                 for (x1,x2) in region_list:
                     info_region = t_s_aug[x1: x2,:].clone().detach().cpu()
                     inforegion_list.append(info_region)
             else:
-                t_s = augment(t_s,i=i,**kwargs) #some other augment if needed
+                t_s = augment(t_s,i=i,seq_len=each_seq_len,**kwargs) #some other augment if needed
                 
             for reg_i in range(len(inforegion_list)):
                 x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
@@ -1149,7 +1154,7 @@ class KeepAugment(object): #need fix
             for param in model.parameters():
                 param.requires_grad = True
         return torch.stack(aug_t_s_list, dim=0) #(b,seq,ch)
-    def Augment_search(self, t_series, model=None,selective='paste', apply_func=None,ops_names=None, **kwargs):
+    def Augment_search(self, t_series, model=None,selective='paste', apply_func=None,ops_names=None, seq_len=None, **kwargs):
         b,w,c = t_series.shape
         augment, selective = self.get_augment(apply_func,selective)
         slc_, t_series_ = self.get_slc(t_series,model)
@@ -1171,7 +1176,7 @@ class KeepAugment(object): #need fix
         aug_t_s_list = []
         start, end = 0,w
         win_start, win_end = 0,windowed_w
-        for i,(t_s, slc, windowed_slc_each) in enumerate(zip(t_series_, slc_, windowed_slc)):
+        for i,(t_s, slc, windowed_slc_each, each_seq_len) in enumerate(zip(t_series_, slc_, windowed_slc,seq_len)):
             #find region
             for k, ops_name in enumerate(ops_names):
                 t_s_tmp = t_s.clone().detach().cpu()
@@ -1195,13 +1200,13 @@ class KeepAugment(object): #need fix
                 #augment & paste back
                 if selective=='cut':
                     t_s_aug = t_s_tmp.clone().detach().cpu()
-                    t_s_aug = augment(t_s_aug,i=i,k=k,ops_name=ops_name,**kwargs) #maybe some error!!!
+                    t_s_aug = augment(t_s_aug,i=i,k=k,ops_name=ops_name,seq_len=each_seq_len,**kwargs) #maybe some error!!!
                     inforegion_list = [] #empty
                     for (x1,x2) in region_list:
                         info_region = t_s_aug[x1: x2,:].clone().detach().cpu()
                         inforegion_list.append(info_region)
                 else:
-                    t_s_tmp = augment(t_s_tmp,i=i,k=k,ops_name=ops_name,**kwargs) #some other augment if needed
+                    t_s_tmp = augment(t_s_tmp,i=i,k=k,ops_name=ops_name,seq_len=each_seq_len,**kwargs) #some other augment if needed
                     #print('Size compare: ',t_s[x1: x2, :].shape,info_region.shape)
                 for reg_i in range(len(inforegion_list)):
                     x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
@@ -1308,7 +1313,7 @@ class AdaKeepAugment(KeepAugment): #
         #'torch.nn.functional.avg_pool1d' use this for segment
         print(f'Apply InfoKeep Augment: mode={self.mode},target={self.adapt_target}, threshold={self.thres}, transfrom={self.trans}')
     #kwargs for apply_func, batch_inputs
-    def __call__(self, t_series, model=None,selective='paste', apply_func=None,len_idx=None, keep_thres=None, **kwargs):
+    def __call__(self, t_series, model=None,selective='paste', apply_func=None,len_idx=None, keep_thres=None, seq_len=None, **kwargs):
         b,w,c = t_series.shape
         augment, selective = self.get_augment(apply_func,selective)
         slc_, t_series_ = self.get_slc(t_series,model)
@@ -1320,7 +1325,7 @@ class AdaKeepAugment(KeepAugment): #
         t_series_ = t_series_.detach().cpu()
         aug_t_s_list = []
         start, end = 0,w
-        for i,(t_s, slc) in enumerate(zip(t_series_, slc_)):
+        for i,(t_s, slc,each_seq_len) in enumerate(zip(t_series_, slc_,seq_len)):
             #len choose
             use_reverse = None
             if self.adapt_target=='len':
@@ -1377,13 +1382,13 @@ class AdaKeepAugment(KeepAugment): #
             #augment & paste back
             if selective=='cut':
                 t_s_aug = t_s.clone().detach().cpu()
-                t_s_aug = augment(t_s_aug,i=i,**kwargs) #maybe some error!!!
+                t_s_aug = augment(t_s_aug,i=i,seq_len=each_seq_len,**kwargs) #maybe some error!!!
                 inforegion_list = [] #empty
                 for (x1,x2) in region_list:
                     info_region = t_s_aug[x1: x2,:].clone().detach().cpu()
                     inforegion_list.append(info_region)
             else:
-                t_s = augment(t_s,i=i,**kwargs) #some other augment if needed
+                t_s = augment(t_s,i=i,seq_len=each_seq_len,**kwargs) #some other augment if needed
             #paste back
             for reg_i in range(len(inforegion_list)):
                 x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
@@ -1412,7 +1417,7 @@ class AdaKeepAugment(KeepAugment): #
             raise
 
         return keepway_params, keeplen_params, keepseg_params
-    def Augment_search(self, t_series, model=None,selective='paste', apply_func=None,ops_names=None, keep_thres=None, **kwargs):
+    def Augment_search(self, t_series, model=None,selective='paste', apply_func=None,ops_names=None, keep_thres=None, seq_len=None, **kwargs):
         b,w,c = t_series.shape
         augment, selective = self.get_augment(apply_func,selective)
         slc_, t_series_ = self.get_slc(t_series,model)
@@ -1421,7 +1426,7 @@ class AdaKeepAugment(KeepAugment): #
         aug_t_s_list = []
         each_len, seg_number = self.length[0], self.possible_segment[0]
         keepway_params, keeplen_params, keepseg_params = self.make_params(self.adapt_target,each_len,seg_number,selective)
-        for i,(t_s, slc) in enumerate(zip(t_series_, slc_)):
+        for i,(t_s, slc,each_seq_len) in enumerate(zip(t_series_, slc_,seq_len)):
             for (each_way,each_len, seg_number) in zip(keepway_params,keeplen_params,keepseg_params):
 
                 (selective, use_reverse) = each_way
@@ -1464,7 +1469,7 @@ class AdaKeepAugment(KeepAugment): #
                     #augment & paste back
                     if selective=='cut':
                         t_s_aug = t_s_tmp.clone().detach().cpu()
-                        t_s_aug = augment(t_s_aug,i=i,k=k,ops_name=ops_name,keep_thres=keep_thres,**kwargs) #maybe some error!!!
+                        t_s_aug = augment(t_s_aug,i=i,k=k,ops_name=ops_name,keep_thres=keep_thres,seq_len=each_seq_len,**kwargs) #maybe some error!!!
                         inforegion_list = [] #empty
                         for (x1,x2) in region_list:
                             info_region = t_s_aug[x1: x2,:].clone().detach().cpu()
@@ -1472,7 +1477,7 @@ class AdaKeepAugment(KeepAugment): #
                         #for info_region in inforegion_list:
                         #    info_region = augment(info_region,i=i,k=k,ops_name=ops_name,keep_thres=keep_thres,**kwargs)
                     else:
-                        t_s_tmp = augment(t_s_tmp,i=i,k=k,ops_name=ops_name,keep_thres=keep_thres,**kwargs) #some other augment if needed
+                        t_s_tmp = augment(t_s_tmp,i=i,k=k,ops_name=ops_name,keep_thres=keep_thres,seq_len=each_seq_len,**kwargs) #some other augment if needed
                         #print('Size compare: ',t_s[x1: x2, :].shape,info_region.shape)
                     for reg_i in range(len(inforegion_list)):
                         x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
@@ -1488,7 +1493,7 @@ class AdaKeepAugment(KeepAugment): #
     
     #independent search, ops_names is this turn params and fix_idx is this turn fixs
     ###!!!Not a good implement!!!###
-    def Augment_search_ind(self, t_series, model=None,selective='paste', apply_func=None,ops_names=None,fix_idx=None, keep_thres=None, **kwargs):
+    def Augment_search_ind(self, t_series, model=None,selective='paste', apply_func=None,ops_names=None,fix_idx=None, keep_thres=None,seq_len=None, **kwargs):
         b,w,c = t_series.shape
         augment, selective = self.get_augment(apply_func,selective)
         slc_, t_series_ = self.get_slc(t_series,model)
@@ -1502,7 +1507,7 @@ class AdaKeepAugment(KeepAugment): #
         #keep len or segment
         each_len, seg_number = self.length[0], self.possible_segment[0]
         keepway_params, keeplen_params, keepseg_params = self.make_params(self.adapt_target,each_len,seg_number,selective)
-        for i,(t_s, slc) in enumerate(zip(t_series_, slc_)):
+        for i,(t_s, slc,each_seq_len) in enumerate(zip(t_series_, slc_,seq_len)):
             if stage_name=='trans': #from all possible to a fix number
                 keepway_params_l = [keepway_params[fix_idx[i]]]
                 keeplen_params_l = [keeplen_params[fix_idx[i]]]
@@ -1554,13 +1559,13 @@ class AdaKeepAugment(KeepAugment): #
                     #augment & paste back
                     if selective=='cut':
                         t_s_aug = t_s_tmp.clone().detach().cpu()
-                        t_s_aug = augment(t_s_aug,i=i,k=k,ops_name=ops_name,keep_thres=keep_thres,**kwargs) #maybe some error!!!
+                        t_s_aug = augment(t_s_aug,i=i,k=k,ops_name=ops_name,keep_thres=keep_thres,seq_len=each_seq_len,**kwargs) #maybe some error!!!
                         inforegion_list = [] #empty
                         for (x1,x2) in region_list:
                             info_region = t_s_aug[x1: x2,:].clone().detach().cpu()
                             inforegion_list.append(info_region)
                     else:
-                        t_s_tmp = augment(t_s_tmp,i=i,k=k,ops_name=ops_name,keep_thres=keep_thres,**kwargs) #some other augment if needed
+                        t_s_tmp = augment(t_s_tmp,i=i,k=k,ops_name=ops_name,keep_thres=keep_thres,seq_len=each_seq_len,**kwargs) #some other augment if needed
                         #print('Size compare: ',t_s[x1: x2, :].shape,info_region.shape)
                     for reg_i in range(len(inforegion_list)):
                         x1, x2 = region_list[reg_i][0], region_list[reg_i][1]

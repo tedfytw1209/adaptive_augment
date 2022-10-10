@@ -97,7 +97,7 @@ parser.add_argument('--loss_type', type=str, default='minus', help="loss type fo
         choices=['minus','relative','relativediff','adv'])
 parser.add_argument('--policy_loss', type=str, default='', help="loss type for simular policy training")
 parser.add_argument('--keep_aug', action='store_true', default=False, help='info keep augment')
-parser.add_argument('--keep_mode', type=str, default='auto', help='info keep mode',choices=['auto','adapt','b','p','t'])
+parser.add_argument('--keep_mode', type=str, default='auto', help='info keep mode',choices=['auto','adapt','b','p','t','rand'])
 parser.add_argument('--adapt_target', type=str, default='len', help='info keep mode',choices=['len','seg','way'])
 parser.add_argument('--mix_method', type=str, default='', help='who search mix params',
         choices=['ind','sub','indsub',''])

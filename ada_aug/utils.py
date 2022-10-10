@@ -13,9 +13,31 @@ import torch
 import torchvision.transforms as transforms
 from torch.autograd import Variable
 from sklearn.metrics import average_precision_score,roc_auc_score
+import wandb
 
 sns.set()
+def plot_conf_wandb(confusion,title,class_names=None):
+    n_classes = confusion.shape[0]
+    if class_names==None:
+        class_names = ['c%d'%i for i in range(n_classes)]
+    data = []
+    for i in range(n_classes):
+        for j in range(n_classes):
+            counts = confusion[i,j]
+            data.append([class_names[i], class_names[j], counts])
 
+    fields = {
+        "Actual": "Actual",
+        "Predicted": "Predicted",
+        "nPredictions": "nPredictions",
+    }
+    title = title or ""
+    return wandb.plot_table(
+        "wandb/confusion_matrix/v1",
+        wandb.Table(columns=["Actual", "Predicted", "nPredictions"], data=data),
+        fields,
+        {"title": title},
+    )
 def AUROC_cw(targs, preds):
     """Returns the model's average precision for each class
     Return:

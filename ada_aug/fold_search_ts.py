@@ -25,6 +25,7 @@ from step_function import train,infer,search_train,search_infer
 from non_saturating_loss import NonSaturatingLoss
 from class_balanced_loss import ClassBalLoss,ClassDiffLoss
 import wandb
+from utils import plot_conf_wandb
 
 import ray
 import ray.tune as tune
@@ -342,6 +343,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         self.base_path = self.config['BASE_PATH']
         self.mapselect = self.config['mapselect']
         self.pre_train_acc = 0.0
+        self.result_table_dic = {}
     def step(self):#use step replace _train
         if self._iteration==0:
             wandb.config.update(self.config)
@@ -362,7 +364,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 'sim_reweight':args.sim_rew,'warmup_epoch': args.pwarmup,'mix_type':args.mix_type}
         
         # searching
-        train_acc, train_obj, train_dic = search_train(args,self.train_queue, self.search_queue, self.tr_search_queue, self.gf_model, self.adaaug,
+        train_acc, train_obj, train_dic, table_dic = search_train(args,self.train_queue, self.search_queue, self.tr_search_queue, self.gf_model, self.adaaug,
             self.criterion, self.gf_optimizer,self.scheduler, args.grad_clip, self.h_optimizer, self._iteration, args.search_freq, 
             search_round=args.search_round,search_repeat=self.search_repeat,multilabel=self.multilabel,n_class=self.n_class,map_select=self.mapselect, **diff_dic)
         if self.noaug_add:
@@ -372,7 +374,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             self.adaaug.update_alpha(class_acc)
         self.pre_train_acc = train_acc / 100.0
         # validation
-        valid_acc, valid_obj,valid_dic = search_infer(self.valid_queue, self.gf_model, self.criterion, 
+        valid_acc, valid_obj,valid_dic,valid_table = search_infer(self.valid_queue, self.gf_model, self.criterion, 
             multilabel=self.multilabel,n_class=self.n_class,mode='valid',map_select=self.mapselect)
         if args.policy_loss=='classdiff':
             class_acc = [valid_dic[f'valid_{ptype}_c{i}'] / 100.0 for i in range(self.n_class)]
@@ -381,7 +383,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             self.sim_criterion.update_weight(self.class_difficulty)
         #scheduler.step()
         #test
-        test_acc, test_obj, test_dic  = search_infer(self.test_queue, self.gf_model, self.criterion, 
+        test_acc, test_obj, test_dic, test_table  = search_infer(self.test_queue, self.gf_model, self.criterion, 
             multilabel=self.multilabel,n_class=self.n_class,mode='test',map_select=self.mapselect)
         #val select
         if args.valselect and valid_acc>self.best_val_acc:
@@ -390,6 +392,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             self.result_test_dic = {f'result_{k}': test_dic[k] for k in test_dic.keys()}
             valid_dic[f'best_valid_{ptype}_avg'] = valid_acc
             test_dic[f'best_test_{ptype}_avg'] = test_acc
+            self.result_table_dic.update(valid_table)
+            self.result_table_dic.update(test_table)
             self.best_gf = self.gf_model
             self.best_h = self.h_model
         elif not args.valselect:
@@ -416,6 +420,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             step_dic.update(self.result_test_dic)
             #save&log
             wandb.log(step_dic)
+            wandb.log(plot_conf_wandb(self.result_table_dic['valid_confusion'],title='valid_confusion'))
+            wandb.log(plot_conf_wandb(self.result_table_dic['test_confusion'],title='valid_confusion'))
             self.adaaug.save_history(self.class2label)
             figure = self.adaaug.plot_history()
             

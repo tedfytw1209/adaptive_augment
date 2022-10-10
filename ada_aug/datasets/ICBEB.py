@@ -146,15 +146,17 @@ class ICBEB(BaseDataset):
         else:
             y_from = 'y_fold%d_single.npy'
             X_from = 'X_fold%d_fix.npy'
-        datas,labels = [],[]
+        datas,labels,seq_lens = [],[],[]
         for f in folds:
             data = np.load(os.path.join(self.dataset_path,self.labelgroup,X_from%f),allow_pickle=True)
-            data = input_resizeing(data)
+            data,seq_len = input_resizeing(data)
             label = np.load(os.path.join(self.dataset_path,self.labelgroup,y_from%f),allow_pickle=True)
             datas.append(data)
             labels.append(label)
+            seq_lens.append(seq_len)
         self.input_data = np.concatenate(datas,axis=0).astype(float)
         self.label = np.concatenate(labels,axis=0).astype(int)
+        self.seq_lens = np.concatenate(seq_lens,axis=0).astype(int)
 
     def get_split_indices(self):
         return self.split_indices

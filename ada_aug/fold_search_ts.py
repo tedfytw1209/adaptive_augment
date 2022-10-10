@@ -92,6 +92,9 @@ parser.add_argument('--lambda_sim', type=float, default=1.0, help="augment sampl
 parser.add_argument('--lambda_noaug', type=float, default=0, help="no augment regular weight")
 parser.add_argument('--class_adapt', action='store_true', default=False, help='class adaptive')
 parser.add_argument('--class_embed', action='store_true', default=False, help='class embed') #tmp use
+parser.add_argument('--feature_mask', type=str, default='', help='add regular for noaugment ',
+        choices=['dropout','select',''])
+parser.add_argument('--class_dist', type=str, default='', help='class distance')
 parser.add_argument('--noaug_reg', type=str, default='', help='add regular for noaugment ',
         choices=['cadd','add',''])
 parser.add_argument('--loss_type', type=str, default='minus', help="loss type for difficult policy training",
@@ -232,7 +235,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             elif args.adapt_target=='way':
                 proj_add = 4 + 1
         self.h_model = Projection_TSeries(in_features=h_input,label_num=label_num,label_embed=label_embed,
-            n_layers=args.n_proj_layer, n_hidden=args.n_proj_hidden, augselect=args.augselect, proj_addition=proj_add).cuda()
+            n_layers=args.n_proj_layer, n_hidden=args.n_proj_hidden, augselect=args.augselect, proj_addition=proj_add,
+            feature_mask=args.feature_mask).cuda()
         #  training settings
         self.gf_optimizer = torch.optim.AdamW(self.gf_model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay) #follow ptbxl batchmark
         self.scheduler = torch.optim.lr_scheduler.OneCycleLR(self.gf_optimizer, max_lr=args.learning_rate, 
@@ -344,6 +348,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         self.mapselect = self.config['mapselect']
         self.pre_train_acc = 0.0
         self.result_table_dic = {}
+        self.class_dist = None
     def step(self):#use step replace _train
         if self._iteration==0:
             wandb.config.update(self.config)
@@ -401,6 +406,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             self.best_h = self.h_model
             self.result_valid_dic = {f'result_{k}': valid_dic[k] for k in valid_dic.keys()}
             self.result_test_dic = {f'result_{k}': test_dic[k] for k in test_dic.keys()}
+            self.result_table_dic.update(valid_table)
+            self.result_table_dic.update(test_table)
         if self.test_fold_idx>=0:
             gf_path = os.path.join(f'fold{self.test_fold_idx}', 'gf_weights.pt')
             h_path = os.path.join(f'fold{self.test_fold_idx}', 'h_weights.pt')
@@ -421,7 +428,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             #save&log
             wandb.log(step_dic)
             wandb.log(plot_conf_wandb(self.result_table_dic['valid_confusion'],title='valid_confusion'))
-            wandb.log(plot_conf_wandb(self.result_table_dic['test_confusion'],title='valid_confusion'))
+            wandb.log(plot_conf_wandb(self.result_table_dic['test_confusion'],title='test_confusion'))
             self.adaaug.save_history(self.class2label)
             figure = self.adaaug.plot_history()
             

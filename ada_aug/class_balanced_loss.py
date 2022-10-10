@@ -16,9 +16,10 @@ All rights reserved.
 This source code is licensed under the license found in the
 LICENSE file in the root directory of this source tree.
 """
-import numpy as np
 import sys
 import torch.nn as nn
+from scipy.special import kl_div
+from scipy.stats import wasserstein_distance
 
 def sigmoid(x):
     return 1/(1 + np.exp(-x))
@@ -213,6 +214,70 @@ class ClassDiffLoss(torch.nn.Module):
         else:
             self.loss_func = nn.CrossEntropyLoss(weight=torch.FloatTensor(cdb_weights),).cuda()
         self.class_difficulty = class_difficulty
+    def forward(self, logits, targets):
+        return self.loss_func(logits, targets)
+
+def kl(c,class_output):
+    n_class = class_output.shape[0]
+    out_arr = np.zeros(n_class)
+    for k in range(n_class):
+        if c==k: continue
+        dist = kl_div(class_output[c],class_output[k])
+        out_arr[k] = dist
+    return out_arr
+
+def wass(c,class_output):
+    n_class = class_output.shape[0]
+    out_arr = np.zeros(n_class)
+    for k in range(n_class):
+        if c==k: continue
+        dist = wasserstein_distance(class_output[c],class_output[k]) #need weight???
+        out_arr[k] = dist
+    return out_arr
+
+def confidence(c,class_output):
+    n_class = class_output.shape[0]
+    out_arr = np.zeros(n_class)
+    c_output = class_output[c]
+    for k in range(n_class):
+        if c==k: continue
+        dist = max(c_output[c] - c_output[k],0) #clip
+        out_arr[k] = dist
+    return out_arr
+
+class ClassDistLoss(torch.nn.Module):
+    def __init__(self, distance_func='',loss_choose='',init_k=3):
+        super().__init__()
+        self.distance_func = distance_func
+        self.loss_choose = loss_choose
+        self.classpair_dist = []
+        self.k = init_k
+
+    def update_distance(self,class_output_mat): #(n_class,n_class)
+        self.classpair_dist = []
+        n_class = class_output_mat.shape[0]
+        if self.distance_func=='kl':
+            cuc_func = kl
+        elif self.distance_func=='wass':
+            cuc_func = wass
+        elif self.distance_func=='conf':
+            cuc_func = confidence
+        for c in range(n_class):
+            line = cuc_func(c,class_output_mat) # class c distance to other class
+            self.classpair_dist.append(line)
+        self.classpair_dist = np.array(self.classpair_dist)
+        return self.classpair_dist
+    
+    def update_classpair(self,class_output_mat):
+        self.update_distance(class_output_mat)
+        #min distance
+        class_pairs = np.zeros((n_class,self.k))
+        n_class = class_output_mat.shape[0]
+        for c in n_class: #tmp use min distance
+            pair_dists = np.minimum(self.classpair_dist[c,:], self.classpair_dist[:,c])
+            sorted_dist = np.argsort(pair_dists)
+
+        
     def forward(self, logits, targets):
         return self.loss_func(logits, targets)
 

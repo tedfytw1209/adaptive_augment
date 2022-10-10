@@ -352,7 +352,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             step_dic.update(self.result_test_dic)
             #save&log
             wandb.log(plot_conf_wandb(self.result_table_dic['valid_confusion'],title='valid_confusion'))
-            wandb.log(plot_conf_wandb(self.result_table_dic['test_confusion'],title='valid_confusion'))
+            wandb.log(plot_conf_wandb(self.result_table_dic['test_confusion'],title='test_confusion'))
             self.adaaug.save_history(self.class2label)
             figure = self.adaaug.plot_history()
             wandb.log(step_dic)

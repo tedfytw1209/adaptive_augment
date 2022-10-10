@@ -97,13 +97,14 @@ parser.add_argument('--loss_type', type=str, default='minus', help="loss type fo
         choices=['minus','relative','relativediff','adv'])
 parser.add_argument('--policy_loss', type=str, default='', help="loss type for simular policy training")
 parser.add_argument('--keep_aug', action='store_true', default=False, help='info keep augment')
-parser.add_argument('--keep_mode', type=str, default='auto', help='info keep mode',choices=['auto','adapt','b','p','t'])
+parser.add_argument('--keep_mode', type=str, default='auto', help='info keep mode',choices=['auto','adapt','b','p','t','rand'])
 parser.add_argument('--adapt_target', type=str, default='len', help='info keep mode',choices=['len','seg','way'])
 parser.add_argument('--mix_method', type=str, default='', help='who search mix params',
         choices=['ind','sub','indsub',''])
 parser.add_argument('--keep_seg', type=int, nargs='+', default=[1], help='info keep segment mode')
 parser.add_argument('--keep_grid', action='store_true', default=False, help='info keep augment grid')
 parser.add_argument('--keep_thres', type=float, default=0.6, help="keep augment weight (lower protect more)")
+parser.add_argument('--thres_adapt', action='store_false', default=True, help="keep augment thres adapt")
 parser.add_argument('--keep_len', type=int, nargs='+', default=[100], help="info keep seq len")
 parser.add_argument('--keep_bound', type=float, default=0.0, help="info keep bound %")
 parser.add_argument('--teach_aug', action='store_true', default=False, help='teacher augment')
@@ -292,7 +293,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                     'search_d': get_dataset_dimension(args.dataset),
                     'target_d': get_dataset_dimension(args.dataset),
                     'gf_model_name': args.model_name}
-        keepaug_config = {'keep_aug':args.keep_aug,'mode':args.keep_mode,'thres':args.keep_thres,'length':args.keep_len,
+        keepaug_config = {'keep_aug':args.keep_aug,'mode':args.keep_mode,'thres':args.keep_thres,'length':args.keep_len,'thres_adapt':args.thres_adapt,
             'grid_region':args.keep_grid, 'possible_segment': args.keep_seg, 'info_upper': args.keep_bound, 'sfreq':self.sfreq, 'adapt_target':args.adapt_target}
         trans_config = {'sfreq':self.sfreq}
         if args.keep_mode=='adapt':

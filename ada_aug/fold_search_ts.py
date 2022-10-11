@@ -23,7 +23,7 @@ from dataset import get_ts_dataloaders, get_num_class, get_label_name, get_datas
 from operation_tseries import TS_OPS_NAMES,ECG_OPS_NAMES,TS_ADD_NAMES,MAG_TEST_NAMES,NOMAG_TEST_NAMES
 from step_function import train,infer,search_train,search_infer
 from non_saturating_loss import NonSaturatingLoss
-from class_balanced_loss import ClassBalLoss,ClassDiffLoss
+from class_balanced_loss import ClassBalLoss,ClassDiffLoss,ClassDistLoss
 import wandb
 from utils import plot_conf_wandb
 
@@ -94,7 +94,7 @@ parser.add_argument('--class_adapt', action='store_true', default=False, help='c
 parser.add_argument('--class_embed', action='store_true', default=False, help='class embed') #tmp use
 parser.add_argument('--feature_mask', type=str, default='', help='add regular for noaugment ',
         choices=['dropout','select',''])
-parser.add_argument('--class_dist', type=str, default='', help='class distance')
+parser.add_argument('--class_dist', type=str, default='', help='class distance loss')
 parser.add_argument('--noaug_reg', type=str, default='', help='add regular for noaugment ',
         choices=['cadd','add',''])
 parser.add_argument('--loss_type', type=str, default='minus', help="loss type for difficult policy training",
@@ -114,6 +114,7 @@ parser.add_argument('--keep_bound', type=float, default=0.0, help="info keep bou
 parser.add_argument('--teach_aug', action='store_true', default=False, help='teacher augment')
 parser.add_argument('--ema_rate', type=float, default=0.999, help="teacher ema rate")
 parser.add_argument('--visualize', action='store_true', default=False, help='visualize')
+parser.add_argument('--output_visual', action='store_true', default=False, help='visualize output and confusion matrix')
 
 args = parser.parse_args()
 debug = True if args.save == "debug" else False
@@ -282,6 +283,12 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 self.sim_criterion = nn.CrossEntropyLoss(reduction='none')
             else:
                 self.sim_criterion = nn.BCEWithLogitsLoss(reduction='none')
+        self.extra_losses = []
+        #class distance
+        self.class_criterion = None
+        if args.class_dist:
+            self.class_criterion = ClassDistLoss(distance_func=args.class_dist,loss_choose=args.class_dist)
+            self.extra_losses.append(self.class_criterion)
 
         #  AdaAug settings for search
         ind_mix,sub_mix = False,False
@@ -366,7 +373,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         diff_dic = {'difficult_aug':self.diff_augment,'same_train':args.same_train,'reweight':self.diff_reweight,'lambda_aug':args.lambda_aug,
                 'lambda_sim':args.lambda_sim,'class_adaptive':args.class_adapt,'lambda_noaug':args.lambda_noaug,'train_perfrom':self.pre_train_acc,
                 'loss_type':args.loss_type, 'adv_criterion': self.adv_criterion, 'teacher_model':self.ema_model, 'sim_criterion':self.sim_criterion,
-                'sim_reweight':args.sim_rew,'warmup_epoch': args.pwarmup,'mix_type':args.mix_type}
+                'extra_criterions':self.extra_losses,'sim_reweight':args.sim_rew,'warmup_epoch': args.pwarmup,'mix_type':args.mix_type}
         
         # searching
         train_acc, train_obj, train_dic, table_dic = search_train(args,self.train_queue, self.search_queue, self.tr_search_queue, self.gf_model, self.adaaug,
@@ -381,12 +388,14 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         # validation
         valid_acc, valid_obj,valid_dic,valid_table = search_infer(self.valid_queue, self.gf_model, self.criterion, 
             multilabel=self.multilabel,n_class=self.n_class,mode='valid',map_select=self.mapselect)
+        #update runtime weights
         if args.policy_loss=='classdiff':
             class_acc = [valid_dic[f'valid_{ptype}_c{i}'] / 100.0 for i in range(self.n_class)]
             print(class_acc)
             self.class_difficulty = 1 - np.array(class_acc)
             self.sim_criterion.update_weight(self.class_difficulty)
-        #scheduler.step()
+        if args.class_dist:
+            self.class_criterion.update_classpair(table_dic['search_output'])
         #test
         test_acc, test_obj, test_dic, test_table  = search_infer(self.test_queue, self.gf_model, self.criterion, 
             multilabel=self.multilabel,n_class=self.n_class,mode='test',map_select=self.mapselect)
@@ -397,6 +406,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             self.result_test_dic = {f'result_{k}': test_dic[k] for k in test_dic.keys()}
             valid_dic[f'best_valid_{ptype}_avg'] = valid_acc
             test_dic[f'best_test_{ptype}_avg'] = test_acc
+            self.result_table_dic.update(table_dic)
             self.result_table_dic.update(valid_table)
             self.result_table_dic.update(test_table)
             self.best_gf = self.gf_model
@@ -406,6 +416,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             self.best_h = self.h_model
             self.result_valid_dic = {f'result_{k}': valid_dic[k] for k in valid_dic.keys()}
             self.result_test_dic = {f'result_{k}': test_dic[k] for k in test_dic.keys()}
+            self.result_table_dic.update(table_dic)
             self.result_table_dic.update(valid_table)
             self.result_table_dic.update(test_table)
         if self.test_fold_idx>=0:
@@ -427,8 +438,15 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             step_dic.update(self.result_test_dic)
             #save&log
             wandb.log(step_dic)
-            wandb.log(plot_conf_wandb(self.result_table_dic['valid_confusion'],title='valid_confusion'))
-            wandb.log(plot_conf_wandb(self.result_table_dic['test_confusion'],title='test_confusion'))
+            if args.output_visual:
+                wandb.log(plot_conf_wandb(self.result_table_dic['train_confusion'],title='train_confusion'))
+                wandb.log(plot_conf_wandb(self.result_table_dic['valid_confusion'],title='valid_confusion'))
+                wandb.log(plot_conf_wandb(self.result_table_dic['test_confusion'],title='test_confusion'))
+                #! maybe will bug
+                wandb.log(plot_conf_wandb(self.result_table_dic['train_output'],title='train_output'))
+                wandb.log(plot_conf_wandb(self.result_table_dic['search_output'],title='search_output'))
+                wandb.log(plot_conf_wandb(self.result_table_dic['valid_output'],title='valid_output'))
+                wandb.log(plot_conf_wandb(self.result_table_dic['test_output'],title='test_output'))
             self.adaaug.save_history(self.class2label)
             figure = self.adaaug.plot_history()
             

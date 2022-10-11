@@ -287,7 +287,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
             grad_clip, h_optimizer, epoch, search_freq,search_round=1,search_repeat=1, multilabel=False,n_class=10,
             difficult_aug=False,same_train=False,reweight=True,sim_reweight=False,mix_type='embed', warmup_epoch = 0
             ,lambda_sim = 1.0,lambda_aug = 1.0,loss_type='minus',lambda_noaug = 0,train_perfrom = 0.0,
-            class_adaptive=False,adv_criterion=None,sim_criterion=None,teacher_model=None,map_select=False):
+            class_adaptive=False,adv_criterion=None,sim_criterion=None,extra_criterions=[],teacher_model=None,map_select=False):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
     top5 = utils.AvgrageMeter()
@@ -333,6 +333,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     preds = []
     targets = []
     total = 0
+    ex_losses = {str(x.__class__.__name__):0 for x in ex_losses}
     difficult_loss, adaptive_loss, search_total,re_weights_sum = 0, 0, 0, 0
     aug_diff_loss, ori_diff_loss, aug_search_loss, ori_search_loss = 0,0,0,0
     noaug_reg_sum = 0
@@ -512,6 +513,11 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 else:
                     loss = loss.mean()
                 loss = loss * lambda_sim + noaug_loss
+                #extra losses
+                for e_criterion in extra_criterions:
+                    e_loss = e_criterion(logits_search,target_search)
+                    loss += e_loss
+                    ex_losses[str(x.__class__.__name__)] += e_loss.detach().item()
                 loss.backward()
                 adaptive_loss += loss.detach().item()
                 search_total += 1
@@ -571,6 +577,8 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     #wandb dic
     out_dic = {}
     out_dic['train_loss'] = objs.avg
+    for k in sorted(ex_losses):
+        out_dic[k] = ex_losses[k] / search_total
     if epoch>= warmup_epoch:
         out_dic['adaptive_loss'] = adaptive_loss / search_total
         out_dic['aug_sear_loss'] = aug_search_loss / search_total

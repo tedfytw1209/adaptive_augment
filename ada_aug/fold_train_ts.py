@@ -99,6 +99,7 @@ parser.add_argument('--thres_adapt', action='store_false', default=True, help="k
 parser.add_argument('--keep_len', type=int, nargs='+', default=[100], help="info keep seq len")
 parser.add_argument('--keep_bound', type=float, default=0.0, help="info keep bound %")
 parser.add_argument('--visualize', action='store_true', default=False, help='visualize')
+parser.add_argument('--output_visual', action='store_true', default=False, help='visualize output and confusion matrix')
 
 args = parser.parse_args()
 debug = True if args.save == "debug" else False
@@ -329,6 +330,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             self.result_test_dic = {f'result_{k}': test_dic[k] for k in test_dic.keys()}
             valid_dic[f'best_valid_{ptype}_avg'] = valid_acc
             test_dic[f'best_test_{ptype}_avg'] = test_acc
+            self.result_table_dic.update(train_table)
             self.result_table_dic.update(valid_table)
             self.result_table_dic.update(test_table)
             self.best_task = self.task_model
@@ -336,6 +338,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             self.best_task = self.task_model
             self.result_valid_dic = {f'result_{k}': valid_dic[k] for k in valid_dic.keys()}
             self.result_test_dic = {f'result_{k}': test_dic[k] for k in test_dic.keys()}
+            self.result_table_dic.update(train_table)
             self.result_table_dic.update(valid_table)
             self.result_table_dic.update(test_table)
 
@@ -351,11 +354,18 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             step_dic.update(self.result_valid_dic)
             step_dic.update(self.result_test_dic)
             #save&log
-            wandb.log(plot_conf_wandb(self.result_table_dic['valid_confusion'],title='valid_confusion'))
-            wandb.log(plot_conf_wandb(self.result_table_dic['test_confusion'],title='test_confusion'))
+            wandb.log(step_dic)
+            if args.output_visual:
+                wandb.log(plot_conf_wandb(self.result_table_dic['train_confusion'],title='train_confusion'))
+                wandb.log(plot_conf_wandb(self.result_table_dic['valid_confusion'],title='valid_confusion'))
+                wandb.log(plot_conf_wandb(self.result_table_dic['test_confusion'],title='test_confusion'))
+                #! maybe will bug
+                wandb.log(plot_conf_wandb(self.result_table_dic['train_output'],title='train_output'))
+                wandb.log(plot_conf_wandb(self.result_table_dic['valid_output'],title='valid_output'))
+                wandb.log(plot_conf_wandb(self.result_table_dic['test_output'],title='test_output'))
             self.adaaug.save_history(self.class2label)
             figure = self.adaaug.plot_history()
-            wandb.log(step_dic)
+
         call_back_dic = {'train_acc': train_acc, 'valid_acc': valid_acc, 'test_acc': test_acc}
         return call_back_dic
 

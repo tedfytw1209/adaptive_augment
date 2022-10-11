@@ -222,7 +222,7 @@ def kl(c,class_output):
     out_arr = np.zeros(n_class)
     for k in range(n_class):
         if c==k: continue
-        dist = kl_div(class_output[c],class_output[k])
+        dist = kl_div(class_output[c],class_output[k])+1e-9
         out_arr[k] = dist
     return out_arr
 
@@ -231,7 +231,7 @@ def wass(c,class_output):
     out_arr = np.zeros(n_class)
     for k in range(n_class):
         if c==k: continue
-        dist = wasserstein_distance(class_output[c],class_output[k]) #need weight???
+        dist = wasserstein_distance(class_output[c],class_output[k])+1e-9 #need weight???
         out_arr[k] = dist
     return out_arr
 
@@ -241,16 +241,39 @@ def confidence(c,class_output):
     c_output = class_output[c]
     for k in range(n_class):
         if c==k: continue
-        dist = max(c_output[c] - c_output[k],0) #clip
+        dist = max(c_output[c] - c_output[k],0)+1e-9 #clip
         out_arr[k] = dist
     return out_arr
 
+def wasserstein_loss(y_true, y_pred): 
+    #smaller when two distribution different, minus if need make distribution similar
+    return torch.mean(y_true * y_pred)
+def wass_loss(logits,targets,target_pair,class_output):
+    soft_logits = logits.softmax(dim=1)
+    pairs_label = target_pair[targets] #(batch, k)
+    print(pairs_label.shape)
+    loss = 0
+    for e_k in range(pairs_label.shape[1]):
+        target_output = class_output[pairs_label[:,e_k].view(-1)].detach() #(batch, n_class)
+        each_loss = wasserstein_loss(target_output,soft_logits) #smaller more different
+        loss += each_loss
+
+    return loss
+def confidence_loss(logits,targets,target_pair,class_output):
+    soft_logits = logits.softmax(dim=1)
+    pairs_label = target_pair[targets] #(batch, k)
+    print(pairs_label.shape)
+    loss = torch.mean(soft_logits[pairs_label])
+    return loss
+
 class ClassDistLoss(torch.nn.Module):
-    def __init__(self, distance_func='',loss_choose='',init_k=3):
+    def __init__(self, distance_func='conf',loss_choose='conf',init_k=3):
         super().__init__()
         self.distance_func = distance_func
         self.loss_choose = loss_choose
+        self.class_output_mat = None
         self.classpair_dist = []
+        self.class_pairs = None
         self.k = init_k
 
     def update_distance(self,class_output_mat): #(n_class,n_class)
@@ -270,16 +293,23 @@ class ClassDistLoss(torch.nn.Module):
     
     def update_classpair(self,class_output_mat):
         self.update_distance(class_output_mat)
+        self.class_output_mat = class_output_mat
         #min distance
         class_pairs = np.zeros((n_class,self.k))
         n_class = class_output_mat.shape[0]
         for c in n_class: #tmp use min distance
             pair_dists = np.minimum(self.classpair_dist[c,:], self.classpair_dist[:,c])
             sorted_dist = np.argsort(pair_dists)
-
+            class_pairs[c] = sorted_dist[1:self.k+1] #top k
+        self.class_pairs = torch.from_numpy(class_pairs).long()
         
     def forward(self, logits, targets):
-        return self.loss_func(logits, targets)
+        if self.distance_func=='wass':
+            loss_func = wass_loss
+        elif self.distance_func=='conf':
+            loss_func = confidence_loss
+        classdist_loss = loss_func(logits,targets,self.class_pairs,self.class_output_mat)
+        return classdist_loss
 
 if __name__ == '__main__':
     no_of_classes = 5

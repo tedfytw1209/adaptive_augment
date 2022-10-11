@@ -550,6 +550,8 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     #visualize
     if visualize:
         input_search, seq_len, target_search = next(iter(search_queue))
+        input_search = input_search.float().cuda()
+        target_search = target_search.cuda()
         policy_y = None
         if class_adaptive: #target to onehot
             if not multilabel:

@@ -379,11 +379,12 @@ class AdaAug_TS(AdaAug):
         #resize_imgs = F.interpolate(images, size=self.search_d) if self.resize else images
         magnitudes, weights = self.predict_aug_params(resize_imgs, seq_len, 'exploit',y=y)
         aug_imgs = self.get_training_aug_images(images, magnitudes, weights,seq_len=seq_len)
+        if self.use_keepaug:
+            slc_out = self.Augment_wrapper.visualize_slc(images, model=self.gf_model)
         print('Visualize for Debug')
         self.print_imgs(imgs=images,title='id')
         self.print_imgs(imgs=aug_imgs,title='aug')
-        if self.use_keepaug:
-            self.Augment_wrapper.visualize_slc(images, model=self.gf_model)
+        
 
     def forward(self, images, seq_len, mode, mix_feature=True,y=None):
         if mode == 'explore':

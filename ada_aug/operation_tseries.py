@@ -1108,12 +1108,14 @@ class KeepAugment(object): #need fix
         slc_, t_series_ = self.get_slc(t_series,model)
         info_aug, compare_func, info_bound, bound_func = self.get_selective(selective)
         print(slc_) #(b,seq)
+        slc_ = slc_.detach().cpu()
         slen = slc_.shape[1]
-        t = np.np.linspace(0, 10, self.sfreq) #!!!tmp for ptbxl
+        t = np.linspace(0, 10, self.sfreq*10) #!!!tmp for ptbxl
         for idx,e_slc in enumerate(slc_):
             plt.clf()
             plt.plot(t, e_slc)
             plt.savefig(f'{self.save_dir}/img{idx}_slc.png')
+        return slc_
 
     #kwargs for apply_func, batch_inputs
     def __call__(self, t_series, model=None,selective='paste', apply_func=None, seq_len=None, **kwargs):

@@ -219,7 +219,7 @@ class AdaAug_TS(AdaAug):
         self.config = config
         self.use_keepaug = keepaug_config['keep_aug']
         if self.use_keepaug:
-            self.Augment_wrapper = KeepAugment(**keepaug_config)
+            self.Augment_wrapper = KeepAugment(save_dir=save_dir,**keepaug_config)
             self.Search_wrapper = self.Augment_wrapper.Augment_search
         else:
             self.Augment_wrapper = Normal_augment
@@ -371,6 +371,20 @@ class AdaAug_TS(AdaAug):
             exit()
         return aug_imgs
 
+    def visualize_result(self, images, seq_len,y=None):
+        if self.resize and 'lstm' not in self.config['gf_model_name']:
+            resize_imgs = F.interpolate(images, size=self.search_d)
+        else:
+            resize_imgs = images
+        #resize_imgs = F.interpolate(images, size=self.search_d) if self.resize else images
+        magnitudes, weights = self.predict_aug_params(resize_imgs, seq_len, 'exploit',y=y)
+        aug_imgs = self.get_training_aug_images(images, magnitudes, weights,seq_len=seq_len)
+        print('Visualize for Debug')
+        self.print_imgs(imgs=images,title='id')
+        self.print_imgs(imgs=aug_imgs,title='aug')
+        if self.use_keepaug:
+            self.Augment_wrapper.visualize_slc(images, model=self.gf_model)
+
     def forward(self, images, seq_len, mode, mix_feature=True,y=None):
         if mode == 'explore':
             #  return a set of mixed augmented features, mix_feature is for experiment
@@ -438,7 +452,7 @@ class AdaAugkeep_TS(AdaAug):
         self.adapt_target = keepaug_config['adapt_target']
         self.keepaug_config = keepaug_config
         if self.use_keepaug:
-            self.Augment_wrapper = AdaKeepAugment(**keepaug_config)
+            self.Augment_wrapper = AdaKeepAugment(save_dir=save_dir,**keepaug_config)
             self.Search_wrapper = self.Augment_wrapper.Augment_search
             if ind_mix:
                 self.Search_wrapper = self.Augment_wrapper.Augment_search_ind
@@ -606,6 +620,20 @@ class AdaAugkeep_TS(AdaAug):
             self.print_imgs(imgs=aug_imgs,title='aug')
             exit()
         return aug_imgs
+    def visualize_result(self, images, seq_len,y=None):
+        if self.resize and 'lstm' not in self.config['gf_model_name']:
+            resize_imgs = F.interpolate(images, size=self.search_d)
+        else:
+            resize_imgs = images
+        #resize_imgs = F.interpolate(images, size=self.search_d) if self.resize else images
+        magnitudes, weights, keeplen_ws, keep_thres = self.predict_aug_params(resize_imgs, seq_len, 'exploit',y=y)
+        #print(magnitudes.shape, weights.shape, keeplen_ws.shape, keep_thres.shape)
+        aug_imgs = self.get_training_aug_images(images, magnitudes, weights, keeplen_ws, keep_thres,seq_len=seq_len)
+        print('Visualize for Debug')
+        self.print_imgs(imgs=images,title='id')
+        self.print_imgs(imgs=aug_imgs,title='aug')
+        if self.use_keepaug:
+            self.Augment_wrapper.visualize_slc(images, model=self.gf_model)
 
     def forward(self, images, seq_len, mode, mix_feature=True,y=None):
         if mode == 'explore':

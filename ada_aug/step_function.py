@@ -287,7 +287,8 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
             grad_clip, h_optimizer, epoch, search_freq,search_round=1,search_repeat=1, multilabel=False,n_class=10,
             difficult_aug=False,same_train=False,reweight=True,sim_reweight=False,mix_type='embed', warmup_epoch = 0
             ,lambda_sim = 1.0,lambda_aug = 1.0,loss_type='minus',lambda_noaug = 0,train_perfrom = 0.0,
-            class_adaptive=False,adv_criterion=None,sim_criterion=None,extra_criterions=[],teacher_model=None,map_select=False):
+            class_adaptive=False,adv_criterion=None,sim_criterion=None,extra_criterions=[],teacher_model=None,map_select=False,
+            visualize=False):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
     top5 = utils.AvgrageMeter()
@@ -546,7 +547,17 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
         if global_step % args.report_freq == 0:
             logging.info('  |train %03d %e %f %f | %.3f + %.3f s', global_step,
                 objs.avg, top1.avg, top5.avg, exploitation_time, exploration_time)
-
+    #visualize
+    if visualize:
+        input_search, seq_len, target_search = next(iter(search_queue))
+        policy_y = None
+        if class_adaptive: #target to onehot
+            if not multilabel:
+                policy_y = nn.functional.one_hot(target_search, num_classes=n_class).cuda().float()
+            else:
+                policy_y = target_search.cuda().float()
+        adaaug.visualize_result(input_search, seq_len,policy_y)
+        exit()
     #class-wise & Total
     if not multilabel:
         cw_acc = 100 * confusion_matrix.diag()/(confusion_matrix.sum(1)+1e-9)

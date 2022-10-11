@@ -315,7 +315,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 gf_model=self.gf_model,
                 h_model=self.h_model,
                 save_dir=os.path.join(self.config['BASE_PATH'],self.config['save'],f'fold{test_fold_idx}'),
-                visualize=args.visualize,
+                #visualize=args.visualize,
                 config=adaaug_config,
                 keepaug_config=keepaug_config,
                 multilabel=multilabel,
@@ -331,7 +331,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 gf_model=self.gf_model,
                 h_model=self.h_model,
                 save_dir=os.path.join(self.config['BASE_PATH'],self.config['save'],f'fold{test_fold_idx}'),
-                visualize=args.visualize,
+                #visualize=args.visualize,
                 config=adaaug_config,
                 keepaug_config=keepaug_config,
                 multilabel=multilabel,
@@ -373,7 +373,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         diff_dic = {'difficult_aug':self.diff_augment,'same_train':args.same_train,'reweight':self.diff_reweight,'lambda_aug':args.lambda_aug,
                 'lambda_sim':args.lambda_sim,'class_adaptive':args.class_adapt,'lambda_noaug':args.lambda_noaug,'train_perfrom':self.pre_train_acc,
                 'loss_type':args.loss_type, 'adv_criterion': self.adv_criterion, 'teacher_model':self.ema_model, 'sim_criterion':self.sim_criterion,
-                'extra_criterions':self.extra_losses,'sim_reweight':args.sim_rew,'warmup_epoch': args.pwarmup,'mix_type':args.mix_type}
+                'extra_criterions':self.extra_losses,'sim_reweight':args.sim_rew,'warmup_epoch': args.pwarmup,'mix_type':args.mix_type,'visualize':args.visualize}
         
         # searching
         train_acc, train_obj, train_dic, table_dic = search_train(args,self.train_queue, self.search_queue, self.tr_search_queue, self.gf_model, self.adaaug,

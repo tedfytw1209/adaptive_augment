@@ -1019,7 +1019,7 @@ def activate_bn_track_running_stats(model):
 
 class KeepAugment(object): #need fix
     def __init__(self, mode, length,thres=0.6,transfrom=None,default_select=None, early=False, low = False,
-        possible_segment=[1],grid_region=False, reverse=False,info_upper = 0.0,
+        possible_segment=[1],grid_region=False, reverse=False,info_upper = 0.0, visualize=False,
         sfreq=100,pw_len=0.2,tw_len=0.4,**_kwargs):
         assert mode in ['auto','b','p','t','rand'] #auto: all, b: heart beat(-0.2,0.4), p: p-wave(-0.2,0), t: t-wave(0,0.4)
         self.mode = mode
@@ -1046,6 +1046,7 @@ class KeepAugment(object): #need fix
         self.info_upper = info_upper
         self.detectors = Detectors(sfreq) #need input ecg: (seq_len)
         self.compare_func_list = [le,ge]
+        self.visualize = visualize
         #'torch.nn.functional.avg_pool1d' use this for segment
         ##self.m_pool = torch.nn.AvgPool1d(kernel_size=self.length, stride=1, padding=0) #for winodow sum
         print(f'Apply InfoKeep Augment: mode={self.mode}, threshold={self.thres}, transfrom={self.trans}')
@@ -1088,6 +1089,14 @@ class KeepAugment(object): #need fix
             slc_ = self.get_rand(t_series)
         else:
             slc_ = self.get_heartbeat(t_series)
+        if self.visualize:
+            print(slc_) #(b,seq)
+            slen = slc_.shape[1]
+            t = np.np.linspace(0, 10, self.sfreq) #!!!tmp for ptbxl
+            for idx,e_slc in enumerate(slc_):
+                plt.clf()
+                plt.plot(t, e_slc)
+                plt.show()
         t_series_.requires_grad = False #no need gradient now
         return slc_, t_series_
     def get_seg(self,seg_number,seg_len,w,window_w,windowed_len):

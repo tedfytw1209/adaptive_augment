@@ -93,7 +93,7 @@ def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_
         # Accuracy / AUROC
         if not multilabel:
             _, predicted = torch.max(logits.data, 1)
-            soft_out = softmax_m(logits).detach()
+            soft_out = softmax_m(logits).detach().cpu()
             total += target.size(0)
             for t, p in zip(target.data.view(-1), predicted.view(-1)):
                 confusion_matrix[t.long(), p.long()] += 1
@@ -127,7 +127,7 @@ def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_
         ptype = 'auroc'
     #table dic
     table_dic = {}
-    table_dic['train_output'] = (tr_output_matrix / tr_output_matrix.mean(dim=1))
+    table_dic['train_output'] = (tr_output_matrix / torch.clamp(tr_output_matrix.sum(dim=1,keepdim=True),min=1e-9))
     table_dic['train_confusion'] = confusion_matrix
     #wandb dic
     out_dic = {}
@@ -174,7 +174,7 @@ def infer(valid_queue, model, criterion, multilabel=False, n_class=10,mode='test
                 prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
                 top1.update(prec1.detach().item(), n)
                 top5.update(prec5.detach().item(), n)
-                soft_out = softmax_m(logits).detach()
+                soft_out = softmax_m(logits).detach().cpu()
                 for t, p in zip(target.data.view(-1), predicted.view(-1)):
                     confusion_matrix[t.long(), p.long()] += 1
                 for i,t in enumerate(target.data.view(-1)):
@@ -187,7 +187,7 @@ def infer(valid_queue, model, criterion, multilabel=False, n_class=10,mode='test
             targets.append(target.cpu().detach())
     #table dic
     table_dic = {}
-    table_dic[f'{mode}_output'] = (output_matrix / output_matrix.mean(dim=1))
+    table_dic[f'{mode}_output'] = (output_matrix / torch.clamp(output_matrix.sum(dim=1,keepdim=True),min=1e-9))
     table_dic[f'{mode}_confusion'] = confusion_matrix
     #class-wise
     if not multilabel:
@@ -333,7 +333,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     preds = []
     targets = []
     total = 0
-    ex_losses = {str(x.__class__.__name__):0 for x in ex_losses}
+    ex_losses = {str(x.__class__.__name__):0 for x in extra_criterions}
     difficult_loss, adaptive_loss, search_total,re_weights_sum = 0, 0, 0, 0
     aug_diff_loss, ori_diff_loss, aug_search_loss, ori_search_loss = 0,0,0,0
     noaug_reg_sum = 0
@@ -397,7 +397,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
             top1.update(prec1.detach().item(), n)
             top5.update(prec5.detach().item(), n)
             _, predicted = torch.max(logits.data, 1)
-            soft_out = softmax_m(logits).detach()
+            soft_out = softmax_m(logits).detach().cpu()
             total += target.size(0)
             for t, p in zip(target.data.view(-1), predicted.view(-1)):
                 confusion_matrix[t.long(), p.long()] += 1
@@ -493,9 +493,9 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 origin_logits = sim_model(input_search, seq_len)
                 ori_loss = cuc_loss(origin_logits,target_search,sim_criterion,multilabel).mean() #!to assert loss mean reduce
                 #output pred
-                soft_out = softmax_m(logits_search).detach() #(bs,n_class)
+                soft_out = softmax_m(logits_search).detach().cpu() #(bs,n_class)
                 for i,t in enumerate(target_search.data.view(-1)):
-                    sea_output_matrix[t.long(),:] += soft_out[i]
+                    sea_output_matrix[t.long()] += soft_out[i]
 
                 #similar reweight?
                 aug_search_loss += loss.detach().item()
@@ -571,9 +571,14 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
         ptype = 'auroc'
     #table dic
     table_dic = {}
-    table_dic['search_output'] = (sea_output_matrix / sea_output_matrix.mean(dim=1))
-    table_dic['train_output'] = (tr_output_matrix / tr_output_matrix.mean(dim=1))
+    #print(sea_output_matrix.sum()) #! tmp
+    #print(sea_output_matrix.sum(dim=1))
+    #print(sea_output_matrix) #! tmp
+    table_dic['search_output'] = (sea_output_matrix / torch.clamp(sea_output_matrix.sum(dim=1,keepdim=True),min=1e-9))
+    table_dic['train_output'] = (tr_output_matrix / torch.clamp(tr_output_matrix.sum(dim=1,keepdim=True),min=1e-9))
     table_dic['train_confusion'] = confusion_matrix
+    #print(table_dic['search_output'].sum()) #! tmp
+    #print(table_dic['search_output']) #! tmp
     #wandb dic
     out_dic = {}
     out_dic['train_loss'] = objs.avg
@@ -636,7 +641,7 @@ def search_infer(valid_queue, gf_model, criterion, multilabel=False, n_class=10,
                 prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
                 top1.update(prec1.detach().item(), n)
                 top5.update(prec5.detach().item(), n)
-                soft_out = softmax_m(logits).detach()
+                soft_out = softmax_m(logits).detach().cpu()
                 for t, p in zip(target.data.view(-1), predicted.view(-1)):
                     confusion_matrix[t.long(), p.long()] += 1
                 for i,t in enumerate(target.data.view(-1)):
@@ -670,7 +675,7 @@ def search_infer(valid_queue, gf_model, criterion, multilabel=False, n_class=10,
         ptype = 'auroc'
     #table dic
     table_dic = {}
-    table_dic[f'{mode}_output'] = (output_matrix / output_matrix.mean(dim=1))
+    table_dic[f'{mode}_output'] = (output_matrix / torch.clamp(output_matrix.sum(dim=1,keepdim=True),1e-9))
     table_dic[f'{mode}_confusion'] = confusion_matrix
     #wandb dic
     out_dic = {}

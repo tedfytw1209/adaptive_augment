@@ -33,6 +33,7 @@ subject_id = [
 
 
 class WISDM(BaseDataset):
+    Hz = 20
     def __init__(self,data_dir,mode='all', sensor="accel", device="phone",**_kwargs):
         super(WISDM,self).__init__(**_kwargs)
         assert sensor in ["accel", "gyro"]

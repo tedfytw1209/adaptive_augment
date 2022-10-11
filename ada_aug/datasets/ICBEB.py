@@ -41,6 +41,7 @@ def make_split_indices(test_k,each_lens,sub_tr_ratio):
     return [test_k, sub_tr_ratio, tr_idx, valid_idx, test_idx]
 
 class ICBEB(BaseDataset):
+    Hz = 100
     def __init__(self, dataset_path, labelgroup="all",multilabel=True,mode='all',resize_ratio=1.0,
     transfroms=[],augmentations=[],class_augmentations=[],label_transfroms=[],**_kwargs):
         super(ICBEB,self).__init__(transfroms=transfroms,augmentations=augmentations,
@@ -165,11 +166,11 @@ class ICBEB(BaseDataset):
         input_data, label = self.input_data[index], self.label[index]
         seq_len = self.seq_lens[index]
         for transfrom in self.transfroms:
-            input_data = transfrom(input_data)
+            input_data = transfrom(input_data,seq_len=seq_len)
         for augmentation in self.augmentations:
-            input_data = augmentation(input_data)
+            input_data = augmentation(input_data,seq_len=seq_len)
         for augmentation in self.class_augmentations:
-            input_data = augmentation(input_data,label)
+            input_data = augmentation(input_data,label,seq_len=seq_len)
         for label_trans in self.label_transfroms:
             label = label_trans(label)
         return input_data,seq_len, label

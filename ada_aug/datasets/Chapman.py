@@ -21,6 +21,7 @@ rhythm_dic = {k:v for (k,v) in zip(rhythm_classes_cinc,rhythm_classes_ori)}
 LABEL_GROUPS = {"yuall":12,"all":11, "rhythm":6, 'superrhythm':4}
 
 class Chapman(BaseDataset):
+    Hz = 500
     def __init__(self, dataset_path,labelgroup='all',mode='all',seed=42,multilabel=False,transfroms=[],augmentations=[],label_transfroms=[],**_kwargs):
         super(Chapman,self).__init__(transfroms=transfroms,augmentations=augmentations,label_transfroms=label_transfroms)
         self.dataset_path = dataset_path

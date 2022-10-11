@@ -23,6 +23,7 @@ def input_resizeing(raw_data,ratio=1):
 
 
 class Georgia(BaseDataset):
+    Hz = 500
     def __init__(self, dataset_path,labelgroup='all',mode='all',seed=42,multilabel=False,transfroms=[],augmentations=[],label_transfroms=[],**_kwargs):
         super(Georgia,self).__init__(transfroms=transfroms,augmentations=augmentations,label_transfroms=label_transfroms)
         self.dataset_path = dataset_path

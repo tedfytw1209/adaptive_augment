@@ -31,6 +31,7 @@ def make_split_indices(test_k,each_lens,sub_tr_ratio):
     return [test_k, sub_tr_ratio, tr_idx, valid_idx, test_idx]
 
 class PTBXL(BaseDataset):
+    Hz = 100
     def __init__(self, dataset_path, labelgroup="diagnostic",multilabel=True,mode='all',denoise=False,
     transfroms=[],augmentations=[],class_augmentations=[],label_transfroms=[],**_kwargs):
         super(PTBXL,self).__init__(transfroms=transfroms,augmentations=augmentations,

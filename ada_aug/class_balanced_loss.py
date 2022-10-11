@@ -275,6 +275,7 @@ class ClassDistLoss(torch.nn.Module):
         self.classpair_dist = []
         self.class_pairs = None
         self.k = init_k
+        self.fill_value = 1e6
 
     def update_distance(self,class_output_mat): #(n_class,n_class)
         self.classpair_dist = []
@@ -286,6 +287,8 @@ class ClassDistLoss(torch.nn.Module):
         elif self.distance_func=='conf':
             cuc_func = confidence
         for c in range(n_class):
+            if class_output_mat[c].sum()==0:
+                line = np.full(n_class, self.fill_value)
             line = cuc_func(c,class_output_mat) # class c distance to other class
             self.classpair_dist.append(line)
         self.classpair_dist = np.array(self.classpair_dist)

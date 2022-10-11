@@ -439,14 +439,16 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             #save&log
             wandb.log(step_dic)
             if args.output_visual:
-                wandb.log(plot_conf_wandb(self.result_table_dic['train_confusion'],title='train_confusion'))
-                wandb.log(plot_conf_wandb(self.result_table_dic['valid_confusion'],title='valid_confusion'))
-                wandb.log(plot_conf_wandb(self.result_table_dic['test_confusion'],title='test_confusion'))
+                tables_dic = {}
+                tables_dic['train_confusion'] = plot_conf_wandb(self.result_table_dic['train_confusion'],title='train_confusion')
+                tables_dic['valid_confusion'] = plot_conf_wandb(self.result_table_dic['valid_confusion'],title='valid_confusion')
+                tables_dic['test_confusion'] = plot_conf_wandb(self.result_table_dic['test_confusion'],title='test_confusion')
                 #! maybe will bug
-                wandb.log(plot_conf_wandb(self.result_table_dic['train_output'],title='train_output'))
-                wandb.log(plot_conf_wandb(self.result_table_dic['search_output'],title='search_output'))
-                wandb.log(plot_conf_wandb(self.result_table_dic['valid_output'],title='valid_output'))
-                wandb.log(plot_conf_wandb(self.result_table_dic['test_output'],title='test_output'))
+                tables_dic['train_output'] = plot_conf_wandb(self.result_table_dic['train_output'],title='train_output')
+                tables_dic['search_output'] = plot_conf_wandb(self.result_table_dic['search_output'],title='search_output')
+                tables_dic['valid_output'] = plot_conf_wandb(self.result_table_dic['valid_output'],title='valid_output')
+                tables_dic['test_output'] = plot_conf_wandb(self.result_table_dic['test_output'],title='test_output')
+                wandb.log(tables_dic)
             self.adaaug.save_history(self.class2label)
             figure = self.adaaug.plot_history()
             

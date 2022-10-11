@@ -160,6 +160,7 @@ class EDFX(BaseDataset):
         self.num_class = 5
         self.n_folds = 5
         self.prep_physionet_dataset(mne_data_path=dataset_path,n_subj=81,recording_ids=[1],preload=True)
+        self.Hz = 100
     
     def prep_physionet_dataset(
         self,

@@ -64,6 +64,7 @@ class WISDM(BaseDataset):
         self.num_class = len(class_name)
         self.channel = 3
         self.max_len = MAX_LENGTH
+        self.Hz = 20
 
     def __len__(self):
         return len(self.input_data)

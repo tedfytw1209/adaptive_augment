@@ -44,6 +44,7 @@ class PTBXL(BaseDataset):
         self.denoise = denoise
         self.channel = 12
         self.sub_tr_ratio = 1.0
+        self.Hz = 100
         #k, ratio, sub_tr_idx, valid_idx, test_idx
         self.split_indices = [[0, self.sub_tr_ratio, 0, 0, 0]]
         if self.multilabel:

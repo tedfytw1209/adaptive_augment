@@ -34,6 +34,7 @@ class Chapman(BaseDataset):
         self.channel = 12
         self.labelgroup = labelgroup
         self.sub_tr_ratio = 1.0
+        self.Hz = 500
         #k, ratio, sub_tr_idx, valid_idx, test_idx
         self.split_indices = []
         self.fold_indices = [] # fold_idx : indices

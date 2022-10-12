@@ -95,6 +95,7 @@ parser.add_argument('--class_embed', action='store_true', default=False, help='c
 parser.add_argument('--feature_mask', type=str, default='', help='add regular for noaugment ',
         choices=['dropout','select',''])
 parser.add_argument('--class_dist', type=str, default='', help='class distance loss')
+parser.add_argument('--lambda_dist', type=float, default=1.0, help="class distance weight")
 parser.add_argument('--noaug_reg', type=str, default='', help='add regular for noaugment ',
         choices=['cadd','add',''])
 parser.add_argument('--loss_type', type=str, default='minus', help="loss type for difficult policy training",
@@ -288,7 +289,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         #class distance
         self.class_criterion = None
         if args.class_dist:
-            self.class_criterion = ClassDistLoss(distance_func=args.class_dist,loss_choose=args.class_dist)
+            self.class_criterion = ClassDistLoss(distance_func=args.class_dist,loss_choose=args.class_dist,lamda=args.lambda_dist)
             self.extra_losses.append(self.class_criterion)
 
         #  AdaAug settings for search

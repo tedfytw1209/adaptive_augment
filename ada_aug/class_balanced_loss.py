@@ -274,7 +274,7 @@ def confidence_loss(logits,targets,target_pair,class_output):
     return loss
 
 class ClassDistLoss(torch.nn.Module):
-    def __init__(self, distance_func='conf',loss_choose='conf',init_k=3):
+    def __init__(self, distance_func='conf',loss_choose='conf',init_k=3,lamda=1.0):
         super().__init__()
         self.distance_func = distance_func
         self.loss_choose = loss_choose
@@ -284,6 +284,7 @@ class ClassDistLoss(torch.nn.Module):
         self.k = init_k
         self.fill_value = 1e6
         self.updated = False
+        self.lamda = lamda
 
     def update_distance(self,class_output_mat): #(n_class,n_class)
         self.classpair_dist = []
@@ -323,7 +324,7 @@ class ClassDistLoss(torch.nn.Module):
             loss_func = wass_loss
         elif self.distance_func=='conf':
             loss_func = confidence_loss
-        classdist_loss = loss_func(logits,targets,self.class_pairs,self.class_output_mat)
+        classdist_loss = loss_func(logits,targets,self.class_pairs,self.class_output_mat) * self.lamda
         return classdist_loss
 
 if __name__ == '__main__':

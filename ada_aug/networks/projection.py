@@ -21,8 +21,9 @@ class SelectDropout(nn.Module):
             '''binomial = torch.distributions.binomial.Binomial(probs=1-self.p)
             return X * binomial.sample(X.size()) * (1.0/(1-self.p))'''
             binomial = torch.distributions.binomial.Binomial(probs=1-self.p)
-            select = binomial.sample(X.shape[0])
-            out = X * self.masks[select] * self.ratios[select] # (bs,in_dim) * (bs,in_dim) * (bs,1)
+            select = binomial.sample([X.shape[0]]).long()
+            print(self.masks[select].shape)
+            out = X * self.masks[select].to(X.device) * self.ratios[select].to(X.device) # (bs,in_dim) * (bs,in_dim) * (bs,1)
             return out
 
         return X
@@ -63,12 +64,17 @@ class Projection_TSeries(nn.Module):
         self.label_embed = None
         if label_num>0 and label_embed>0:
             self.label_embed = nn.Sequential(nn.Linear(label_num, label_embed), nn.ReLU()) #10/10 change
+            n_label = label_embed
+        elif label_num>0:
+            n_label = label_num
+        else:
+            n_label = 0
         self.n_layers = n_layers
         layers = []
         if feature_mask=='dropout':
             layers += [nn.Dropout(p=0.5)]
         elif feature_mask=='select':
-            layers += [SelectDropout(p=0.5)] #custom dropout
+            layers += [SelectDropout(p=0.5,fea_len=in_features-label_embed,label_len=n_label)] #custom dropout
         if self.n_layers > 0:
             layers += [nn.Linear(in_features, n_hidden), nn.ReLU()]
             for _ in range(self.n_layers-1):

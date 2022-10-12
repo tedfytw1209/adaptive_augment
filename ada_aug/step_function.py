@@ -517,8 +517,9 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 #extra losses
                 for e_criterion in extra_criterions:
                     e_loss = e_criterion(logits_search,target_search)
-                    loss += e_loss
-                    ex_losses[str(x.__class__.__name__)] += e_loss.detach().item()
+                    if torch.is_tensor(e_loss):
+                        loss += e_loss
+                        ex_losses[str(e_criterion.__class__.__name__)] += e_loss.detach().item()
                 loss.backward()
                 adaptive_loss += loss.detach().item()
                 search_total += 1

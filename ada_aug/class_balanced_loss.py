@@ -250,20 +250,27 @@ def wasserstein_loss(y_true, y_pred):
     return torch.mean(y_true * y_pred)
 def wass_loss(logits,targets,target_pair,class_output):
     soft_logits = logits.softmax(dim=1)
-    pairs_label = target_pair[targets] #(batch, k)
-    print(pairs_label.shape)
+    pairs_label = target_pair[targets.detach().cpu()] #(batch, k)
     loss = 0
     for e_k in range(pairs_label.shape[1]):
-        target_output = class_output[pairs_label[:,e_k].view(-1)].detach() #(batch, n_class)
+        target_output = class_output[pairs_label[:,e_k].view(-1)].to(soft_logits.device) #(batch, n_class)
+        print(target_output.shape)
         each_loss = wasserstein_loss(target_output,soft_logits) #smaller more different
         loss += each_loss
 
     return loss
 def confidence_loss(logits,targets,target_pair,class_output):
-    soft_logits = logits.softmax(dim=1)
-    pairs_label = target_pair[targets] #(batch, k)
-    print(pairs_label.shape)
-    loss = torch.mean(soft_logits[pairs_label])
+    n_class = class_output.shape[0]
+    soft_logits = logits.softmax(dim=1) #(batch, n_class)
+    pairs_label = target_pair[targets.detach().cpu()].to(soft_logits.device) #(batch, k)
+    mask = torch.zeros(*logits.size()).to(soft_logits.device) #(batch, n_class)
+    mask.scatter_(1, pairs_label, 1)
+    loss = 0
+    loss = torch.mean(mask * soft_logits) * n_class
+    '''for e_k in range(pairs_label.shape[1]):
+        print(soft_logits[pairs_label[:,e_k].view(-1)].shape)
+        loss += torch.mean(soft_logits[pairs_label[:,e_k].view(-1)]) * n_class'''
+    
     return loss
 
 class ClassDistLoss(torch.nn.Module):
@@ -276,6 +283,7 @@ class ClassDistLoss(torch.nn.Module):
         self.class_pairs = None
         self.k = init_k
         self.fill_value = 1e6
+        self.updated = False
 
     def update_distance(self,class_output_mat): #(n_class,n_class)
         self.classpair_dist = []
@@ -295,18 +303,22 @@ class ClassDistLoss(torch.nn.Module):
         return self.classpair_dist
     
     def update_classpair(self,class_output_mat):
+        n_class = class_output_mat.shape[0]
         self.update_distance(class_output_mat)
         self.class_output_mat = class_output_mat
+        print(self.class_output_mat)
         #min distance
         class_pairs = np.zeros((n_class,self.k))
-        n_class = class_output_mat.shape[0]
-        for c in n_class: #tmp use min distance
+        for c in range(n_class): #tmp use min distance
             pair_dists = np.minimum(self.classpair_dist[c,:], self.classpair_dist[:,c])
             sorted_dist = np.argsort(pair_dists)
             class_pairs[c] = sorted_dist[1:self.k+1] #top k
         self.class_pairs = torch.from_numpy(class_pairs).long()
+        self.updated = True
         
     def forward(self, logits, targets):
+        if not self.updated:
+            return 0
         if self.distance_func=='wass':
             loss_func = wass_loss
         elif self.distance_func=='conf':

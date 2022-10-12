@@ -492,7 +492,8 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 #sim mix if need, calculate loss
                 loss, logits_search = mix_func(gf_model,mixed_features,aug_weights,sim_criterion,target_search,multilabel)
                 origin_logits = sim_model(input_search, seq_len)
-                ori_loss = cuc_loss(origin_logits,target_search,sim_criterion,multilabel).mean() #!to assert loss mean reduce
+                ori_loss = cuc_loss(origin_logits,target_search,sim_criterion,multilabel)
+                ori_loss = ori_loss.mean() #!to assert loss mean reduce
                 #output pred
                 soft_out = softmax_m(logits_search).detach().cpu() #(bs,n_class)
                 for i,t in enumerate(target_search.data.view(-1)):

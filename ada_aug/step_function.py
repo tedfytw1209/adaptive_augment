@@ -463,7 +463,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                         p_orig = origin_logits.softmax(dim=1)[torch.arange(batch_size), target_trsearch].detach()
                         p_aug = aug_logits.softmax(dim=1)[torch.arange(batch_size), target_trsearch].clone().detach()
                         w_aug = torch.sqrt(p_orig * torch.clamp(p_orig - p_aug, min=0)) #a=0.5,b=0.5
-                        re_weights_sum += w_aug.sum().detach().item() / search_round
+                        re_weights_sum += w_aug.sum().detach().item()
                         if w_aug.sum() > 0:
                             w_aug /= (w_aug.mean().detach() + 1e-6)
                         else:
@@ -471,8 +471,8 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                         loss_policy = (w_aug * loss_prepolicy).mean()
                     else:
                         loss_policy = loss_prepolicy.mean()
-                    #!!!10/13 bug fix!!!
-                    loss_policy = loss_policy / search_round
+                    #!!!10/13 bug fix!!! ,tmp*4 for same plr
+                    loss_policy = loss_policy * 4 / search_round
                     loss_policy.backward()
                     #h_optimizer.step() wait till validation set
                     difficult_loss += loss_policy.detach().item()
@@ -536,8 +536,8 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                     if torch.is_tensor(e_loss):
                         loss += e_loss
                         ex_losses[str(e_criterion.__class__.__name__)] += e_loss.detach().item()
-                #!!!10/13 bug fix!!!
-                loss = loss / search_round
+                #!!!10/13 bug fix, tmp *4 for plr!!!
+                loss = loss * 4 / search_round
                 loss.backward()
                 adaptive_loss += loss.detach().item()
                 search_total += 1

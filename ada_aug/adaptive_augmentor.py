@@ -371,19 +371,20 @@ class AdaAug_TS(AdaAug):
             exit()
         return aug_imgs
 
-    def visualize_result(self, images, seq_len,y=None):
+    def visualize_result(self, images, seq_len,policy_y=None,y=None):
         if self.resize and 'lstm' not in self.config['gf_model_name']:
             resize_imgs = F.interpolate(images, size=self.search_d)
         else:
             resize_imgs = images
+        target = y.detach().cpu()
         #resize_imgs = F.interpolate(images, size=self.search_d) if self.resize else images
-        magnitudes, weights = self.predict_aug_params(resize_imgs, seq_len, 'exploit',y=y)
+        magnitudes, weights = self.predict_aug_params(resize_imgs, seq_len, 'exploit',y=policy_y)
         aug_imgs = self.get_training_aug_images(images, magnitudes, weights,seq_len=seq_len)
         if self.use_keepaug:
             slc_out = self.Augment_wrapper.visualize_slc(images, model=self.gf_model)
         print('Visualize for Debug')
-        self.print_imgs(imgs=images,title='id')
-        self.print_imgs(imgs=aug_imgs,title='aug')
+        self.print_imgs(imgs=images,label=target,title='id',slc=slc_out)
+        self.print_imgs(imgs=aug_imgs,label=target,title='aug',slc=slc_out)
         
 
     def forward(self, images, seq_len, mode, mix_feature=True,y=None):
@@ -396,17 +397,20 @@ class AdaAug_TS(AdaAug):
         elif mode == 'inference':
             return images
     
-    def print_imgs(self,imgs,title):
+    def print_imgs(self,imgs,label,title='',slc=None):
         imgs = imgs.cpu().detach().numpy()
         t = np.linspace(0, 10, 1000)
-        for idx,img in enumerate(imgs):
+        for idx,(img,e_lb) in enumerate(zip(imgs,label)):
             plt.clf()
+            fig, (ax1, ax2) = plt.subplots(2, sharex=True, gridspec_kw={'height_ratios': [2, 1]})
             channel_num = img.shape[-1]
             for i in  range(channel_num):
-                plt.plot(t, img[:,i])
+                ax1.plot(t, img[:,i])
+            if slc:
+                ax2.plot(t,slc[idx])
             if title:
-                plt.title(title)
-            plt.savefig(f'{self.save_dir}/img{idx}_{title}.png')
+                fig.title(f'{title}_{e_lb}')
+            plt.savefig(f'{self.save_dir}/img{idx}_{title}_{e_lb}.png')
     
     def update_alpha(self,class_acc):
         self.alpha = torch.tensor(class_acc).view(1,-1).cuda()

@@ -21,7 +21,7 @@ import wandb
 
 
 def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_clip, adaaug, multilabel=False,n_class=10,
-        difficult_aug=False,reweight=True,lambda_aug = 1.0,class_adaptive=False,map_select=False):
+        difficult_aug=False,reweight=True,lambda_aug = 1.0,class_adaptive=False,map_select=False,visualize=False):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
     top5 = utils.AvgrageMeter()
@@ -103,6 +103,19 @@ def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_
             predicted = torch.sigmoid(logits.data)
         preds.append(predicted.cpu().detach())
         targets.append(target.cpu().detach())
+    #visualize
+    if visualize:
+        input_search, seq_len, target_search = next(iter(train_queue))
+        input_search = input_search.float().cuda()
+        target_search = target_search.cuda()
+        policy_y = None
+        if class_adaptive: #target to onehot
+            if not multilabel:
+                policy_y = nn.functional.one_hot(target_search, num_classes=n_class).cuda().float()
+            else:
+                policy_y = target_search.cuda().float()
+        adaaug.visualize_result(input_search, seq_len,policy_y,target_search)
+        exit()
     #class-wise & Total
     if not multilabel:
         cw_acc = 100 * confusion_matrix.diag()/(confusion_matrix.sum(1)+1e-9)
@@ -560,7 +573,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 policy_y = nn.functional.one_hot(target_search, num_classes=n_class).cuda().float()
             else:
                 policy_y = target_search.cuda().float()
-        adaaug.visualize_result(input_search, seq_len,policy_y)
+        adaaug.visualize_result(input_search, seq_len,policy_y,target_search)
         exit()
     #class-wise & Total
     if not multilabel:

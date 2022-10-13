@@ -1108,7 +1108,7 @@ class KeepAugment(object): #need fix
         slc_, t_series_ = self.get_slc(t_series,model)
         info_aug, compare_func, info_bound, bound_func = self.get_selective(selective)
         print(slc_) #(b,seq)
-        slc_ = slc_.detach().cpu()
+        slc_ = slc_.detach().cpu().numpy()
         slen = slc_.shape[1]
         t = np.linspace(0, 10, self.sfreq*10) #!!!tmp for ptbxl
         for idx,e_slc in enumerate(slc_):

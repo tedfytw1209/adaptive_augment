@@ -200,10 +200,12 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         self.criterion = self.criterion.cuda()
         #  restore setting
         if args.restore:
-            trained_epoch = utils.restore_ckpt(self.task_model, self.optimizer, self.scheduler, args.restore_path, location=0) + 1
+            trained_epoch = utils.restore_ckpt(self.task_model, self.optimizer, self.scheduler,
+                os.path.join(self.base_path,args.restore_path,f'fold{test_fold_idx}', 'weights.pt'), location=0) + 1
             print(f'From epoch {trained_epoch}, Resume')
         else:
             trained_epoch = 0
+        self.trained_epoch = trained_epoch
         #  load trained adaaug sub models
         search_n_class = get_num_class(args.search_dataset,args.labelgroup)
         self.gf_model = get_model_tseries(model_name=args.gf_model_name,
@@ -253,7 +255,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 gf_model=self.gf_model,
                 h_model=self.h_model,
                 save_dir=os.path.join(self.config['BASE_PATH'],self.config['save'],f'fold{test_fold_idx}'),
-                visualize=args.visualize,
+                #visualize=args.visualize,
                 config=adaaug_config,
                 keepaug_config=keepaug_config,
                 multilabel=multilabel,
@@ -268,7 +270,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 gf_model=self.gf_model,
                 h_model=self.h_model,
                 save_dir=os.path.join(self.config['BASE_PATH'],self.config['save'],f'fold{test_fold_idx}'),
-                visualize=args.visualize,
+                #visualize=args.visualize,
                 config=adaaug_config,
                 keepaug_config=keepaug_config,
                 multilabel=multilabel,
@@ -303,13 +305,19 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         else:
             ptype = 'acc'
         print(f'Starting Ray ID {self.trial_id} Iteration: {self._iteration}')
+        Curr_epoch = self.trained_epoch + self._iteration
         args = self.config['args']
-        step_dic={'epoch':self._iteration}
+        step_dic={'epoch':Curr_epoch}
         diff_dic = {'difficult_aug':self.diff_augment,'reweight':self.diff_reweight,'lambda_aug':args.lambda_aug, 'class_adaptive':args.class_adapt
-                }
+                ,'visualize':args.visualize}
+        if Curr_epoch>self.config['epochs']-1:
+            all_epochs = self.config['epochs']-1
+            print(f'Trained epochs {Curr_epoch} Iteration: {self._iteration} already reach {all_epochs}, Skip step')
+            call_back_dic = {'train_acc': 0, 'valid_acc': 0, 'test_acc': 0}
+            return call_back_dic
         # training
         train_acc, train_obj, train_dic, train_table = train(args,
-            self.train_queue, self.task_model, self.criterion, self.optimizer, self.scheduler, self._iteration, args.grad_clip, self.adaaug, 
+            self.train_queue, self.task_model, self.criterion, self.optimizer, self.scheduler, Curr_epoch, args.grad_clip, self.adaaug, 
                 multilabel=self.multilabel,n_class=self.n_class,map_select=self.mapselect,**diff_dic)
         if self.noaug_add:
             class_acc = train_acc / 100.0
@@ -343,14 +351,14 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             self.result_table_dic.update(test_table)
 
         #utils.save_model(self.best_task, os.path.join(self.base_path,self.config['save'],f'fold{self.test_fold_idx}', 'h_weights.pt'))
-        utils.save_ckpt(self.best_task, self.optimizer, self.scheduler, self._iteration,
+        utils.save_ckpt(self.best_task, self.optimizer, self.scheduler, Curr_epoch,
             os.path.join(self.base_path,self.config['save'],f'fold{self.test_fold_idx}', 'weights.pt'))
         step_dic.update(test_dic)
         step_dic.update(train_dic)
         step_dic.update(valid_dic)
         wandb.log(step_dic)
         #if last epoch
-        if self._iteration==self.config['epochs']-1:
+        if Curr_epoch==self.config['epochs']-1:
             step_dic.update(self.result_valid_dic)
             step_dic.update(self.result_test_dic)
             #save&log
@@ -401,7 +409,10 @@ def main():
         data_add = '_r' + str(round(reduce_train,3))
     else:
         data_add = ''
-    experiment_name = f'{Aug_type}{args.k_ops}{description}_train{args.augselect}_{args.dataset}{args.labelgroup}{data_add}_{args.model_name}_{h_model_dir}'
+    Mode = 'train'
+    if args.evaluate_path:
+        Mode = 'Eval'
+    experiment_name = f'{Aug_type}{args.k_ops}{description}_{Mode}{args.augselect}_{args.dataset}{args.labelgroup}{data_add}_{args.model_name}_{h_model_dir}'
     '''run_log = wandb.init(config=args, 
                   project='AdaAug',
                   group=experiment_name,

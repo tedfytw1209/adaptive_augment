@@ -23,7 +23,7 @@ from dataset import get_ts_dataloaders, get_num_class, get_label_name, get_datas
 from operation_tseries import TS_OPS_NAMES,ECG_OPS_NAMES,TS_ADD_NAMES,MAG_TEST_NAMES,NOMAG_TEST_NAMES
 from step_function import train,infer,search_train,search_infer
 from non_saturating_loss import NonSaturatingLoss
-from class_balanced_loss import ClassBalLoss,ClassDiffLoss,ClassDistLoss
+from class_balanced_loss import ClassBalLoss,ClassDiffLoss,ClassDistLoss,make_class_balance_count,make_class_weights,make_loss
 import wandb
 from utils import plot_conf_wandb
 
@@ -100,6 +100,7 @@ parser.add_argument('--noaug_reg', type=str, default='', help='add regular for n
         choices=['cadd','add',''])
 parser.add_argument('--loss_type', type=str, default='minus', help="loss type for difficult policy training",
         choices=['minus','relative','relativediff','adv'])
+parser.add_argument('--balance_loss', type=str, default='', help="loss type for model and policy training to acheive class balance")
 parser.add_argument('--policy_loss', type=str, default='', help="loss type for simular policy training")
 parser.add_argument('--keep_aug', action='store_true', default=False, help='info keep augment')
 parser.add_argument('--keep_mode', type=str, default='auto', help='info keep mode',choices=['auto','adapt','b','p','t','rand'])
@@ -143,7 +144,7 @@ if args.keep_aug:
 if args.teach_aug:
     description+=f'teach{args.ema_rate}'
 now_str = time.strftime("%Y%m%d-%H%M%S")
-args.save = '{}-{}-{}{}'.format(now_str, args.save,Aug_type,description+args.augselect)
+args.save = '{}-{}-{}{}'.format(now_str, args.save,Aug_type,description+args.augselect+args.balance_loss)
 if debug:
     args.save = os.path.join('debug', args.save)
 else:
@@ -249,11 +250,15 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             lr=args.proj_learning_rate,
             betas=(0.9, 0.999),
             weight_decay=args.proj_weight_decay)
-        
-        if not multilabel:
-            self.criterion = nn.CrossEntropyLoss()
+        train_labels = self.train_queue.dataset.dataset.label
+        search_labels = self.search_queue.dataset.dataset.label
+        if args.balance_loss=='classbal':
+            self.criterion = make_class_balance_count(train_labels,search_labels,multilabel,n_class)
+        elif args.balance_loss=='classweight':
+            smaple_weights = make_class_weights(train_labels,n_class,search_labels)
+
         else:
-            self.criterion = nn.BCEWithLogitsLoss(reduction='mean')
+            self.criterion = make_loss(multilabel=multilabel)
         self.criterion = self.criterion.cuda()
         self.adv_criterion = None
         if args.loss_type=='adv':
@@ -265,15 +270,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 self.adv_criterion = nn.BCEWithLogitsLoss(reduction='none')
         self.sim_criterion = None
         if args.policy_loss=='classbal': #bug!: can not with loss_mix
-            search_labels = self.search_queue.dataset.dataset.label
-            if not multilabel:
-                search_labels_count = [np.count_nonzero(search_labels == i) for i in range(n_class)] #formulticlass
-            else:
-                search_labels_count = np.sum(search_labels,axis=0)
-            sim_type = 'softmax'
-            if multilabel:
-                sim_type = 'focal'
-            self.sim_criterion = ClassBalLoss(search_labels_count,len(search_labels_count),loss_type=sim_type).cuda()
+
+            self.sim_criterion = make_class_balance_count(train_labels,search_labels,multilabel,n_class)
         elif args.policy_loss=='classdiff': #bug!: can not with loss_mix
             self.class_difficulty = np.ones(n_class)
             gamma = None
@@ -481,7 +479,7 @@ def main():
     #logging.info('gpu device = %d' % args.gpu)
     logging.info("args = %s", args)
     #wandb
-    experiment_name = f'{Aug_type}{description}lamda{args.lambda_aug}_search{args.augselect}_{args.dataset}{args.labelgroup}_{args.model_name}'
+    experiment_name = f'{Aug_type}{description}lamda{args.lambda_aug}_search{args.augselect}_{args.dataset}{args.labelgroup}_{args.model_name}_{args.balance_loss}'
     '''run_log = wandb.init(config=args, 
                   project='AdaAug',
                   group=experiment_name,

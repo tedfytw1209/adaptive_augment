@@ -20,6 +20,8 @@ import sys
 import torch.nn as nn
 from scipy.special import kl_div
 from scipy.stats import wasserstein_distance
+from sklearn.utils.class_weight import compute_class_weight,\
+    compute_sample_weight
 
 def sigmoid(x):
     return 1/(1 + np.exp(-x))
@@ -104,7 +106,25 @@ def focal_loss(labels, logits, alpha, gamma):
     focal_loss /= torch.sum(labels)
     return focal_loss
 
+def make_loss(multilabel):
+    if not multilabel:
+        return nn.CrossEntropyLoss()
+    else:
+        return nn.BCEWithLogitsLoss(reduction='mean')
 
+def make_class_balance_count(train_labels,search_labels,multilabel,n_class):
+    if not multilabel:
+        train_labels_count = np.array([np.count_nonzero(train_labels == i) for i in range(n_class)]) #formulticlass
+        search_labels_count = np.array([np.count_nonzero(search_labels == i) for i in range(n_class)]) #formulticlass
+    else:
+        train_labels_count = np.sum(train_labels,axis=0)
+        search_labels_count = np.sum(search_labels,axis=0)
+    tot_labels_count = train_labels_count + search_labels_count
+    sim_type = 'softmax'
+    if multilabel:
+        sim_type = 'focal'
+    print(tot_labels_count)
+    return ClassBalLoss(tot_labels_count,len(tot_labels_count),loss_type=sim_type).cuda()
 
 def CB_loss(labels, logits, samples_per_cls, no_of_classes, loss_type, beta, gamma):
     """Compute the Class Balanced Loss between `logits` and the ground truth `labels`.
@@ -326,6 +346,32 @@ class ClassDistLoss(torch.nn.Module):
             loss_func = confidence_loss
         classdist_loss = loss_func(logits,targets,self.class_pairs,self.class_output_mat) * self.lamda
         return classdist_loss
+
+#train class weight loss
+def compute_class_weights_dict(train_y, n_class): #!!!need change
+    class_weights_dict = None
+    smooth = np.arange(n_class)
+    train_y = np.concatenate([train_y,smooth],axis=0)
+    class_weights = compute_class_weight(
+        'balanced',
+        classes=np.unique(train_y),
+        y=train_y
+    )
+    class_weights_dict = {i: w for i, w in enumerate(class_weights)}
+    return class_weights_dict
+
+def make_class_weights(train_y, n_class, search_y=np.array([])):
+    if len(search_y)>0:
+        tot_y = np.concatenate([train_y,search_y],axis=0)
+    else:
+        tot_y = train_y
+    class_dict = compute_class_weights_dict(tot_y,n_class)
+    train_sample_w = compute_sample_weight(class_dict,train_y)
+    if len(search_y)>0:
+        search_sample_w = compute_sample_weight(class_dict,search_y)
+        return train_sample_w,search_sample_w
+    else:
+        return train_sample_w
 
 if __name__ == '__main__':
     no_of_classes = 5

@@ -406,10 +406,10 @@ class AdaAug_TS(AdaAug):
             channel_num = img.shape[-1]
             for i in  range(channel_num):
                 ax1.plot(t, img[:,i])
-            if slc:
+            if torch.is_tensor(slc):
                 ax2.plot(t,slc[idx])
             if title:
-                fig.title(f'{title}_{e_lb}')
+                plt.title(f'{title}_{e_lb}')
             plt.savefig(f'{self.save_dir}/img{idx}_{title}_{e_lb}.png')
     
     def update_alpha(self,class_acc):

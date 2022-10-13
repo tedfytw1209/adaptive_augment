@@ -310,15 +310,20 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         step_dic={'epoch':Curr_epoch}
         diff_dic = {'difficult_aug':self.diff_augment,'reweight':self.diff_reweight,'lambda_aug':args.lambda_aug, 'class_adaptive':args.class_adapt
                 ,'visualize':args.visualize}
-        if Curr_epoch>self.config['epochs']-1:
+        if Curr_epoch>self.config['epochs']:
             all_epochs = self.config['epochs']-1
             print(f'Trained epochs {Curr_epoch} Iteration: {self._iteration} already reach {all_epochs}, Skip step')
             call_back_dic = {'train_acc': 0, 'valid_acc': 0, 'test_acc': 0}
             return call_back_dic
-        # training
+        elif Curr_epoch==self.config['epochs']:
+            print('Evaluating Train/Valid/Test dataset')
+            training = False
+        else:
+            training = True
+        # training or evaluate training data
         train_acc, train_obj, train_dic, train_table = train(args,
-            self.train_queue, self.task_model, self.criterion, self.optimizer, self.scheduler, Curr_epoch, args.grad_clip, self.adaaug, 
-                multilabel=self.multilabel,n_class=self.n_class,map_select=self.mapselect,**diff_dic)
+                self.train_queue, self.task_model, self.criterion, self.optimizer, self.scheduler, Curr_epoch, args.grad_clip, self.adaaug, 
+                multilabel=self.multilabel,n_class=self.n_class,map_select=self.mapselect,training=training,**diff_dic)
         if self.noaug_add:
             class_acc = train_acc / 100.0
             if self.class_noaug:

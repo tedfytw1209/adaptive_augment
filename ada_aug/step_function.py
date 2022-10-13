@@ -21,7 +21,7 @@ import wandb
 
 
 def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_clip, adaaug, multilabel=False,n_class=10,
-        difficult_aug=False,reweight=True,lambda_aug = 1.0,class_adaptive=False,map_select=False,visualize=False):
+        difficult_aug=False,reweight=True,lambda_aug = 1.0,class_adaptive=False,map_select=False,visualize=False,training=True):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
     top5 = utils.AvgrageMeter()
@@ -72,7 +72,8 @@ def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_
         loss = ori_loss + aug_loss
         loss.backward()
         nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
-        optimizer.step()
+        if training:
+            optimizer.step()
         scheduler.step()
         torch.cuda.empty_cache()
         n = input.size(0)

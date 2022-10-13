@@ -470,7 +470,8 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                         loss_policy = (w_aug * loss_prepolicy).mean()
                     else:
                         loss_policy = loss_prepolicy.mean()
-                    
+                    #!!!10/13 bug fix!!!
+                    loss_policy = loss_policy / search_round
                     loss_policy.backward()
                     #h_optimizer.step() wait till validation set
                     difficult_loss += loss_policy.detach().item()
@@ -534,6 +535,8 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                     if torch.is_tensor(e_loss):
                         loss += e_loss
                         ex_losses[str(e_criterion.__class__.__name__)] += e_loss.detach().item()
+                #!!!10/13 bug fix!!!
+                loss = loss / search_round
                 loss.backward()
                 adaptive_loss += loss.detach().item()
                 search_total += 1

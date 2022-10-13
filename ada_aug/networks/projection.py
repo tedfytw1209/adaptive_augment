@@ -50,7 +50,8 @@ class Projection(nn.Module):
         return self.projection(agg_x)
 
 class Projection_TSeries(nn.Module):
-    def __init__(self, in_features, n_layers, n_hidden=128,label_num=0,label_embed=0, augselect='', proj_addition=0, feature_mask=""):
+    def __init__(self, in_features, n_layers, n_hidden=128,label_num=0,label_embed=0, augselect='', proj_addition=0, 
+        feature_mask="", input_act=False):
         super(Projection_TSeries, self).__init__()
         self.ops_names = TS_OPS_NAMES.copy()
         if 'tsadd' in augselect:
@@ -71,6 +72,8 @@ class Projection_TSeries(nn.Module):
             n_label = 0
         self.n_layers = n_layers
         layers = []
+        self.input_act = input_act
+        self.feature_mask = feature_mask
         if feature_mask=='dropout':
             layers += [nn.Dropout(p=0.5)]
         elif feature_mask=='select':
@@ -93,4 +96,6 @@ class Projection_TSeries(nn.Module):
             agg_x = torch.cat([x,y_tmp], dim=1) #feature dim
         else:
             agg_x = torch.cat([x,y], dim=1) #feature dim
+        if self.input_act or self.feature_mask:
+            agg_x = nn.functional.relu(agg_x)
         return self.projection(agg_x)

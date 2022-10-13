@@ -410,8 +410,6 @@ def main():
     else:
         data_add = ''
     Mode = 'train'
-    if args.evaluate_path:
-        Mode = 'Eval'
     experiment_name = f'{Aug_type}{args.k_ops}{description}_{Mode}{args.augselect}_{args.dataset}{args.labelgroup}{data_add}_{args.model_name}_{h_model_dir}'
     '''run_log = wandb.init(config=args, 
                   project='AdaAug',

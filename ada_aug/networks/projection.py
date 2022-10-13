@@ -63,7 +63,7 @@ class Projection_TSeries(nn.Module):
         proj_out = 2*self.ops_len + proj_addition
         self.label_embed = None
         if label_num>0 and label_embed>0:
-            self.label_embed = nn.Sequential(nn.Linear(label_num, label_embed), nn.ReLU()) #10/10 change
+            self.label_embed = nn.Linear(label_num, label_embed) #10/10 change
             n_label = label_embed
         elif label_num>0:
             n_label = label_num

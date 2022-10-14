@@ -617,11 +617,11 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     for k in sorted(ex_losses):
         out_dic[k] = ex_losses[k] / search_total
     if epoch>= warmup_epoch:
-        out_dic['adaptive_loss'] = adaptive_loss * search_round / search_total
+        out_dic['adaptive_loss'] = adaptive_loss * search_round / (search_total*4)
         out_dic['aug_sear_loss'] = aug_search_loss / search_total
         out_dic['ori_sear_loss'] = ori_search_loss / search_total
         if difficult_aug:
-            out_dic['difficult_loss'] = difficult_loss * search_round / search_total
+            out_dic['difficult_loss'] = difficult_loss * search_round / (search_total*4)
             out_dic['reweight_sum'] = re_weights_sum / search_total
             out_dic['aug_diff_loss'] = aug_diff_loss / search_total
             out_dic['ori_diff_loss'] = ori_diff_loss / search_total

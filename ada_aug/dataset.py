@@ -465,7 +465,7 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
     else:
         trainloader = torch.utils.data.DataLoader(
             train_data, batch_size=batch, shuffle=False,
-            sampler=train_sampler, drop_last=False,
+            sampler=train_sampler, drop_last=True,
             pin_memory=True, num_workers=num_workers)
 
     validloader = torch.utils.data.DataLoader(

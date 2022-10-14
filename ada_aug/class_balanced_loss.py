@@ -106,11 +106,11 @@ def focal_loss(labels, logits, alpha, gamma):
     focal_loss /= torch.sum(labels)
     return focal_loss
 
-def make_loss(multilabel):
+def make_loss(multilabel,**kwargs):
     if not multilabel:
-        return nn.CrossEntropyLoss()
+        return nn.CrossEntropyLoss(**kwargs)
     else:
-        return nn.BCEWithLogitsLoss(reduction='mean')
+        return nn.BCEWithLogitsLoss(reduction='mean',**kwargs)
 
 def make_class_balance_count(train_labels,search_labels,multilabel,n_class):
     if not multilabel:
@@ -360,7 +360,7 @@ def compute_class_weights_dict(train_y, n_class): #!!!need change
     class_weights_dict = {i: w for i, w in enumerate(class_weights)}
     return class_weights_dict
 
-def make_class_weights(train_y, n_class, search_y=np.array([])):
+def make_class_weights_samples(train_y, n_class, search_y=np.array([])):
     if len(search_y)>0:
         tot_y = np.concatenate([train_y,search_y],axis=0)
     else:
@@ -372,6 +372,33 @@ def make_class_weights(train_y, n_class, search_y=np.array([])):
         return train_sample_w,search_sample_w
     else:
         return train_sample_w
+
+def make_class_weights(train_y, n_class, search_y=np.array([])):
+    if len(search_y)>0:
+        tot_y = np.concatenate([train_y,search_y],axis=0)
+    else:
+        tot_y = train_y
+    class_dict = compute_class_weights_dict(tot_y,n_class)
+    print('Class dict:')
+    print(class_dict)
+    return np.array([class_dict[i] for i in range(n_class)])
+
+def make_class_weights_maxrel(train_y, n_class, search_y=np.array([]),multilabel=False):
+    if len(search_y)>0:
+        tot_y = np.concatenate([train_y,search_y],axis=0)
+    else:
+        tot_y = train_y
+    if not multilabel:
+        labels_count = np.array([np.count_nonzero(tot_y == i) for i in range(n_class)]) #formulticlass
+    else:
+        labels_count = np.sum(tot_y,axis=0)
+    print('Class labels count:')
+    print(labels_count)
+    max_nclass = np.max(labels_count)
+    class_weight = np.array([max_nclass / (count+1) for count in labels_count]) #with smooth
+    print('Class weights:')
+    print(class_weight)
+    return class_weight
 
 if __name__ == '__main__':
     no_of_classes = 5

@@ -23,7 +23,8 @@ from dataset import get_ts_dataloaders, get_num_class, get_label_name, get_datas
 from operation_tseries import TS_OPS_NAMES,ECG_OPS_NAMES,TS_ADD_NAMES,MAG_TEST_NAMES,NOMAG_TEST_NAMES
 from step_function import train,infer,search_train,search_infer
 from non_saturating_loss import NonSaturatingLoss
-from class_balanced_loss import ClassBalLoss,ClassDiffLoss,ClassDistLoss,make_class_balance_count,make_class_weights,make_loss
+from class_balanced_loss import ClassBalLoss,ClassDiffLoss,ClassDistLoss,make_class_balance_count,make_class_weights,make_loss,make_class_weights_maxrel \
+    ,make_class_weights_samples
 import wandb
 from utils import plot_conf_wandb
 
@@ -78,8 +79,10 @@ parser.add_argument('--n_proj_hidden', type=int, default=128, help="number of hi
 parser.add_argument('--mapselect', action='store_true', default=False, help='use map select for multilabel')
 parser.add_argument('--valselect', action='store_true', default=False, help='use valid select')
 parser.add_argument('--augselect', type=str, default='', help="augmentation selection")
+parser.add_argument('--train_sampler', type=str, default='', help='for train sampler',
+        choices=['weight','wmaxrel',''])
 parser.add_argument('--search_sampler', type=str, default='', help='for search sampler',
-        choices=['weight',''])
+        choices=['weight','wmaxrel',''])
 parser.add_argument('--diff_aug', action='store_true', default=False, help='use valid select')
 parser.add_argument('--same_train', action='store_true', default=False, help='use valid select')
 parser.add_argument('--mix_type', type=str, default='embed', help='add regular for noaugment ',
@@ -206,7 +209,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             split=args.train_portion, split_idx=0, target_lb=-1,
             search=True, search_divider=sdiv,search_size=args.search_size,
             test_size=args.test_size,multilabel=args.multilabel,default_split=args.default_split,
-            fold_assign=train_val_test_folds,labelgroup=args.labelgroup,bal_ssampler=args.search_sampler)
+            fold_assign=train_val_test_folds,labelgroup=args.labelgroup,bal_ssampler=args.search_sampler,bal_trsampler=args.train_sampler)
         #  model settings
         self.gf_model = get_model_tseries(model_name=args.model_name, num_class=n_class,n_channel=n_channel,
             use_cuda=True, data_parallel=False,dataset=args.dataset)
@@ -252,13 +255,9 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             weight_decay=args.proj_weight_decay)
         train_labels = self.train_queue.dataset.dataset.label
         search_labels = self.search_queue.dataset.dataset.label
-        if args.balance_loss=='classbal':
-            self.criterion = make_class_balance_count(train_labels,search_labels,multilabel,n_class)
-        elif args.balance_loss=='classweight':
-            smaple_weights = make_class_weights(train_labels,n_class,search_labels)
-
-        else:
-            self.criterion = make_loss(multilabel=multilabel)
+        default_criterion = make_loss(multilabel=multilabel)
+        self.criterion = self.choose_criterion(train_labels,search_labels,multilabel,n_class,
+            loss_type=args.balance_loss,default=default_criterion)
         self.criterion = self.criterion.cuda()
         self.adv_criterion = None
         if args.loss_type=='adv':
@@ -269,20 +268,9 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             else:
                 self.adv_criterion = nn.BCEWithLogitsLoss(reduction='none')
         self.sim_criterion = None
-        if args.policy_loss=='classbal': #bug!: can not with loss_mix
-
-            self.sim_criterion = make_class_balance_count(train_labels,search_labels,multilabel,n_class)
-        elif args.policy_loss=='classdiff': #bug!: can not with loss_mix
-            self.class_difficulty = np.ones(n_class)
-            gamma = None
-            if multilabel:
-                gamma = 2.0
-            self.sim_criterion = ClassDiffLoss(class_difficulty=self.class_difficulty,focal_gamma=gamma).cuda() #default now
-        elif args.mix_type=='loss':
-            if not multilabel:
-                self.sim_criterion = nn.CrossEntropyLoss(reduction='none')
-            else:
-                self.sim_criterion = nn.BCEWithLogitsLoss(reduction='none')
+        #bug!: can not with loss_mix
+        self.sim_criterion = self.choose_criterion(train_labels,search_labels,multilabel,n_class,
+            loss_type=args.policy_loss,mix_type=args.mix_type).cuda()
         self.extra_losses = []
         #class distance
         self.class_criterion = None
@@ -469,6 +457,32 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
     def reset_config(self, new_config):
         self.config = new_config
         return True
+    
+    def choose_criterion(self,train_labels,search_labels,multilabel,n_class,loss_type='',mix_type='',default=None):
+        if loss_type=='classbal': 
+            out_criterion = make_class_balance_count(train_labels,search_labels,multilabel,n_class)
+        elif loss_type=='classdiff':
+            self.class_difficulty = np.ones(n_class)
+            gamma = None
+            if multilabel:
+                gamma = 2.0
+            out_criterion = ClassDiffLoss(class_difficulty=self.class_difficulty,focal_gamma=gamma).cuda() #default now
+        elif loss_type=='classweight':
+            class_weights = make_class_weights(train_labels,n_class,search_labels)
+            class_weights = torch.from_numpy(class_weights).float()
+            out_criterion = make_loss(multilabel=multilabel,weight=class_weights)
+        elif loss_type=='classwmaxrel':
+            class_weights = make_class_weights_maxrel(train_labels,n_class,search_labels)
+            class_weights = torch.from_numpy(class_weights).float()
+            out_criterion = make_loss(multilabel=multilabel,weight=class_weights)
+        elif mix_type=='loss':
+            if not multilabel:
+                out_criterion = nn.CrossEntropyLoss(reduction='none')
+            else:
+                out_criterion = nn.BCEWithLogitsLoss(reduction='none')
+        else:
+            out_criterion = default
+        return out_criterion
 
 def main():
     if not torch.cuda.is_available():

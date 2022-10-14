@@ -14,6 +14,7 @@ import torchvision.transforms as transforms
 from torch.autograd import Variable
 from sklearn.metrics import average_precision_score,roc_auc_score
 import wandb
+from sklearn.utils.class_weight import compute_sample_weight
 
 sns.set()
 def plot_conf_wandb(confusion,title,class_names=None):
@@ -76,20 +77,38 @@ def mAP_cw(targs, preds):
     return 100 * ap
 
 def make_weights_for_balanced_classes(labels, nclasses):                        
-    count = [0] * nclasses                                                      
-    for item in labels:                                                         
-        count[item] += 1                                                     
+    #np ways
+    count = np.array([np.count_nonzero(labels == i) for i in range(nclasses)])
     weight_per_class = [0.] * nclasses                                      
-    N = float(sum(count))                                                   
+    N = float(np.sum(count))
     for i in range(nclasses):
         if count[i] > 0:
             weight_per_class[i] = N/float(count[i])
         else:
             weight_per_class[i] = 1/nclasses
-    weight = [0] * len(labels)                                              
-    for idx, val in enumerate(labels):                                          
-        weight[idx] = weight_per_class[val]                                  
-    return weight
+    class_weights_dict = {i: w for i, w in enumerate(weight_per_class)}
+    '''weight = [0] * len(labels)
+    for idx, val in enumerate(labels):
+        weight[idx] = weight_per_class[val]'''
+    sample_w = compute_sample_weight(class_weights_dict,labels)
+    return sample_w
+
+def make_weights_for_balanced_classes_maxrel(labels, nclasses):                        
+    #np ways
+    count = np.array([np.count_nonzero(labels == i) for i in range(nclasses)])
+    weight_per_class = [0.] * nclasses                                      
+    N = np.max(count)
+    for i in range(nclasses):
+        if count[i] > 0:
+            weight_per_class[i] = N/float(count[i])
+        else:
+            weight_per_class[i] = 1/nclasses
+    class_weights_dict = {i: w for i, w in enumerate(weight_per_class)}
+    '''weight = [0] * len(labels)
+    for idx, val in enumerate(labels):
+        weight[idx] = weight_per_class[val]'''
+    sample_w = compute_sample_weight(class_weights_dict,labels)
+    return sample_w
 
 def save_ckpt(model, optimizer, scheduler, epoch, model_path):
     torch.save({'model':model.state_dict(), 

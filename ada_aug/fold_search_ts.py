@@ -270,7 +270,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         self.sim_criterion = None
         #bug!: can not with loss_mix
         self.sim_criterion = self.choose_criterion(train_labels,search_labels,multilabel,n_class,
-            loss_type=args.policy_loss,mix_type=args.mix_type).cuda()
+            loss_type=args.policy_loss,mix_type=args.mix_type)
         self.extra_losses = []
         #class distance
         self.class_criterion = None
@@ -470,16 +470,16 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         elif loss_type=='classweight':
             class_weights = make_class_weights(train_labels,n_class,search_labels)
             class_weights = torch.from_numpy(class_weights).float()
-            out_criterion = make_loss(multilabel=multilabel,weight=class_weights)
+            out_criterion = make_loss(multilabel=multilabel,weight=class_weights).cuda()
         elif loss_type=='classwmaxrel':
             class_weights = make_class_weights_maxrel(train_labels,n_class,search_labels)
             class_weights = torch.from_numpy(class_weights).float()
-            out_criterion = make_loss(multilabel=multilabel,weight=class_weights)
+            out_criterion = make_loss(multilabel=multilabel,weight=class_weights).cuda()
         elif mix_type=='loss':
             if not multilabel:
-                out_criterion = nn.CrossEntropyLoss(reduction='none')
+                out_criterion = nn.CrossEntropyLoss(reduction='none').cuda()
             else:
-                out_criterion = nn.BCEWithLogitsLoss(reduction='none')
+                out_criterion = nn.BCEWithLogitsLoss(reduction='none').cuda()
         else:
             out_criterion = default
         return out_criterion

@@ -119,11 +119,11 @@ def make_class_balance_count(train_labels,search_labels=np.array([]),multilabel=
     else:
         train_labels_count = np.sum(train_labels,axis=0)
         search_labels_count = np.sum(search_labels,axis=0)
-    tot_labels_count = train_labels_count + search_labels_count
+    tot_labels_count = train_labels_count + search_labels_count + 1 #smooth
     sim_type = 'softmax'
     if multilabel:
         sim_type = 'focal'
-    print(tot_labels_count)
+    print('Labels count: ',tot_labels_count)
     return ClassBalLoss(tot_labels_count,len(tot_labels_count),loss_type=sim_type).cuda()
 
 def CB_loss(labels, logits, samples_per_cls, no_of_classes, loss_type, beta, gamma):
@@ -156,8 +156,6 @@ def CB_loss(labels, logits, samples_per_cls, no_of_classes, loss_type, beta, gam
     weights = weights.sum(1)
     weights = weights.unsqueeze(1)
     weights = weights.repeat(1,no_of_classes)
-    print('CB loss weights:')
-    print(weights)
 
     if loss_type == "focal":
         cb_loss = focal_loss(labels_one_hot, logits, weights, gamma)
@@ -379,7 +377,7 @@ def make_class_weights(train_y, n_class, search_y=np.array([])):
     else:
         tot_y = train_y
     class_dict = compute_class_weights_dict(tot_y,n_class)
-    print('Class dict:')
+    print('Class weights:')
     print(class_dict)
     return np.array([class_dict[i] for i in range(n_class)])
 

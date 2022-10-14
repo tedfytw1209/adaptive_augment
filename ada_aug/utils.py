@@ -76,7 +76,7 @@ def mAP_cw(targs, preds):
             ap[k] = average_precision_score(targets,scores)
     return 100 * ap
 
-def make_weights_for_balanced_classes(labels, nclasses):                        
+def make_weights_for_balanced_classes(labels, nclasses,alpha=1.0):                        
     #np ways
     count = np.array([np.count_nonzero(labels == i) for i in range(nclasses)]) + 1 #smooth
     weight_per_class = [0.] * nclasses                                      
@@ -86,6 +86,8 @@ def make_weights_for_balanced_classes(labels, nclasses):
             weight_per_class[i] = N/float(count[i])
         else:
             weight_per_class[i] = N/nclasses
+    weight_per_class = np.array(weight_per_class)
+    weight_per_class = np.power(weight_per_class,alpha)
     class_weights_dict = {i: w for i, w in enumerate(weight_per_class)}
     print('train class weight: ',class_weights_dict) #!
     '''weight = [0] * len(labels)
@@ -94,7 +96,7 @@ def make_weights_for_balanced_classes(labels, nclasses):
     sample_w = compute_sample_weight(class_weights_dict,labels)
     return sample_w
 
-def make_weights_for_balanced_classes_maxrel(labels, nclasses):                        
+def make_weights_for_balanced_classes_maxrel(labels, nclasses,alpha=1.0):                        
     #np ways
     count = np.array([np.count_nonzero(labels == i) for i in range(nclasses)]) + 1 #smooth
     weight_per_class = [0.] * nclasses                                      
@@ -104,6 +106,8 @@ def make_weights_for_balanced_classes_maxrel(labels, nclasses):
             weight_per_class[i] = N/float(count[i])
         else:
             weight_per_class[i] = 1.0
+    weight_per_class = np.array(weight_per_class)
+    weight_per_class = np.power(weight_per_class,alpha)
     class_weights_dict = {i: w for i, w in enumerate(weight_per_class)}
     print('train class weight: ',class_weights_dict) #!
     '''weight = [0] * len(labels)

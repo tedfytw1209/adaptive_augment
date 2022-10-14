@@ -79,6 +79,7 @@ parser.add_argument('--n_proj_hidden', type=int, default=128, help="number of hi
 parser.add_argument('--mapselect', action='store_true', default=False, help='use map select for multilabel')
 parser.add_argument('--valselect', action='store_true', default=False, help='use valid select')
 parser.add_argument('--augselect', type=str, default='', help="augmentation selection")
+parser.add_argument('--alpha', type=float, default=1.0, help="alpha adpat")
 parser.add_argument('--train_sampler', type=str, default='', help='for train sampler',
         choices=['weight','wmaxrel',''])
 parser.add_argument('--search_sampler', type=str, default='', help='for search sampler',
@@ -209,7 +210,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             split=args.train_portion, split_idx=0, target_lb=-1,
             search=True, search_divider=sdiv,search_size=args.search_size,
             test_size=args.test_size,multilabel=args.multilabel,default_split=args.default_split,
-            fold_assign=train_val_test_folds,labelgroup=args.labelgroup,bal_ssampler=args.search_sampler,bal_trsampler=args.train_sampler)
+            fold_assign=train_val_test_folds,labelgroup=args.labelgroup,bal_ssampler=args.search_sampler,bal_trsampler=args.train_sampler,
+            sampler_alpha=args.alpha)
         #  model settings
         self.gf_model = get_model_tseries(model_name=args.model_name, num_class=n_class,n_channel=n_channel,
             use_cuda=True, data_parallel=False,dataset=args.dataset)

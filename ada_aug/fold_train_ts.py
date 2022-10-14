@@ -182,7 +182,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             args.dataroot, args.cutout, args.cutout_length,
             split=args.train_portion, split_idx=0, target_lb=-1,search_size=args.search_size, #!use search size to reduce training dataset
             search=False,test_size=args.test_size,multilabel=args.multilabel,default_split=args.default_split,
-            fold_assign=train_val_test_folds,labelgroup=args.labelgroup,bal_trsampler=args.train_sampler)
+            fold_assign=train_val_test_folds,labelgroup=args.labelgroup,bal_trsampler=args.train_sampler,
+            sampler_alpha=args.alpha)
         #  task model settings
         self.task_model = get_model_tseries(model_name=args.model_name,
                             num_class=n_class,n_channel=n_channel,

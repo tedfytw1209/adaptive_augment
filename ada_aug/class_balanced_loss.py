@@ -112,7 +112,7 @@ def make_loss(multilabel,**kwargs):
     else:
         return nn.BCEWithLogitsLoss(reduction='mean',**kwargs)
 
-def make_class_balance_count(train_labels,search_labels,multilabel,n_class):
+def make_class_balance_count(train_labels,search_labels=np.array([]),multilabel=False,n_class=5):
     if not multilabel:
         train_labels_count = np.array([np.count_nonzero(train_labels == i) for i in range(n_class)]) #formulticlass
         search_labels_count = np.array([np.count_nonzero(search_labels == i) for i in range(n_class)]) #formulticlass

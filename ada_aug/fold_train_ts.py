@@ -23,6 +23,8 @@ from operation_tseries import TS_OPS_NAMES,ECG_OPS_NAMES,TS_ADD_NAMES,MAG_TEST_N
 from step_function import train,infer,search_train,search_infer
 from warmup_scheduler import GradualWarmupScheduler
 from config import get_warmup_config
+from class_balanced_loss import ClassBalLoss,ClassDiffLoss,ClassDistLoss,make_class_balance_count,make_class_weights,make_loss,make_class_weights_maxrel \
+    ,make_class_weights_samples
 import wandb
 from utils import plot_conf_wandb
 import ray
@@ -82,6 +84,8 @@ parser.add_argument('--mapselect', action='store_true', default=False, help='use
 parser.add_argument('--valselect', action='store_true', default=False, help='use valid select')
 parser.add_argument('--notwarmup', action='store_true', default=False, help='use valid select')
 parser.add_argument('--augselect', type=str, default='', help="augmentation selection")
+parser.add_argument('--train_sampler', type=str, default='', help='for train sampler',
+        choices=['weight','wmaxrel',''])
 parser.add_argument('--diff_aug', action='store_true', default=False, help='use valid select')
 parser.add_argument('--not_reweight', action='store_true', default=False, help='use valid select')
 parser.add_argument('--lambda_aug', type=float, default=1.0, help="augment sample weight")
@@ -89,6 +93,7 @@ parser.add_argument('--class_adapt', action='store_true', default=False, help='c
 parser.add_argument('--class_embed', action='store_true', default=False, help='class embed') #tmp use
 parser.add_argument('--noaug_reg', type=str, default='', help='add regular for noaugment ',
         choices=['cadd','add',''])
+parser.add_argument('--balance_loss', type=str, default='', help="loss type for model and policy training to acheive class balance")
 parser.add_argument('--keep_aug', action='store_true', default=False, help='info keep augment')
 parser.add_argument('--keep_mode', type=str, default='auto', help='info keep mode',choices=['auto','adapt','b','p','t','rand'])
 parser.add_argument('--adapt_target', type=str, default='len', help='info keep mode',choices=['len','seg','way'])
@@ -123,7 +128,7 @@ if args.keep_aug:
     keep_seg_str = ''.join([str(i) for i in args.keep_seg])
     description+=f'keep{args.keep_mode}{keep_seg_str}'
 now_str = time.strftime("%Y%m%d-%H%M%S")
-args.save = '{}-{}-{}{}'.format(now_str, args.save,Aug_type,description)
+args.save = '{}-{}-{}{}'.format(now_str, args.save,Aug_type,description+args.augselect+args.balance_loss)
 if debug:
     args.save = os.path.join('debug', args.save)
 else:
@@ -177,7 +182,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             args.dataroot, args.cutout, args.cutout_length,
             split=args.train_portion, split_idx=0, target_lb=-1,search_size=args.search_size, #!use search size to reduce training dataset
             search=False,test_size=args.test_size,multilabel=args.multilabel,default_split=args.default_split,
-            fold_assign=train_val_test_folds,labelgroup=args.labelgroup)
+            fold_assign=train_val_test_folds,labelgroup=args.labelgroup,bal_trsampler=args.train_sampler)
         #  task model settings
         self.task_model = get_model_tseries(model_name=args.model_name,
                             num_class=n_class,n_channel=n_channel,
@@ -193,10 +198,10 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 multiplier=m,
                 total_epoch=e,
                 after_scheduler=self.scheduler)
-        if not multilabel:
-            self.criterion = nn.CrossEntropyLoss()
-        else:
-            self.criterion = nn.BCEWithLogitsLoss(reduce='mean')
+        default_criterion = make_loss(multilabel=multilabel)
+        train_labels = self.train_queue.dataset.dataset.label
+        self.criterion = self.choose_criterion(train_labels,None,multilabel,n_class,
+            loss_type=args.balance_loss,default=default_criterion)
         self.criterion = self.criterion.cuda()
         #  restore setting
         if args.restore:
@@ -395,6 +400,32 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
     def reset_config(self, new_config):
         self.config = new_config
         return True
+    
+    def choose_criterion(self,train_labels,search_labels,multilabel,n_class,loss_type='',mix_type='',default=None):
+        if loss_type=='classbal': 
+            out_criterion = make_class_balance_count(train_labels,search_labels,multilabel,n_class)
+        elif loss_type=='classdiff':
+            self.class_difficulty = np.ones(n_class)
+            gamma = None
+            if multilabel:
+                gamma = 2.0
+            out_criterion = ClassDiffLoss(class_difficulty=self.class_difficulty,focal_gamma=gamma).cuda() #default now
+        elif loss_type=='classweight':
+            class_weights = make_class_weights(train_labels,n_class,search_labels)
+            class_weights = torch.from_numpy(class_weights).float()
+            out_criterion = make_loss(multilabel=multilabel,weight=class_weights)
+        elif loss_type=='classwmaxrel':
+            class_weights = make_class_weights_maxrel(train_labels,n_class,search_labels)
+            class_weights = torch.from_numpy(class_weights).float()
+            out_criterion = make_loss(multilabel=multilabel,weight=class_weights)
+        elif mix_type=='loss':
+            if not multilabel:
+                out_criterion = nn.CrossEntropyLoss(reduction='none')
+            else:
+                out_criterion = nn.BCEWithLogitsLoss(reduction='none')
+        else:
+            out_criterion = default
+        return out_criterion
 
 def main():
     if not torch.cuda.is_available():

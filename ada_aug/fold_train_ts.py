@@ -84,6 +84,7 @@ parser.add_argument('--mapselect', action='store_true', default=False, help='use
 parser.add_argument('--valselect', action='store_true', default=False, help='use valid select')
 parser.add_argument('--notwarmup', action='store_true', default=False, help='use valid select')
 parser.add_argument('--augselect', type=str, default='', help="augmentation selection")
+parser.add_argument('--alpha', type=float, default=1.0, help="alpha adpat")
 parser.add_argument('--train_sampler', type=str, default='', help='for train sampler',
         choices=['weight','wmaxrel',''])
 parser.add_argument('--diff_aug', action='store_true', default=False, help='use valid select')
@@ -414,16 +415,16 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         elif loss_type=='classweight':
             class_weights = make_class_weights(train_labels,n_class,search_labels)
             class_weights = torch.from_numpy(class_weights).float()
-            out_criterion = make_loss(multilabel=multilabel,weight=class_weights)
+            out_criterion = make_loss(multilabel=multilabel,weight=class_weights).cuda()
         elif loss_type=='classwmaxrel':
             class_weights = make_class_weights_maxrel(train_labels,n_class,search_labels)
             class_weights = torch.from_numpy(class_weights).float()
-            out_criterion = make_loss(multilabel=multilabel,weight=class_weights)
+            out_criterion = make_loss(multilabel=multilabel,weight=class_weights).cuda()
         elif mix_type=='loss':
             if not multilabel:
-                out_criterion = nn.CrossEntropyLoss(reduction='none')
+                out_criterion = nn.CrossEntropyLoss(reduction='none').cuda()
             else:
-                out_criterion = nn.BCEWithLogitsLoss(reduction='none')
+                out_criterion = nn.BCEWithLogitsLoss(reduction='none').cuda()
         else:
             out_criterion = default
         return out_criterion

@@ -19,6 +19,7 @@ from mne.channels import make_standard_montage
 import matplotlib.pyplot as plt
 from ecgdetectors import Detectors
 from scipy.interpolate import CubicSpline
+from operations_ecg import *
 
 #for model: (len, channel)
 #for this file (channel, len)!
@@ -698,6 +699,49 @@ INFO_TEST_NAMES =[
     'info_Window_Warp',
     'info_Window_Slicing',
 ]
+ECG_NOISE_NAMES = [
+    "identity",
+    "Amplifying",
+    "Baseline_wander",
+    "chest_leads_shuffle",
+    "dropout",
+    "random_time_mask",
+    "add_gaussian_noise",
+    "channel_dropout",
+    "Lead_reversal",
+    "Line_noise",
+    "Scaling",
+    "Time_shift",
+    "random_time_saturation",
+    "Band_pass",
+    "Gaussian_blur",
+    "High_pass",
+    "Low_pass",
+    "IIR_notch",
+    "Sigmoid_compress",
+]
+ECG_NOISE_LIST = [
+        (identity, 0, 1),  # 0
+        (Amplifying, 0, 0.5),  # 1
+        (Baseline_wander, 0, 6),  # 2
+        (chest_leads_shuffle, 0, 1),  # 3
+        (dropout, 0, 0.5),  # 4
+        (random_time_mask, 0, 10),  # 5 impl
+        (add_gaussian_noise, 0, 0.5),  # 6
+        (channel_dropout, 0, 1),  # 7
+        (Lead_reversal, 0, 1),  # 8
+        (Line_noise, 0, 1),  # 9
+        (Scaling, 0, 1),  # 10
+        (Time_shift, 0, 0.5),  # 10
+        (random_time_saturation, 0, 1),  # 11
+        (Band_pass, 0, 1),  # 12
+        (Gaussian_blur, 0, 1),  # 13
+        (High_pass, 0, 1),  # 14
+        (Low_pass, 0, 1),  # 15
+        (IIR_notch, 0, 1),  # 16
+        (Sigmoid_compress, 0, 1),  # 17
+        ]
+ECG_NOISE_DICT = {fn.__name__: (fn, v1, v2) for fn, v1, v2 in ECG_NOISE_LIST}
 
 AUGMENT_DICT = {fn.__name__: (fn, v1, v2) for fn, v1, v2 in TS_AUGMENT_LIST+ECG_AUGMENT_LIST+TS_ADD_LIST+TS_EXP_LIST+INFO_EXP_LIST}
 selopt = ['cut','paste']
@@ -722,11 +766,14 @@ SELECTIVE_DICT = {
     'RR_permutation':selopt[1], #!undefine
     'QRS_resample':selopt[1], #!undefine
 }
-def get_augment(name):
-    return AUGMENT_DICT[name]
+def get_augment(name,aug_dict=None):
+    if aug_dict==None:
+        return AUGMENT_DICT[name]
+    else:
+        return aug_dict[name]
 
-def apply_augment(img, name, level, rd_seed=None,sfreq=100,seq_len=None):
-    augment_fn, low, high = get_augment(name)
+def apply_augment(img, name, level, rd_seed=None,sfreq=100,seq_len=None,aug_dict=None):
+    augment_fn, low, high = get_augment(name,aug_dict=aug_dict)
     assert 0 <= level
     assert level <= 1
     #change tseries signal from (len,channel) to (batch,channel,len)
@@ -793,7 +840,7 @@ class RandAugment:
         return img.permute(0,2,1).detach().view(max_seq_len,channel) #back to (len,channel)
 
 class TransfromAugment:
-    def __init__(self, names,m ,p=0.5,n=1, rd_seed=None,sfreq=100):
+    def __init__(self, names,m ,p=0.5,n=1, rd_seed=None,sfreq=100,aug_dict=None):
         print(f'Using Fix transfroms {names}, m={m}, n={n}, p={p}')
         self.p = p
         if isinstance(m,list):
@@ -807,6 +854,7 @@ class TransfromAugment:
         self.names = names
         self.rng = check_random_state(rd_seed)
         self.sfreq = sfreq
+        self.aug_dict = aug_dict
     def __call__(self, img, seq_len=None, **_kwargs): #ignore other args
         #print(img.shape)
         max_seq_len , channel = img.shape #(channel, seq_len)
@@ -815,7 +863,7 @@ class TransfromAugment:
         img = img.permute(1,0).view(1,channel,max_seq_len) #(seq,ch)
         select_names = self.rng.choice(self.names, size=self.n)
         for name in select_names:
-            augment = get_augment(name)
+            augment = get_augment(name,aug_dict=self.aug_dict)
             use_op = self.rng.random() < self.p
             if use_op:
                 op, minval, maxval = augment
@@ -826,7 +874,7 @@ class TransfromAugment:
         return img.permute(0,2,1).detach().view(max_seq_len,channel) #back to (len,channel)
 
 class TransfromAugment_classwise:
-    def __init__(self, names,m ,p=0.5,n=1,num_class=None, rd_seed=None,sfreq=100,seq_len=None):
+    def __init__(self, names,m ,p=0.5,n=1,num_class=None, rd_seed=None,sfreq=100,seq_len=None,aug_dict=None):
         print(f'Using Class-wise Fix transfroms {names}, m={m}, n={n}, p={p}')
         self.p = p
         assert len(m)==len(names)
@@ -839,6 +887,7 @@ class TransfromAugment_classwise:
         self.rng = check_random_state(rd_seed)
         self.sfreq = sfreq
         self.seq_len = seq_len
+        self.aug_dict = aug_dict
     def __call__(self, img, label):
         #print(img.shape)
         seq_len , channel = img.shape
@@ -847,7 +896,7 @@ class TransfromAugment_classwise:
         trans_name, mag = self.m_dic[label]
         select_names = self.rng.choice(trans_name, size=self.n)
         for name in select_names:
-            augment = get_augment(name)
+            augment = get_augment(name,aug_dict=self.aug_dict)
             use_op = self.rng.random() < self.p
             if use_op:
                 op, minval, maxval = augment
@@ -859,7 +908,7 @@ class TransfromAugment_classwise:
 
 class InfoRAugment:
     def __init__(self, names,m ,p=0.5,n=1,mode='a',sfreq=100,
-        pw_len=0.2,qw_len=0.1,tw_len=0.4,rd_seed=None):
+        pw_len=0.2,qw_len=0.1,tw_len=0.4,rd_seed=None,aug_dict=None):
         print(f'Using Fix transfroms {names}, m={m}, n={n}, p={p}, mode={mode}')
         assert mode in ['a','p','qrs','t','n']
         self.detectors = Detectors(sfreq) #need input ecg: (seq_len)
@@ -889,6 +938,7 @@ class InfoRAugment:
         self.n = n
         self.names = names
         self.rng = check_random_state(rd_seed)
+        self.aug_dict = aug_dict
     def __call__(self, x):
         #print(img.shape)
         seq_len , channel = x.shape
@@ -921,7 +971,7 @@ class InfoRAugment:
             #augment
             select_names = self.rng.choice(self.names, size=self.n)
             for name in select_names:
-                augment = get_augment(name)
+                augment = get_augment(name,self.aug_dict)
                 use_op = self.rng.random() < self.p
                 if use_op:
                     op, minval, maxval = augment
@@ -1634,7 +1684,7 @@ if __name__ == '__main__':
     'chapman' : 10,
     }
     #dataset = PTBXL(dataset_path='../CWDA_research/CWDA/datasets/Datasets/ptbxl-dataset',mode='test',labelgroup='superdiagnostic',denoise=True)
-    dataset = PTBXL(dataset_path='../CWDA_research/CWDA/datasets/Datasets/ptbxl-dataset',mode='test',labelgroup='superdiagnostic')
+    dataset = PTBXL(dataset_path='../Dataset/ptbxl-dataset',mode='test',labelgroup='all',multilabel=False)
     print(dataset[0])
     print(dataset[0][0].shape)
     sample = dataset[100]
@@ -1644,12 +1694,12 @@ if __name__ == '__main__':
     print(t.shape)
     print(x.shape)
     x_tensor = torch.from_numpy(x).float()
-    test_ops = EXP_TEST_NAMES
+    test_ops = ECG_NOISE_NAMES
     #
     plot_line(t,x,title='identity')
     for name in test_ops:
-        for m in [0,0.1,0.5,0.98]:
-            trans_aug = TransfromAugment([name],m=m,n=1,p=0.5)
+        for m in [0.5]:
+            trans_aug = TransfromAugment([name],m=m,n=1,p=1,aug_dict=ECG_NOISE_DICT)
             x_aug = trans_aug(x_tensor).numpy()
             print(x_aug.shape)
             plot_line(t,x_aug,f'{name}_m:{m}')

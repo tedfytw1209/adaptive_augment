@@ -8,7 +8,8 @@ import torch.nn.functional as F
 from torchvision import transforms
 
 import matplotlib.pyplot as plt
-from operation_tseries import apply_augment,TS_ADD_NAMES,ECG_OPS_NAMES,KeepAugment,AdaKeepAugment
+from operation_tseries import apply_augment,TS_ADD_NAMES,ECG_OPS_NAMES,KeepAugment,AdaKeepAugment, \
+    ECG_NOISE_NAMES,ECG_NOISE_DICT
 import operation
 from networks import get_model
 from utils import PolicyHistory,PolicyHistoryKeep
@@ -207,10 +208,14 @@ class AdaAug_TS(AdaAug):
                     noaug_add=False,transfrom_dic={}):
         super(AdaAug_TS, self).__init__(after_transforms, n_class, gf_model, h_model, save_dir, config)
         #other already define in AdaAug
+        self.aug_dict = None
         self.ops_names = TS_OPS_NAMES.copy()
         if 'tsadd' in augselect:
             self.ops_names = self.ops_names + TS_ADD_NAMES.copy()
-        if 'ecg' in augselect:
+        if 'ecg_noise' in augselect:
+            self.ops_names = ECG_NOISE_NAMES.copy()
+            self.aug_dict = ECG_NOISE_DICT
+        elif 'ecg' in augselect:
             self.ops_names = self.ops_names + ECG_OPS_NAMES.copy()
         print('AdaAug Using ',self.ops_names)
         self.n_ops = len(self.ops_names)
@@ -268,7 +273,7 @@ class AdaAug_TS(AdaAug):
             self.history.add(k, mean_lambda, mean_p, std_lambda, std_p)
 
     def get_aug_valid_img(self, image, magnitudes,i=None,k=None,ops_name=None, seq_len=None):
-        trans_image = apply_augment(image, ops_name, magnitudes[i][k].detach().cpu().numpy(),seq_len=seq_len,**self.transfrom_dic)
+        trans_image = apply_augment(image, ops_name, magnitudes[i][k].detach().cpu().numpy(),seq_len=seq_len,aug_dict=self.aug_dict,**self.transfrom_dic)
         trans_image = self.after_transforms(trans_image)
         trans_image = stop_gradient(trans_image.cuda(), magnitudes[i][k])
         return trans_image
@@ -325,7 +330,7 @@ class AdaAug_TS(AdaAug):
             idx_list,magnitude_i = idx_matrix,magnitudes
         for idx in idx_list:
             m_pi = perturb_param(magnitude_i[idx], self.delta).detach().cpu().numpy()
-            image = apply_augment(image, self.ops_names[idx], m_pi,seq_len=seq_len,**self.transfrom_dic)
+            image = apply_augment(image, self.ops_names[idx], m_pi,seq_len=seq_len,aug_dict=self.aug_dict,**self.transfrom_dic)
         return self.after_transforms(image)
     def get_training_aug_images(self, images, magnitudes, weights, seq_len=None):
         # visualization
@@ -421,11 +426,16 @@ class AdaAugkeep_TS(AdaAug):
                     noaug_add=False,transfrom_dic={}):
         super(AdaAugkeep_TS, self).__init__(after_transforms, n_class, gf_model, h_model, save_dir, config)
         #other already define in AdaAug
+        self.aug_dict = None
         self.ops_names = TS_OPS_NAMES.copy()
         if 'tsadd' in augselect:
             self.ops_names = self.ops_names + TS_ADD_NAMES.copy()
-        if 'ecg' in augselect:
+        if 'ecg_noise' in augselect:
+            self.ops_names = ECG_NOISE_NAMES.copy()
+            self.aug_dict = ECG_NOISE_DICT
+        elif 'ecg' in augselect:
             self.ops_names = self.ops_names + ECG_OPS_NAMES.copy()
+        print('AdaAug Using ',self.ops_names)
         self.possible_segment = keepaug_config.get('possible_segment',[1])
         self.keep_lens = keepaug_config['length']
         if keepaug_config['adapt_target'] == 'len': # adapt len
@@ -512,7 +522,7 @@ class AdaAugkeep_TS(AdaAug):
             self.history.add(k, mean_lambda, mean_p, mean_len, mean_thre, std_lambda, std_p, std_len, std_thre)
 
     def get_aug_valid_img(self, image, magnitudes,keep_thres,i=None,k=None,ops_name=None, seq_len=None):
-        trans_image = apply_augment(image, ops_name, magnitudes[i][k].detach().cpu().numpy(),seq_len=seq_len,**self.transfrom_dic)
+        trans_image = apply_augment(image, ops_name, magnitudes[i][k].detach().cpu().numpy(),seq_len=seq_len,aug_dict=self.aug_dict,**self.transfrom_dic)
         trans_image = self.after_transforms(trans_image)
         #trans_image = stop_gradient_keep(trans_image.cuda(), magnitudes[i][k], keep_thres[i]) #add keep thres
         return trans_image
@@ -590,7 +600,7 @@ class AdaAugkeep_TS(AdaAug):
             idx_list,magnitude_i = idx_matrix,magnitudes
         for idx in idx_list:
             m_pi = perturb_param(magnitude_i[idx], self.delta).detach().cpu().numpy()
-            image = apply_augment(image, self.ops_names[idx], m_pi,seq_len=seq_len,**self.transfrom_dic)
+            image = apply_augment(image, self.ops_names[idx], m_pi,seq_len=seq_len,aug_dict=self.aug_dict,**self.transfrom_dic)
         return self.after_transforms(image)
     def get_training_aug_images(self, images, magnitudes, weights, keeplen_ws, keep_thres, seq_len=None):
         # visualization

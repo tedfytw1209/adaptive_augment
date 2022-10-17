@@ -723,17 +723,17 @@ ECG_NOISE_NAMES = [
 ECG_NOISE_LIST = [
         (identity, 0, 1),  # 0
         (Amplifying, 0, 0.5),  # 1
-        (Baseline_wander, 0, 6),  # 2
+        (Baseline_wander, 0, 2),  # 2
         (chest_leads_shuffle, 0, 1),  # 3
-        (dropout, 0, 0.5),  # 4
-        (random_time_mask, 0, 10),  # 5 impl
+        (dropout, 0, 0.2),  # 4
+        (random_time_mask, 0, 2),  # 5 impl
         (add_gaussian_noise, 0, 0.5),  # 6
         (channel_dropout, 0, 1),  # 7
         (Lead_reversal, 0, 1),  # 8
         (Line_noise, 0, 1),  # 9
         (Scaling, 0, 1),  # 10
-        (Time_shift, 0, 0.5),  # 10
-        (random_time_saturation, 0, 1),  # 11
+        (Time_shift, 0, 2),  # 10
+        (random_time_saturation, 0, 2),  # 11
         (Band_pass, 0, 1),  # 12
         (Gaussian_blur, 0, 1),  # 13
         (High_pass, 0, 1),  # 14
@@ -1683,8 +1683,8 @@ if __name__ == '__main__':
     'wisdm' : 10,
     'chapman' : 10,
     }
-    #dataset = PTBXL(dataset_path='../CWDA_research/CWDA/datasets/Datasets/ptbxl-dataset',mode='test',labelgroup='superdiagnostic',denoise=True)
-    dataset = PTBXL(dataset_path='../Dataset/ptbxl-dataset',mode='test',labelgroup='all',multilabel=False)
+    dataset = PTBXL(dataset_path='../CWDA_research/CWDA/datasets/Datasets/ptbxl-dataset',mode='test',labelgroup='all',multilabel=False)
+    #dataset = PTBXL(dataset_path='../Dataset/ptbxl-dataset',mode='test',labelgroup='all',multilabel=False)
     print(dataset[0])
     print(dataset[0][0].shape)
     sample = dataset[100]
@@ -1694,11 +1694,29 @@ if __name__ == '__main__':
     print(t.shape)
     print(x.shape)
     x_tensor = torch.from_numpy(x).float()
-    test_ops = ECG_NOISE_NAMES
+    test_ops = [
+    "Time_shift",
+    "random_time_saturation",
+    "Band_pass",
+    "Gaussian_blur",
+    "High_pass",
+    "Low_pass",
+    "IIR_notch",
+    "Sigmoid_compress",
+    ]
+    '''rng = check_random_state(None)
+    rd_start = rng.uniform(0, 2*np.pi, size=(1, 1))
+    rd_hz = 1
+    tot_s = 10
+    rd_T = tot_s / rd_hz
+    factor = np.linspace(rd_start,rd_start + (2*np.pi * rd_T),1000,axis=-1).reshape(1000,1) #(bs,len) ?
+    print(factor.shape)
+    sin_wave = 2 * np.sin(factor)
+    plot_line(t,sin_wave)'''
     #
     plot_line(t,x,title='identity')
     for name in test_ops:
-        for m in [0.5]:
+        for m in [0.8]:
             trans_aug = TransfromAugment([name],m=m,n=1,p=1,aug_dict=ECG_NOISE_DICT)
             x_aug = trans_aug(x_tensor).numpy()
             print(x_aug.shape)

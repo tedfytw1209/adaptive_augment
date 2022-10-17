@@ -48,13 +48,17 @@ def Baseline_wander(x,magnitude,seq_len=None,sfreq=100, random_state=None, *args
     batch_size, n_channels, max_seq_len = x.shape
     if seq_len==None: #!!!bug when max_seq!=seq
         seq_len = max_seq_len
-    rd_start = rng.uniform(0, 2*np.pi, size=(batch_size, 1))
-    rd_hz = rng.uniform(0, 0.5, size=(batch_size, 1))
-    tot_s = seq_len / sfreq
-    rd_T = tot_s / rd_hz
-    factor = np.linspace(rd_start,rd_start + (2*np.pi / rd_T),seq_len,axis=-1) #(bs,len) ?
-    sin_wave = magnitude * np.sin(factor)
-    print(sin_wave.shape)
+    tot_waves = np.zeros((batch_size, 1, max_seq_len))
+    hz_list = [0.05, 0.1, 0.15, 0.2, 0.5]
+    for i in range(5):
+        rd_start = rng.uniform(0, 2*np.pi, size=(batch_size, 1))
+        rd_hz = np.ones((batch_size, 1)) * hz_list[i]
+        tot_s = seq_len / sfreq
+        rd_T = tot_s * rd_hz
+        factor = np.linspace(rd_start,rd_start + (2*np.pi * rd_T),seq_len,axis=-1) #(bs,len) ?
+        sin_wave = magnitude * np.sin(factor)
+        tot_waves[:,:,:seq_len] += sin_wave
+    
     x = x.detach().cpu().numpy()
     new_x = x + sin_wave
     new_x = torch.from_numpy(new_x).float()
@@ -104,9 +108,9 @@ def Line_noise(x,magnitude,seq_len=None,sfreq=100, random_state=None, *args, **k
     rd_start = rng.uniform(0, 2*np.pi, size=(batch_size, 1))
     rd_hz = np.ones((batch_size, 1)) * 60.0
     tot_s = seq_len / sfreq
-    rd_T = tot_s / rd_hz
-    factor = np.linspace(rd_start,rd_start + (2*np.pi / rd_T),seq_len,axis=-1) #(bs,len) ?
-    sin_wave = magnitude * np.sin(factor)[:,np.newaxis,:]
+    rd_T = tot_s * rd_hz
+    factor = np.linspace(rd_start,rd_start + (2*np.pi * rd_T),seq_len,axis=-1) #(bs,len) ?
+    sin_wave = magnitude * np.sin(factor)
     x = x.detach().cpu().numpy()
     new_x = x + sin_wave
     new_x = torch.from_numpy(new_x).float()
@@ -120,10 +124,15 @@ def Time_shift(x,magnitude,seq_len=None,sfreq=100, random_state=None, *args, **k
     batch_size, n_channels, max_seq_len = x.shape
     if seq_len==None: #!!!bug when max_seq!=seq
         seq_len = max_seq_len
-    shift_val = rng.uniform(-magnitude*sfreq, magnitude*sfreq, size=(batch_size, 1))[:,np.newaxis,:].int()
+    shift_val = rng.uniform(-magnitude*sfreq, magnitude*sfreq, size=(batch_size)).astype(int)
+    print('shift val: ',shift_val)
     x = x.detach().cpu().numpy()
-    new_x = shift(x,shift_val,cval=0.0)
-    new_x = torch.from_numpy(new_x).float()
+    new_x = []
+    for (e_x,e_shift) in zip(x,shift_val):
+        o_x = shift(e_x,[0,shift_val],cval=0.0)
+        new_x.append(o_x)
+    new_x = torch.from_numpy(np.array(new_x)).float()
+    print('new x: ',new_x.shape)
     return new_x
 
 #Vertical flip already have
@@ -137,15 +146,16 @@ def _sample_mask_start(X, mask_len_samples, random_state, seq_len=None):
     ), device=X.device) * (seq_len - mask_len_samples)
     return mask_start
 def _saturation_time(X, mask_start_per_sample, mask_len_samples, val=0):
-    mask = torch.ones_like(X)
+    #mask = torch.ones_like(X)
     for i, start in enumerate(mask_start_per_sample):
-        mask[i, :, int(start):int(start) + mask_len_samples] = val #every channel
-    return X * mask
-def random_time_saturation(X, mask_len_samples, random_state=None,seq_len=None,sfreq=100, *args, **kwargs):
+        X[i, :, int(start):int(start + mask_len_samples)] = val #every channel
+    return X
+def random_time_saturation(x, mask_len_samples, random_state=None,seq_len=None,sfreq=100, *args, **kwargs):
     mask_len_samples = mask_len_samples * sfreq
-    mask_start = _sample_mask_start(X, mask_len_samples, random_state,seq_len=seq_len)
-    max_val = X.max()
-    return _saturation_time(X, mask_start, mask_len_samples,max_val)
+    mask_start = _sample_mask_start(x, mask_len_samples, random_state,seq_len=seq_len)
+    max_val = x.max()
+    x = x.detach().cpu().clone()
+    return _saturation_time(x, mask_start, mask_len_samples,max_val)
 
 #filters
 def butter_bandpass(lowcut, highcut, fs, order=3):
@@ -204,10 +214,11 @@ def Low_pass(x,magnitude,seq_len=None,sfreq=100, random_state=None, *args, **kwa
     return new_x
 #IIR notch Q=30, 60Hz
 def IIR_notch(x,magnitude,seq_len=None,sfreq=100, random_state=None, *args, **kwargs):
-    low_freq = 60
+    low_freq = 60.0
+    w0 = min(low_freq, sfreq/2)
     batch_size, n_channels, max_seq_len = x.shape
     x = x.detach().cpu().numpy().reshape((batch_size*n_channels,max_seq_len))
-    b, a = iirnotch(low_freq, Q=30, fs=sfreq)
+    b, a = iirnotch(w0, Q=30, fs=sfreq)
     new_x = lfilter(b, a, x)
     new_x = new_x.reshape((batch_size, n_channels, max_seq_len))
     new_x = torch.from_numpy(new_x).float()
@@ -215,5 +226,5 @@ def IIR_notch(x,magnitude,seq_len=None,sfreq=100, random_state=None, *args, **kw
 #Sigmoid compress x
 def Sigmoid_compress(x, *args, **kwargs):
     new_x = x.detach().clone().cpu()
-    return nn.Sigmoid(new_x)
+    return torch.sigmoid(new_x)
 

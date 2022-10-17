@@ -318,7 +318,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     if sim_criterion==None:
         sim_criterion = criterion
     noaug_criterion = nn.CrossEntropyLoss().cuda()
-
+    diff_update_w = True
     sim_loss_func = ab_loss
     if loss_type=='minus':
         diff_loss_func = minus_loss
@@ -327,6 +327,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
         sim_loss_func = rel_loss
     elif loss_type=='relativediff':
         diff_loss_func = relative_loss
+        diff_update_w = False
     elif loss_type=='adv':
         diff_loss_func = adv_loss
     else:
@@ -352,6 +353,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     difficult_loss, adaptive_loss, search_total,re_weights_sum = 0, 0, 0, 0
     aug_diff_loss, ori_diff_loss, aug_search_loss, ori_search_loss = 0,0,0,0
     noaug_reg_sum = 0
+    policy_apply = (warmup_epoch==0) #apply policy or not
     for step, (input, seq_len, target) in enumerate(train_queue):
         input = input.float().cuda() #(batch,sed_len,channel)
         target = target.cuda()
@@ -364,7 +366,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
         # exploitation
         timer = time.time()
         if epoch>=warmup_epoch:
-            aug_images = adaaug(input, seq_len, mode='exploit',y=policy_y)
+            aug_images = adaaug(input, seq_len, mode='exploit', y=policy_y, policy_apply=policy_apply)
         else:
             aug_images = input
         aug_images = aug_images.cuda()
@@ -429,6 +431,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
         # exploration
         timer = time.time()
         if epoch>= warmup_epoch and step % search_freq == search_freq-1: #warmup
+            policy_apply = True #start learning policy
             #difficult, train input, target
             gf_optimizer.zero_grad()
             h_optimizer.zero_grad()
@@ -447,15 +450,9 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                             policy_y = nn.functional.one_hot(target_trsearch, num_classes=n_class).cuda().float()
                         else:
                             policy_y = target_trsearch.cuda().float()
-                    mixed_features, aug_weights = adaaug(input_trsearch, seq_len, mode='explore',mix_feature=mix_feature,y=policy_y)
+                    mixed_features, aug_weights = adaaug(input_trsearch, seq_len, mode='explore',mix_feature=mix_feature,y=policy_y,update_w=diff_update_w)
                     aug_loss, aug_logits = mix_func(gf_model,mixed_features,aug_weights,adv_criterion,target_trsearch,multilabel)
                     ori_loss = cuc_loss(origin_logits,target_trsearch,adv_criterion,multilabel).mean() #!to assert loss mean reduce
-                    '''
-                    if multilabel:
-                        ori_loss = adv_criterion(origin_logits, target_trsearch.float())
-                    else:
-                        ori_loss = adv_criterion(origin_logits, target_trsearch.long())
-                    '''
                     aug_diff_loss += aug_loss.detach().item()
                     ori_diff_loss += ori_loss.detach().item()
                     loss_prepolicy = diff_loss_func(ori_loss=ori_loss,aug_loss=aug_loss,lambda_aug=lambda_aug)

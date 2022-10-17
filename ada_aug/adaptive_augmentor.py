@@ -237,7 +237,7 @@ class AdaAug_TS(AdaAug):
         self.noaug_max = 0.5
         self.noaug_tensor = self.noaug_max * F.one_hot(torch.tensor([0]), num_classes=self.n_ops).float()
 
-    def predict_aug_params(self, X, seq_len, mode,y=None):
+    def predict_aug_params(self, X, seq_len, mode,y=None,policy_apply=True):
         self.gf_model.eval()
         if mode == 'exploit':
             self.h_model.eval()
@@ -248,9 +248,14 @@ class AdaAug_TS(AdaAug):
             self.h_model.train()
             T = 1.0
         a_params = self.h_model(self.gf_model.extract_features(X.cuda(),seq_len),y=y)
-        magnitudes, weights = torch.split(a_params, self.n_ops, dim=1)
-        magnitudes = torch.sigmoid(magnitudes)
-        weights = torch.nn.functional.softmax(weights/T, dim=-1)
+        bs, _ = a_params.shape
+        if policy_apply:
+            magnitudes, weights = torch.split(a_params, self.n_ops, dim=1)
+            magnitudes = torch.sigmoid(magnitudes)
+            weights = torch.nn.functional.softmax(weights/T, dim=-1)
+        else: #all unifrom distribution when not using policy
+            magnitudes = torch.rand(bs,self.n_ops)
+            weights = torch.ones(bs,self.n_ops) / self.n_ops
         if self.noaug_add: #add noaug reweights
             if self.class_adaptive: #alpha: (1,n_class), y: (batch_szie,n_class)=>(batch_size,1)
                 batch_alpha = torch.sum(self.alpha * y,dim=-1,keepdim=True) / torch.sum(y,dim=-1,keepdim=True)
@@ -363,13 +368,13 @@ class AdaAug_TS(AdaAug):
         #aug_imgs = torch.stack(trans_images, dim=0).cuda()
         return aug_imgs.cuda() #(b, seq, ch)
 
-    def exploit(self, images, seq_len,y=None):
+    def exploit(self, images, seq_len,y=None,policy_apply=True):
         if self.resize and 'lstm' not in self.config['gf_model_name']:
             resize_imgs = F.interpolate(images, size=self.search_d)
         else:
             resize_imgs = images
         #resize_imgs = F.interpolate(images, size=self.search_d) if self.resize else images
-        magnitudes, weights = self.predict_aug_params(resize_imgs, seq_len, 'exploit',y=y)
+        magnitudes, weights = self.predict_aug_params(resize_imgs, seq_len, 'exploit',y=y,policy_apply=policy_apply)
         aug_imgs = self.get_training_aug_images(images, magnitudes, weights,seq_len=seq_len)
         if self.visualize:
             print('Visualize for Debug')
@@ -394,13 +399,13 @@ class AdaAug_TS(AdaAug):
         self.print_imgs(imgs=aug_imgs,label=target,title='aug',slc=slc_out)
         
 
-    def forward(self, images, seq_len, mode, mix_feature=True,y=None,update_w=True):
+    def forward(self, images, seq_len, mode, mix_feature=True,y=None,update_w=True,policy_apply=True):
         if mode == 'explore':
             #  return a set of mixed augmented features, mix_feature is for experiment
             return self.explore(images,seq_len,mix_feature=mix_feature,y=y,update_w=update_w)
         elif mode == 'exploit':
             #  return a set of augmented images
-            return self.exploit(images,seq_len,y=y)
+            return self.exploit(images,seq_len,y=y,policy_apply=policy_apply)
         elif mode == 'inference':
             return images
     
@@ -485,7 +490,7 @@ class AdaAugkeep_TS(AdaAug):
         self.noaug_tensor = torch.zeros((1,self.n_ops)).float()
         self.noaug_tensor[0:0] = self.noaug_max #noaug
 
-    def predict_aug_params(self, X, seq_len, mode,y=None):
+    def predict_aug_params(self, X, seq_len, mode,y=None,policy_apply=True):
         self.gf_model.eval()
         if mode == 'exploit':
             self.h_model.eval()
@@ -496,11 +501,17 @@ class AdaAugkeep_TS(AdaAug):
             self.h_model.train()
             T = 1.0
         a_params = self.h_model(self.gf_model.extract_features(X.cuda(),seq_len),y=y)
+        bs, _ = a_params.shape
         #mags: mag for ops, weights: weight for ops, keeplen_ws: keeplen weights, keep_thres: keep threshold
         magnitudes, weights, keeplen_ws, keep_thres = torch.split(a_params, [self.n_ops, self.n_ops, self.adapt_len, 1], dim=1)
-        magnitudes = torch.sigmoid(magnitudes)
-        weights = torch.nn.functional.softmax(weights/T, dim=-1)
-        keeplen_ws = torch.nn.functional.softmax(keeplen_ws/T, dim=-1)
+        if policy_apply:
+            magnitudes = torch.sigmoid(magnitudes)
+            weights = torch.nn.functional.softmax(weights/T, dim=-1)
+            keeplen_ws = torch.nn.functional.softmax(keeplen_ws/T, dim=-1)
+        else:
+            magnitudes = torch.rand(bs,self.n_ops)
+            weights = torch.ones(bs,self.n_ops) / self.n_ops
+            keeplen_ws = torch.ones(bs,self.adapt_len) / self.adapt_len
         if self.thres_adapt:
             keep_thres = torch.sigmoid(keep_thres)
         else: #fix thres break gradient
@@ -624,13 +635,13 @@ class AdaAugkeep_TS(AdaAug):
         
         #aug_imgs = torch.stack(trans_images, dim=0).cuda()
         return aug_imgs.cuda() #(b, seq, ch)
-    def exploit(self, images, seq_len,y=None):
+    def exploit(self, images, seq_len,y=None,policy_apply=True):
         if self.resize and 'lstm' not in self.config['gf_model_name']:
             resize_imgs = F.interpolate(images, size=self.search_d)
         else:
             resize_imgs = images
         #resize_imgs = F.interpolate(images, size=self.search_d) if self.resize else images
-        magnitudes, weights, keeplen_ws, keep_thres = self.predict_aug_params(resize_imgs, seq_len, 'exploit',y=y)
+        magnitudes, weights, keeplen_ws, keep_thres = self.predict_aug_params(resize_imgs, seq_len, 'exploit',y=y,policy_apply=policy_apply)
         #print(magnitudes.shape, weights.shape, keeplen_ws.shape, keep_thres.shape)
         aug_imgs = self.get_training_aug_images(images, magnitudes, weights, keeplen_ws, keep_thres,seq_len=seq_len)
         if self.visualize:
@@ -654,13 +665,13 @@ class AdaAugkeep_TS(AdaAug):
         if self.use_keepaug:
             self.Augment_wrapper.visualize_slc(images, model=self.gf_model)
 
-    def forward(self, images, seq_len, mode, mix_feature=True,y=None,update_w=True):
+    def forward(self, images, seq_len, mode, mix_feature=True,y=None,update_w=True,policy_apply=True):
         if mode == 'explore':
             #  return a set of mixed augmented features, mix_feature is for experiment
             return self.explore(images,seq_len,mix_feature=mix_feature,y=y,update_w=update_w)
         elif mode == 'exploit':
             #  return a set of augmented images
-            return self.exploit(images,seq_len,y=y)
+            return self.exploit(images,seq_len,y=y,policy_apply=policy_apply)
         elif mode == 'inference':
             return images
     

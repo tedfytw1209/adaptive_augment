@@ -55,7 +55,7 @@ def Baseline_wander(x,magnitude,seq_len=None,sfreq=100, random_state=None, *args
         rd_hz = np.ones((batch_size, 1)) * hz_list[i]
         tot_s = seq_len / sfreq
         rd_T = tot_s * rd_hz
-        factor = np.linspace(rd_start,rd_start + (2*np.pi * rd_T),seq_len,axis=-1) #(bs,len) ?
+        factor = np.linspace(rd_start,np.add(rd_start, (2*np.pi * rd_T)),seq_len,axis=-1) #(bs,len) ?
         sin_wave = magnitude * np.sin(factor)
         tot_waves[:,:,:seq_len] += sin_wave
     
@@ -108,7 +108,7 @@ def Line_noise(x,magnitude,seq_len=None,sfreq=100, random_state=None, *args, **k
     rd_hz = np.ones((batch_size, 1)) * 60.0
     tot_s = seq_len / sfreq
     rd_T = tot_s * rd_hz
-    factor = np.linspace(rd_start,rd_start + (2*np.pi * rd_T),seq_len,axis=-1) #(bs,len) ?
+    factor = np.linspace(rd_start,np.add(rd_start, (2*np.pi * rd_T)),seq_len,axis=-1) #(bs,1,len) ?
     sin_wave = magnitude * np.sin(factor)
     x = x.detach().cpu().numpy()
     new_x = x + sin_wave

@@ -302,7 +302,7 @@ class AdaAug_TS(AdaAug):
         #return torch.stack(trans_image_list, dim=0) #, torch.stack(trans_seqlen_list, dim=0) #(b*k_ops, seq, ch)
         return aug_imgs
 
-    def explore(self, images, seq_len, mix_feature=True,y=None):
+    def explore(self, images, seq_len, mix_feature=True,y=None,update_w=True):
         """Return the mixed latent feature if mix_feature==True
         !!!can't use for dynamic len now
         Args:
@@ -311,6 +311,8 @@ class AdaAug_TS(AdaAug):
             [Tensor]: return a batch of mixed features
         """
         magnitudes, weights = self.predict_aug_params(images, seq_len,'explore',y=y)
+        if not update_w:
+            weights = weights.detach()
         a_imgs = self.get_aug_valid_imgs(images, magnitudes,seq_len=seq_len)
         #a_imgs = self.Augment_wrapper(images, model=self.gf_model,apply_func=self.get_aug_valid_imgs,magnitudes=magnitudes,selective='paste')
         #a_features = self.gf_model.extract_features(a_imgs, a_seq_len)
@@ -392,10 +394,10 @@ class AdaAug_TS(AdaAug):
         self.print_imgs(imgs=aug_imgs,label=target,title='aug',slc=slc_out)
         
 
-    def forward(self, images, seq_len, mode, mix_feature=True,y=None):
+    def forward(self, images, seq_len, mode, mix_feature=True,y=None,update_w=True):
         if mode == 'explore':
             #  return a set of mixed augmented features, mix_feature is for experiment
-            return self.explore(images,seq_len,mix_feature=mix_feature,y=y)
+            return self.explore(images,seq_len,mix_feature=mix_feature,y=y,update_w=update_w)
         elif mode == 'exploit':
             #  return a set of augmented images
             return self.exploit(images,seq_len,y=y)
@@ -550,7 +552,7 @@ class AdaAugkeep_TS(AdaAug):
                 magnitudes=magnitudes,ops_names=self.ops_names,selective='paste',seq_len=seq_len)
         #(b*lens*ops,seq,ch) or 
         return aug_imgs
-    def explore(self, images, seq_len, mix_feature=True,y=None):
+    def explore(self, images, seq_len, mix_feature=True,y=None,update_w=True):
         """Return the mixed latent feature !!!can't use for dynamic len now
         Args:
             images ([Tensor]): [description]
@@ -558,6 +560,8 @@ class AdaAugkeep_TS(AdaAug):
             [Tensor]: return a batch of mixed features
         """
         magnitudes, weights, keeplen_ws, keep_thres = self.predict_aug_params(images, seq_len,'explore',y=y)
+        if not update_w:
+            weights = weights.detach()
         a_imgs = self.get_aug_valid_imgs(images, magnitudes,weights, keeplen_ws, keep_thres,seq_len=seq_len) #(b*lens*ops,seq,ch)
         a_features = self.gf_model.extract_features(a_imgs) #(b*keep_len*n_ops, n_hidden)
         stage_name = self.Augment_wrapper.all_stages[self.Augment_wrapper.stage] #
@@ -650,10 +654,10 @@ class AdaAugkeep_TS(AdaAug):
         if self.use_keepaug:
             self.Augment_wrapper.visualize_slc(images, model=self.gf_model)
 
-    def forward(self, images, seq_len, mode, mix_feature=True,y=None):
+    def forward(self, images, seq_len, mode, mix_feature=True,y=None,update_w=True):
         if mode == 'explore':
             #  return a set of mixed augmented features, mix_feature is for experiment
-            return self.explore(images,seq_len,mix_feature=mix_feature,y=y)
+            return self.explore(images,seq_len,mix_feature=mix_feature,y=y,update_w=update_w)
         elif mode == 'exploit':
             #  return a set of augmented images
             return self.exploit(images,seq_len,y=y)

@@ -62,7 +62,6 @@ def Baseline_wander(x,magnitude,seq_len=None,sfreq=100, random_state=None, *args
     x = x.detach().cpu().numpy()
     new_x = x + sin_wave
     new_x = torch.from_numpy(new_x).float()
-    print(new_x.shape)
     return new_x
 
 def chest_leads_shuffle(x,magnitude, random_state=None, *args, **kwargs):
@@ -125,14 +124,12 @@ def Time_shift(x,magnitude,seq_len=None,sfreq=100, random_state=None, *args, **k
     if seq_len==None: #!!!bug when max_seq!=seq
         seq_len = max_seq_len
     shift_val = rng.uniform(-magnitude*seq_len, magnitude*seq_len, size=(batch_size)).astype(int)
-    print('shift val: ',shift_val)
     x = x.detach().cpu().numpy()
     new_x = []
     for (e_x,e_shift) in zip(x,shift_val):
         o_x = shift(e_x,[0,shift_val],cval=0.0)
         new_x.append(o_x)
     new_x = torch.from_numpy(np.array(new_x)).float()
-    print('new x: ',new_x.shape)
     return new_x
 
 #Vertical flip already have

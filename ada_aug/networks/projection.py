@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from config import OPS_NAMES,TS_OPS_NAMES
-from operation_tseries import TS_ADD_NAMES,ECG_OPS_NAMES
+from operation_tseries import TS_ADD_NAMES,ECG_OPS_NAMES,ECG_NOISE_NAMES
 
 class SelectDropout(nn.Module):
     def __init__(self, p: float = 0.5, fea_len: int = 128, label_len: int = 32):
@@ -55,9 +55,11 @@ class Projection_TSeries(nn.Module):
         super(Projection_TSeries, self).__init__()
         self.ops_names = TS_OPS_NAMES.copy()
         if 'tsadd' in augselect:
-            self.ops_names += TS_ADD_NAMES.copy()
-        if 'ecg' in augselect:
-            self.ops_names += ECG_OPS_NAMES.copy()
+            self.ops_names = self.ops_names + TS_ADD_NAMES.copy()
+        if 'ecg_noise' in augselect:
+            self.ops_names = ECG_NOISE_NAMES.copy()
+        elif 'ecg' in augselect:
+            self.ops_names = self.ops_names + ECG_OPS_NAMES.copy()
         self.ops_len = len(self.ops_names)
         print('Projection Using ',self.ops_names)
         print('In_features: ',in_features) #already add y_feature_len if needed

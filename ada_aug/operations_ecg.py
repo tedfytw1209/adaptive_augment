@@ -124,7 +124,7 @@ def Time_shift(x,magnitude,seq_len=None,sfreq=100, random_state=None, *args, **k
     batch_size, n_channels, max_seq_len = x.shape
     if seq_len==None: #!!!bug when max_seq!=seq
         seq_len = max_seq_len
-    shift_val = rng.uniform(-magnitude*sfreq, magnitude*sfreq, size=(batch_size)).astype(int)
+    shift_val = rng.uniform(-magnitude*seq_len, magnitude*seq_len, size=(batch_size)).astype(int)
     print('shift val: ',shift_val)
     x = x.detach().cpu().numpy()
     new_x = []

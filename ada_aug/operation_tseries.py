@@ -725,15 +725,15 @@ ECG_NOISE_LIST = [
         (Amplifying, 0, 0.5),  # 1
         (Baseline_wander, 0, 2),  # 2
         (chest_leads_shuffle, 0, 1),  # 3
-        (dropout, 0, 0.2),  # 4
-        (random_time_mask, 0, 2),  # 5 impl
+        (dropout, 0, 0.5),  # 4
+        (random_time_mask, 0, 5),  # 5 impl
         (add_gaussian_noise, 0, 0.5),  # 6
         (channel_dropout, 0, 1),  # 7
         (Lead_reversal, 0, 1),  # 8
         (Line_noise, 0, 1),  # 9
         (Scaling, 0, 1),  # 10
-        (Time_shift, 0, 2),  # 10
-        (random_time_saturation, 0, 2),  # 11
+        (Time_shift, 0, 0.5),  # 10
+        (random_time_saturation, 0, 5),  # 11
         (Band_pass, 0, 1),  # 12
         (Gaussian_blur, 0, 1),  # 13
         (High_pass, 0, 1),  # 14

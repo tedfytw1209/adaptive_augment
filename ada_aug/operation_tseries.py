@@ -1068,7 +1068,7 @@ def activate_bn_track_running_stats(model):
             m.track_running_stats = True
 
 class KeepAugment(object): #need fix
-    def __init__(self, mode, length,thres=0.6,transfrom=None,default_select=None, early=False, low = False,
+    def __init__(self, mode, length,thres=0.6,transfrom=None,default_select=None, early=False, low = False,adapt_target='len',
         possible_segment=[1],grid_region=False, reverse=False,info_upper = 0.0, visualize=False,save_dir='./',
         sfreq=100,pw_len=0.2,tw_len=0.4,**_kwargs):
         assert mode in ['auto','b','p','t','rand'] #auto: all, b: heart beat(-0.2,0.4), p: p-wave(-0.2,0), t: t-wave(0,0.4)
@@ -1098,6 +1098,18 @@ class KeepAugment(object): #need fix
         self.compare_func_list = [le,ge]
         self.visualize = visualize
         self.save_dir = save_dir
+        self.selective = None
+        if adapt_target not in ['len','seg','way','ch']:
+            print('Keep Auto select: ',target)
+            target = adapt_target
+            if 'cut' in target:
+                self.default_select = 'cut'
+            else:
+                self.default_select = 'cut'
+            if 're' in target:
+                self.reverse = True
+            else:
+                self.reverse = False
         #'torch.nn.functional.avg_pool1d' use this for segment
         ##self.m_pool = torch.nn.AvgPool1d(kernel_size=self.length, stride=1, padding=0) #for winodow sum
         print(f'Apply InfoKeep Augment: mode={self.mode}, threshold={self.thres}, transfrom={self.trans}')
@@ -1107,8 +1119,8 @@ class KeepAugment(object): #need fix
             augment = apply_func
         elif self.trans!=None:
             augment = self.trans
-            if self.default_select:
-                selective = self.default_select
+        if self.default_select:
+            selective = self.default_select
         return augment, selective
     def get_selective(self,selective,thres=None,use_reverse=None):
         #cut or paste

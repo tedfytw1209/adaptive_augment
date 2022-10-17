@@ -97,7 +97,8 @@ parser.add_argument('--noaug_reg', type=str, default='', help='add regular for n
 parser.add_argument('--balance_loss', type=str, default='', help="loss type for model and policy training to acheive class balance")
 parser.add_argument('--keep_aug', action='store_true', default=False, help='info keep augment')
 parser.add_argument('--keep_mode', type=str, default='auto', help='info keep mode',choices=['auto','adapt','b','p','t','rand'])
-parser.add_argument('--adapt_target', type=str, default='len', help='info keep mode',choices=['len','seg','way'])
+parser.add_argument('--adapt_target', type=str, default='len', help='info keep mode',
+        choices=['len','seg','way','ch','recut','repaste','recut','repaste'])
 parser.add_argument('--keep_seg', type=int, nargs='+', default=[1], help='info keep segment mode')
 parser.add_argument('--keep_grid', action='store_true', default=False, help='info keep augment grid')
 parser.add_argument('--keep_thres', type=float, default=0.6, help="keep augment weight (lower protect more)")

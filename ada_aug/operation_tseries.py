@@ -718,7 +718,7 @@ ECG_NOISE_NAMES = [
     "High_pass",
     "Low_pass",
     "IIR_notch",
-    "Sigmoid_compress",
+    #"Sigmoid_compress", some bug
 ]
 ECG_NOISE_LIST = [
         (identity, 0, 1),  # 0
@@ -738,8 +738,7 @@ ECG_NOISE_LIST = [
         (Gaussian_blur, 0, 1),  # 13
         (High_pass, 0, 1),  # 14
         (Low_pass, 0, 1),  # 15
-        (IIR_notch, 0, 1),  # 16
-        (Sigmoid_compress, 0, 1),  # 17
+        #(IIR_notch, 0, 1),  # 16 some bug
         ]
 ECG_NOISE_DICT = {fn.__name__: (fn, v1, v2) for fn, v1, v2 in ECG_NOISE_LIST}
 

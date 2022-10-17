@@ -65,6 +65,7 @@ class Projection_TSeries(nn.Module):
         print('In_features: ',in_features) #already add y_feature_len if needed
         proj_out = 2*self.ops_len + proj_addition
         self.label_embed = None
+        self.feature_embed = None
         if label_num>0 and label_embed>0:
             #self.label_embed = nn.Sequential(nn.Linear(label_num, label_embed),nn.ReLU()) #old ver
             self.label_embed = nn.Linear(label_num, label_embed) #10/10 change
@@ -73,32 +74,42 @@ class Projection_TSeries(nn.Module):
             n_label = label_num
         else:
             n_label = 0
+        self.class_adapt = int(n_label>0)
         self.n_layers = n_layers
         layers = []
         self.input_act = input_act
         self.feature_mask = feature_mask
-        if feature_mask=='dropout':
-            layers += [nn.Dropout(p=0.5)]
-        elif feature_mask=='select':
-            layers += [SelectDropout(p=0.5,fea_len=in_features-label_embed,label_len=n_label)] #custom dropout
+        #
         if self.n_layers > 0:
-            layers += [nn.Linear(in_features, n_hidden), nn.ReLU()]
+            self.feature_embed = nn.Sequential(nn.Linear(in_features-n_label, n_hidden), nn.ReLU())
+            layers = [] 
+            if feature_mask=='dropout':
+                layers += [nn.Dropout(p=0.5)]
+            elif feature_mask=='select':
+                layers += [SelectDropout(p=0.5,fea_len=n_hidden-n_label,label_len=n_label)] #custom dropout
             for _ in range(self.n_layers-1):
-                layers.append(nn.Linear(n_hidden, n_hidden))
+                layers.append(nn.Linear(n_hidden + n_label, n_hidden))
                 layers.append(nn.ReLU())
-            layers.append(nn.Linear(n_hidden, proj_out))
+                n_label = 0
+            layers.append(nn.Linear(n_hidden + n_label, proj_out))
         else:
+            if feature_mask=='dropout':
+                layers += [nn.Dropout(p=0.5)]
+            elif feature_mask=='select':
+                layers += [SelectDropout(p=0.5,fea_len=in_features-label_embed,label_len=n_label)]
             layers += [nn.Linear(in_features, proj_out)]
         self.projection = nn.Sequential(*layers)
 
     def forward(self, x,y=None):
-        if not torch.is_tensor(y):
+        if self.feature_embed!=None:
+            x = self.feature_embed(x)
+        if not self.class_adapt:
             agg_x = x
         elif self.label_embed!=None:
             y_tmp = self.label_embed(y)
             agg_x = torch.cat([x,y_tmp], dim=1) #feature dim
         else:
             agg_x = torch.cat([x,y], dim=1) #feature dim
-        if self.input_act or self.feature_mask:
+        if self.input_act:
             agg_x = nn.functional.relu(agg_x)
         return self.projection(agg_x)

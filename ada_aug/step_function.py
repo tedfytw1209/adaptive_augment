@@ -257,6 +257,8 @@ def minus_loss(ori_loss, aug_loss, lambda_aug):
     return -1 * lambda_aug * aug_loss
 def adv_loss(ori_loss, aug_loss, lambda_aug):
     return lambda_aug * aug_loss
+def none_loss(ori_loss, aug_loss, lambda_aug):
+    return ori_loss
 
 def ab_loss(ori_loss, aug_loss):
     return aug_loss
@@ -271,6 +273,11 @@ def cuc_loss(logits,target,criterion,multilabel,**kwargs):
     return loss
 
 def embed_mix(gf_model,mixed_features,aug_weights,adv_criterion,target_trsearch,multilabel):
+    aug_logits = gf_model.classify(mixed_features) 
+    aug_loss = cuc_loss(aug_logits,target_trsearch,adv_criterion,multilabel)
+    return aug_loss, aug_logits
+
+def embed_diff(gf_model,mixed_features,aug_weights,adv_criterion,target_trsearch,multilabel):
     aug_logits = gf_model.classify(mixed_features) 
     aug_loss = cuc_loss(aug_logits,target_trsearch,adv_criterion,multilabel)
     return aug_loss, aug_logits
@@ -340,6 +347,9 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
         diff_update_w = False
     elif loss_type=='adv':
         diff_loss_func = adv_loss
+    elif loss_type=='embed':
+        diff_loss_func = adv_loss
+        diff_update_w = False
     else:
         print('Unknown loss type for policy training')
         print(loss_type)
@@ -356,6 +366,11 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     else:
         print('Unknown mix type')
         raise
+    if loss_type=='embed':
+        diff_mix_feature = False
+        mix_func = embed_diff
+    else:
+        diff_mix_feature = mix_feature
     preds = []
     targets = []
     total = 0
@@ -462,9 +477,9 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                             policy_y = nn.functional.one_hot(target_trsearch, num_classes=n_class).cuda().float()
                         else:
                             policy_y = target_trsearch.cuda().float()
-                    mixed_features, aug_weights = adaaug(input_trsearch, seq_len, mode='explore',mix_feature=mix_feature,y=policy_y,update_w=diff_update_w)
+                    mixed_features, aug_weights = adaaug(input_trsearch, seq_len, mode='explore',mix_feature=diff_mix_feature,y=policy_y,update_w=diff_update_w)
                     aug_loss, aug_logits = mix_func(gf_model,mixed_features,aug_weights,adv_criterion,target_trsearch,multilabel)
-                    ori_loss = cuc_loss(origin_logits,target_trsearch,adv_criterion,multilabel).mean() #!to assert loss mean reduce
+                    ori_loss = cuc_loss(origin_logits,target_trsearch,adv_criterion,multilabel).mean().detach() #!to assert loss mean reduce
                     aug_diff_loss += aug_loss.detach().item()
                     ori_diff_loss += ori_loss.detach().item()
                     loss_prepolicy = diff_loss_func(ori_loss=ori_loss,aug_loss=aug_loss,lambda_aug=lambda_aug)

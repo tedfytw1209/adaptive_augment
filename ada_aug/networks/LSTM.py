@@ -119,7 +119,7 @@ class LSTM_ptb(nn.Module): #LSTM for PTBXL
                 nn.Linear(config['n_hidden'], config['n_output'])])
         self.fc.in_features = config['n_hidden']
 
-    def extract_features(self, x, seq_lens=None):
+    def extract_features(self, x, seq_lens=None, pool=True):
         x_shape = x.shape
         if self.input_channels == x_shape[1]:
             x = x.transpose(1, 2) #(bs,ch,len) -> (bs, len, ch)
@@ -135,11 +135,16 @@ class LSTM_ptb(nn.Module): #LSTM for PTBXL
             out_pad, _out_len = rnn_utils.pad_packed_sequence(rnn_out, batch_first=True)
         else:
             out_pad = rnn_out
-        out_pad = out_pad.transpose(1, 2) # bs, n_hidden, len
-        features = self.pool(out_pad) #bs, ch * (1+b_dir) * concat pool
+        features = out_pad.transpose(1, 2) # bs, n_hidden, len
+        if pool:
+            features = self.pool(features) #bs, ch * (1+b_dir) * concat pool
+            features = self.concat_fc(features) #bs, ch
+        return features
+    def pool_features(self, features):
+        features = self.pool(features) #bs, ch * (1+b_dir) * concat pool
         features = self.concat_fc(features) #bs, ch
         return features
-
+    
     def classify(self, features):
         fc_out = self.fc(features)  # bs x d_out
         return fc_out

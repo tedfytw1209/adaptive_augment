@@ -176,16 +176,18 @@ class ResNet1d(nn.Module):
         
     def set_output_layer(self,x):
         self[-1][-1]=x
-    def extract_features(self, x, seq_len=None):
+    def extract_features(self, x, seq_len=None, pool=True):
         #convert to 1dcnn ways (bs,len,ch) -> (bs,ch,len)
         #adaptive transpose
         x_shape = x.shape
         if self.input_channels == x_shape[2]:
             x = x.transpose(1, 2) #(bs,len,ch) -> (bs, ch, len)
-        x = self.feature_extractor(x)
-        x = self.pool(x)
+        x = self.feature_extractor(x) #(bs,n_hidden,reduced len)
+        if pool:
+            x = self.pool(x)
         return x
-    
+    def pool_features(self, x):
+        return self.pool(x)
     def classify(self, features):
         return self.fc(features)
 

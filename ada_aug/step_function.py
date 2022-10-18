@@ -453,7 +453,9 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                     input_trsearch = input_trsearch.float().cuda()
                     target_trsearch = target_trsearch.cuda()
                     batch_size = target_trsearch.shape[0]
-                    origin_logits = gf_model(input_trsearch, seq_len)
+                    origin_embed = gf_model.extract_features(input_trsearch, seq_len, pool=False)
+                    origin_features = gf_model.pool_features(origin_embed)
+                    origin_logits = gf_model.classify(origin_features)
                     policy_y = None
                     if class_adaptive: #target to onehot
                         if not multilabel:

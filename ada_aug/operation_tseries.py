@@ -738,7 +738,7 @@ ECG_NOISE_LIST = [
         (Gaussian_blur, 0, 1),  # 13
         (High_pass, 0, 1),  # 14
         (Low_pass, 0, 1),  # 15
-        (IIR_notch, 0, 1),  # 16 some bug
+        (IIR_notch, 0, 1),  # 16
         ]
 ECG_NOISE_DICT = {fn.__name__: (fn, v1, v2) for fn, v1, v2 in ECG_NOISE_LIST}
 

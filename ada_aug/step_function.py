@@ -21,7 +21,8 @@ import wandb
 from gradient_match import hyper_step
 
 def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_clip, adaaug, multilabel=False,n_class=10,
-        difficult_aug=False,reweight=True,lambda_aug = 1.0,class_adaptive=False,map_select=False,visualize=False,training=True):
+        difficult_aug=False,reweight=True,lambda_aug = 1.0,class_adaptive=False,map_select=False,visualize=False,training=True,
+        teach_rew=None):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
     top5 = utils.AvgrageMeter()
@@ -69,6 +70,15 @@ def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_
                 aug_loss = (w_aug * lambda_aug * aug_loss).mean() / 2
             else:
                 aug_loss = (lambda_aug * aug_loss).mean() / 2
+        #teach reweight
+        if teach_rew!=None:
+            teach_ori_logits = model(input, seq_len)
+            p_aug = logits.softmax(dim=1)[torch.arange(batch_size), target].clone().detach()
+            t_aug = teach_ori_logits.softmax(dim=1)[torch.arange(batch_size), target].clone().detach()
+            w_aug = torch.sqrt(t_aug * torch.clamp(t_aug - p_aug, min=0)) + 1 #a=0.5,b=0.5 ???
+            w_aug /= (w_aug.mean().detach() + 1e-9)
+            aug_loss = (w_aug * aug_loss).mean()
+
         loss = ori_loss + aug_loss
         loss.backward()
         nn.utils.clip_grad_norm_(model.parameters(), grad_clip)

@@ -105,6 +105,7 @@ parser.add_argument('--keep_thres', type=float, default=0.6, help="keep augment 
 parser.add_argument('--thres_adapt', action='store_false', default=True, help="keep augment thres adapt")
 parser.add_argument('--keep_len', type=int, nargs='+', default=[100], help="info keep seq len")
 parser.add_argument('--keep_bound', type=float, default=0.0, help="info keep bound %")
+parser.add_argument('--teach_rew', action='store_true', default=False, help='teach reweight')
 parser.add_argument('--visualize', action='store_true', default=False, help='visualize')
 parser.add_argument('--output_visual', action='store_true', default=False, help='visualize output and confusion matrix')
 
@@ -240,11 +241,14 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             n_layers=args.n_proj_layer, n_hidden=args.n_proj_hidden, augselect=args.augselect, proj_addition=proj_add).cuda()
         utils.load_model(self.gf_model, os.path.join(self.config['BASE_PATH'],f'{args.gf_model_path}',f'fold{test_fold_idx}', 'gf_weights.pt'), location=0)
         utils.load_model(self.h_model, os.path.join(self.config['BASE_PATH'],f'{args.h_model_path}',f'fold{test_fold_idx}', 'h_weights.pt'), location=0)
-
         for param in self.gf_model.parameters():
             param.requires_grad = False
         for param in self.h_model.parameters():
             param.requires_grad = False
+        self.teach_model = None
+        if args.teach_rew: #teacher reweight, only use when search&train same
+            self.teach_model = self.gf_model
+        #AdaAug / Keep
         after_transforms = self.train_queue.dataset.after_transforms
         adaaug_config = {'sampling': 'prob',
                     'k_ops': args.k_ops,
@@ -317,7 +321,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         args = self.config['args']
         step_dic={'epoch':Curr_epoch}
         diff_dic = {'difficult_aug':self.diff_augment,'reweight':self.diff_reweight,'lambda_aug':args.lambda_aug, 'class_adaptive':args.class_adapt
-                ,'visualize':args.visualize}
+                ,'visualize':args.visualize,'teach_rew':self.teach_model}
         if Curr_epoch>self.config['epochs']:
             all_epochs = self.config['epochs']-1
             print(f'Trained epochs {Curr_epoch} Iteration: {self._iteration} already reach {all_epochs}, Skip step')

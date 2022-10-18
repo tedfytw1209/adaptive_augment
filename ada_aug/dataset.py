@@ -453,9 +453,10 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
         tr_weights = make_weights_for_balanced_classes(train_data.dataset.label,nclasses=train_data.dataset.dataset.num_class,alpha=sampler_alpha)
         train_sampler = torch.utils.data.sampler.WeightedRandomSampler(tr_weights, len(tr_weights))
         print('train sampler: ',train_sampler) #!
-    elif bal_ssampler=='wmaxrel':
+    elif bal_trsampler=='wmaxrel': #bal_ssampler=='wmaxrel':
         tr_weights = make_weights_for_balanced_classes_maxrel(train_data.dataset.label,nclasses=train_data.dataset.dataset.num_class,alpha=sampler_alpha)
         train_sampler = torch.utils.data.sampler.WeightedRandomSampler(tr_weights, len(tr_weights))
+        print('train sampler: ',train_sampler) #!
     
     if train_sampler is None:
         trainloader = torch.utils.data.DataLoader(

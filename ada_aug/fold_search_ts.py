@@ -22,7 +22,7 @@ from config import get_search_divider
 from dataset import get_ts_dataloaders, get_num_class, get_label_name, get_dataset_dimension,get_num_channel,Freq_dict,TimeS_dict
 from operation_tseries import TS_OPS_NAMES,ECG_OPS_NAMES,TS_ADD_NAMES,MAG_TEST_NAMES,NOMAG_TEST_NAMES
 from step_function import train,infer,search_train,search_infer
-from non_saturating_loss import NonSaturatingLoss
+from non_saturating_loss import NonSaturatingLoss,Wasserstein_loss
 from class_balanced_loss import ClassBalLoss,ClassDiffLoss,ClassDistLoss,make_class_balance_count,make_class_weights,make_loss,make_class_weights_maxrel \
     ,make_class_weights_samples
 import wandb
@@ -103,7 +103,7 @@ parser.add_argument('--lambda_dist', type=float, default=1.0, help="class distan
 parser.add_argument('--noaug_reg', type=str, default='', help='add regular for noaugment ',
         choices=['cadd','add',''])
 parser.add_argument('--loss_type', type=str, default='minus', help="loss type for difficult policy training",
-        choices=['minus','relative','relativediff','adv'])
+        choices=['minus','relative','relativediff','adv','embed'])
 parser.add_argument('--balance_loss', type=str, default='', help="loss type for model and policy training to acheive class balance")
 parser.add_argument('--policy_loss', type=str, default='', help="loss type for simular policy training")
 parser.add_argument('--keep_aug', action='store_true', default=False, help='info keep augment')
@@ -265,11 +265,15 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         self.adv_criterion = None
         if args.loss_type=='adv':
             self.adv_criterion = NonSaturatingLoss(epsilon=0.1).cuda()
+        elif args.loss_type=='embed':
+            #self.adv_criterion = nn.MSELoss(reduction='mean') #default
+            self.adv_criterion = Wasserstein_loss(reduction='mean')
         elif args.mix_type=='loss':
             if not multilabel:
                 self.adv_criterion = nn.CrossEntropyLoss(reduction='none')
             else:
                 self.adv_criterion = nn.BCEWithLogitsLoss(reduction='none')
+        
         self.sim_criterion = None
         #bug!: can not with loss_mix
         self.sim_criterion = self.choose_criterion(train_labels,search_labels,multilabel,n_class,

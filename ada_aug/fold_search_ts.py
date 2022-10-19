@@ -289,9 +289,17 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         ind_mix,sub_mix = False,False
         if 'ind' in args.mix_method:
             ind_mix = True
-            self.search_repeat = 2 #tmp for (n_ops,keep_params)
+            self.search_repeat = 2
         else:
             self.search_repeat = 1
+        #need double search round
+        if 'sub' in args.mix_method:
+            sub_mix = 0.5 #!!!tmp dedault for subset mix
+            self.search_mult = 2
+        else:
+            self.search_mult = 1
+            sub_mix = 1
+
         after_transforms = self.train_queue.dataset.after_transforms
         adaaug_config = {'sampling': 'prob',
                     'k_ops': self.config['k_ops'], #as paper
@@ -318,6 +326,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 augselect=args.augselect,
                 class_adaptive=self.class_noaug,
                 ind_mix=ind_mix,
+                sub_mix=sub_mix,
                 noaug_add=self.noaug_add,
                 transfrom_dic=trans_config)
         else:
@@ -333,6 +342,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 multilabel=multilabel,
                 augselect=args.augselect,
                 class_adaptive=self.class_noaug,
+                sub_mix=sub_mix,
                 noaug_add=self.noaug_add,
                 transfrom_dic=trans_config)
         #to self
@@ -374,7 +384,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         # searching
         train_acc, train_obj, train_dic, table_dic = search_train(args,self.train_queue, self.search_queue, self.tr_search_queue, self.gf_model, self.adaaug,
             self.criterion, self.gf_optimizer,self.scheduler, args.grad_clip, self.h_optimizer, self._iteration, args.search_freq, 
-            search_round=args.search_round,search_repeat=self.search_repeat,multilabel=self.multilabel,n_class=self.n_class,map_select=self.mapselect, **diff_dic)
+            search_round=args.search_round * self.search_mult,search_repeat=self.search_repeat,multilabel=self.multilabel,n_class=self.n_class,map_select=self.mapselect, **diff_dic)
         if self.noaug_add:
             class_acc = train_acc / 100.0
             if self.class_noaug:

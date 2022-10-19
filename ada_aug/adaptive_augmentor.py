@@ -63,7 +63,8 @@ def Normal_augment(t_series, model=None,selective='paste', apply_func=None, seq_
         trans_t_series.append(trans_t_s)
     aug_t_s = torch.stack(trans_t_series, dim=0)
     return aug_t_s
-def Normal_search(t_series, model=None,selective='paste', apply_func=None,ops_names=None, seq_len=None, **kwargs):
+def Normal_search(t_series, model=None,selective='paste', apply_func=None,
+        ops_names=None, seq_len=None,mask_idx=None, **kwargs):
     trans_t_series=[]
     for i, (t_s,each_seq_len) in enumerate(zip(t_series,seq_len)):
         t_s = t_s.detach().cpu()
@@ -74,6 +75,14 @@ def Normal_search(t_series, model=None,selective='paste', apply_func=None,ops_na
             trans_t_series.append(trans_t_s)
             #trans_seqlen_list.append(e_len)
     return torch.stack(trans_t_series, dim=0) #, torch.stack(trans_seqlen_list, dim=0) #(b*k_ops, seq, ch)
+
+def make_subset(n_ops,p):
+    bernoulli = torch.distributions.bernoulli.Bernoulli(probs=1-p)
+    select = bernoulli.sample([n_ops]).long()
+    select_idxs = torch.nonzero(select, as_tuple=True)[0] #only one dim
+    print('Mask: ',select) #!tmp
+    print('Mask idx: ',select_idxs) #!tmp
+    return select,select_idxs
 
 class AdaAug(nn.Module):
     def __init__(self, after_transforms, n_class, gf_model, h_model, save_dir=None, 
@@ -205,7 +214,7 @@ class AdaAug(nn.Module):
 class AdaAug_TS(AdaAug):
     def __init__(self, after_transforms, n_class, gf_model, h_model, save_dir=None, visualize=False,
                     config=default_config,keepaug_config=default_config, multilabel=False, augselect='',class_adaptive=False,
-                    noaug_add=False,transfrom_dic={}):
+                    sub_mix=1.0,noaug_add=False,transfrom_dic={}):
         super(AdaAug_TS, self).__init__(after_transforms, n_class, gf_model, h_model, save_dir, config)
         #other already define in AdaAug
         self.aug_dict = None
@@ -236,6 +245,7 @@ class AdaAug_TS(AdaAug):
         self.alpha = torch.tensor([0.5]).view(1,-1).cuda()
         self.noaug_max = 0.5
         self.noaug_tensor = self.noaug_max * F.one_hot(torch.tensor([0]), num_classes=self.n_ops).float()
+        self.sub_mix = sub_mix
 
     def predict_aug_params(self, X, seq_len, mode,y=None,policy_apply=True):
         self.gf_model.eval()
@@ -282,9 +292,8 @@ class AdaAug_TS(AdaAug):
         trans_image = self.after_transforms(trans_image)
         trans_image = stop_gradient(trans_image.cuda(), magnitudes[i][k])
         return trans_image
-    def get_aug_valid_imgs(self, images, magnitudes, seq_len=None):
+    def get_aug_valid_imgs(self, images, magnitudes, seq_len=None,mask_idx=None):
         """Return the mixed latent feature
-
         Args:
             images ([Tensor]): [description]
             magnitudes ([Tensor]): [description]
@@ -303,7 +312,8 @@ class AdaAug_TS(AdaAug):
                 trans_image = stop_gradient(trans_image.cuda(), magnitudes[i][k])
                 trans_image_list.append(trans_image)
                 #trans_seqlen_list.append(e_len)'''
-        aug_imgs = self.Search_wrapper(images, model=self.gf_model,apply_func=self.get_aug_valid_img,magnitudes=magnitudes,ops_names=self.ops_names,selective='paste',seq_len=seq_len)
+        aug_imgs = self.Search_wrapper(images, model=self.gf_model,apply_func=self.get_aug_valid_img,
+            magnitudes=magnitudes,ops_names=self.ops_names,selective='paste',seq_len=seq_len,mask_idx=mask_idx)
         #return torch.stack(trans_image_list, dim=0) #, torch.stack(trans_seqlen_list, dim=0) #(b*k_ops, seq, ch)
         return aug_imgs
 
@@ -318,17 +328,27 @@ class AdaAug_TS(AdaAug):
         magnitudes, weights = self.predict_aug_params(images, seq_len,'explore',y=y)
         if not update_w:
             weights = weights.detach()
-        a_imgs = self.get_aug_valid_imgs(images, magnitudes,seq_len=seq_len)
+        if self.sub_mix<1.0:
+            ops_mask, ops_mask_idx = make_subset(self.n_ops,self.sub_mix) #(n_ops)
+            n_ops_sub = len(ops_mask_idx)
+            print('ops subset: ',n_ops_sub)
+            weights_subset = torch.masked_select(weights,ops_mask.view(1,self.n_ops)) #(bs,n_ops_sub)
+            #reweight to sum=1
+            weights_subset = weights_subset / weights_subset.detach().sum(dim=1)
+        else:
+            weights_subset = weights
+            n_ops_sub = self.n_ops
+        a_imgs = self.get_aug_valid_imgs(images, magnitudes,seq_len=seq_len, mask_idx=ops_mask_idx)
         #a_imgs = self.Augment_wrapper(images, model=self.gf_model,apply_func=self.get_aug_valid_imgs,magnitudes=magnitudes,selective='paste')
         #a_features = self.gf_model.extract_features(a_imgs, a_seq_len)
         a_features = self.gf_model.extract_features(a_imgs)
-        ba_features = a_features.reshape(len(images), self.n_ops, -1) # batch, n_ops, n_hidden
-        if mix_feature:
-            mixed_features = [w.matmul(feat) for w, feat in zip(weights, ba_features)]
+        ba_features = a_features.reshape(len(images), n_ops_sub, -1) # batch, n_ops(sub), n_hidden
+        if mix_feature: #weights with select
+            mixed_features = [w.matmul(feat) for w, feat in zip(weights_subset, ba_features)]
             mixed_features = torch.stack(mixed_features, dim=0)
-            return mixed_features, [weights]
+            return mixed_features, [weights_subset]
         else:
-            return ba_features, [weights]
+            return ba_features, [weights_subset]
     def get_training_aug_image(self, image, magnitudes, idx_matrix,i=None, seq_len=None):
         if i!=None:
             idx_list = idx_matrix[i]
@@ -398,7 +418,6 @@ class AdaAug_TS(AdaAug):
         self.print_imgs(imgs=images,label=target,title='id',slc=slc_out)
         self.print_imgs(imgs=aug_imgs,label=target,title='aug',slc=slc_out)
         
-
     def forward(self, images, seq_len, mode, mix_feature=True,y=None,update_w=True,policy_apply=True):
         if mode == 'explore':
             #  return a set of mixed augmented features, mix_feature is for experiment
@@ -430,7 +449,7 @@ class AdaAug_TS(AdaAug):
 class AdaAugkeep_TS(AdaAug):
     def __init__(self, after_transforms, n_class, gf_model, h_model, save_dir=None, visualize=False,
                     config=default_config,keepaug_config=default_config, multilabel=False, augselect='',class_adaptive=False,ind_mix=False,
-                    noaug_add=False,transfrom_dic={}):
+                    sub_mix=1.0,noaug_add=False,transfrom_dic={}):
         super(AdaAugkeep_TS, self).__init__(after_transforms, n_class, gf_model, h_model, save_dir, config)
         #other already define in AdaAug
         self.aug_dict = None

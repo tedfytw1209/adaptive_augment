@@ -1239,7 +1239,7 @@ class KeepAugment(object): #need fix
             for param in model.parameters():
                 param.requires_grad = True
         return torch.stack(aug_t_s_list, dim=0) #(b,seq,ch)
-    def Augment_search(self, t_series, model=None,selective='paste', apply_func=None,ops_names=None, seq_len=None, **kwargs):
+    def Augment_search(self, t_series, model=None,selective='paste', apply_func=None,ops_names=None, seq_len=None,mask_idx=None, **kwargs):
         b,w,c = t_series.shape
         augment, selective = self.get_augment(apply_func,selective)
         slc_, t_series_ = self.get_slc(t_series,model)
@@ -1254,6 +1254,13 @@ class KeepAugment(object): #need fix
         windowed_len = int(windowed_w / seg_number)
         #quant_scores = torch.quantile(windowed_slc,info_aug,dim=1) #quant for each batch
         seg_accum, windowed_accum = self.get_seg(seg_number,seg_len,w,windowed_w,windowed_len)
+        if torch.is_tensor(mask_idx): #mask idx: (~n_ops*subset)
+            mask_idx = mask_idx.detach().cpu().numpy()
+            print(mask_idx) #!tmp
+            print([ops_names[k] for k in mask_idx]) #!tmp
+            ops_search = zip(mask_idx, [ops_names[k] for k in mask_idx])
+        else:
+            ops_search = enumerate(ops_names)
         #print(slc_)
         #print(windowed_slc)
         #print(quant_scores)
@@ -1263,7 +1270,7 @@ class KeepAugment(object): #need fix
         win_start, win_end = 0,windowed_w
         for i,(t_s, slc, windowed_slc_each, each_seq_len) in enumerate(zip(t_series_, slc_, windowed_slc,seq_len)):
             #find region
-            for k, ops_name in enumerate(ops_names):
+            for k, ops_name in ops_search:
                 t_s_tmp = t_s.clone().detach().cpu()
                 region_list,inforegion_list = [],[]
                 for seg_idx in range(seg_number):

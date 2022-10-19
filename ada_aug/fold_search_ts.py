@@ -110,7 +110,7 @@ parser.add_argument('--keep_aug', action='store_true', default=False, help='info
 parser.add_argument('--keep_mode', type=str, default='auto', help='info keep mode',choices=['auto','adapt','b','p','t','rand'])
 parser.add_argument('--aug_target', type=str, default='', help='info keep adapt target',choices=['kops',''])
 parser.add_argument('--adapt_target', type=str, default='len', help='info keep adapt target / keep auto cut/paste or len/ch keep',
-        choices=['len','seg','way','ch','recut','repaste','recut','repaste'])
+        choices=['len','seg','way','ch','cut','paste','recut','repaste'])
 parser.add_argument('--mix_method', type=str, default='', help='who search mix params',
         choices=['ind','sub','indsub',''])
 parser.add_argument('--keep_seg', type=int, nargs='+', default=[1], help='info keep segment mode')

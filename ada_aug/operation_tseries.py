@@ -1259,7 +1259,6 @@ class KeepAugment(object): #need fix
             ops_search = [n for n in zip(mask_idx, [ops_names[k] for k in mask_idx])]
         else:
             ops_search = [n for n in enumerate(ops_names)]
-        print(ops_search) #!tmp
         #print(slc_)
         #print(windowed_slc)
         #print(quant_scores)

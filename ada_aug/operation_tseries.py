@@ -1117,6 +1117,11 @@ class KeepAugment(object): #need fix
                 self.reverse = True
             else:
                 self.reverse = False
+        elif adapt_target=='len' and self.keep_leads!=[12]: #adapt len
+            print(f'Keep len {self.length} with lead {self.keep_leads}')
+        elif adapt_target=='ch' and self.keep_leads!=[12]: #adapt leads
+            print(f'Using keep leads {self.keep_leads}')
+        
         #'torch.nn.functional.avg_pool1d' use this for segment
         ##self.m_pool = torch.nn.AvgPool1d(kernel_size=self.length, stride=1, padding=0) #for winodow sum
         print(f'Apply InfoKeep Augment: mode={self.mode}, threshold={self.thres}, transfrom={self.trans}')

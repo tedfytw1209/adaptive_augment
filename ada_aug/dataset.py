@@ -325,7 +325,7 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
             #transforms.ToTensor(),
             #transforms.Normalize(_SVHN_MEAN, _SVHN_STD), assume already normalize
         ])
-
+    num_class = get_num_class(dataset_name,labelgroup)
     kwargs = {}
     if dataset_name == 'ptbxl':
         dataset_func = PTBXL
@@ -450,11 +450,11 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
     valid_data = AugmentDataset_TS(valid_dataset, transform_train_pre, transform_train_after, transform_test, search=False, train=False)
     test_data = AugmentDataset_TS(testset, transform_train_pre, transform_train_after, transform_test, search=False, train=False)
     if bal_trsampler=='weight':
-        tr_weights = make_weights_for_balanced_classes(train_data.dataset.label,nclasses=train_data.dataset.dataset.num_class,alpha=sampler_alpha)
+        tr_weights = make_weights_for_balanced_classes(train_data.dataset.label,nclasses=num_class,alpha=sampler_alpha)
         train_sampler = torch.utils.data.sampler.WeightedRandomSampler(tr_weights, len(tr_weights))
         print('train sampler: ',train_sampler) #!
     elif bal_trsampler=='wmaxrel': #bal_ssampler=='wmaxrel':
-        tr_weights = make_weights_for_balanced_classes_maxrel(train_data.dataset.label,nclasses=train_data.dataset.dataset.num_class,alpha=sampler_alpha)
+        tr_weights = make_weights_for_balanced_classes_maxrel(train_data.dataset.label,nclasses=num_class,alpha=sampler_alpha)
         train_sampler = torch.utils.data.sampler.WeightedRandomSampler(tr_weights, len(tr_weights))
         print('train sampler: ',train_sampler) #!
     
@@ -476,16 +476,16 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
 
     if search and search_dataset is not None:
         if bal_ssampler=='weight':
-            se_weights = make_weights_for_balanced_classes(search_data.dataset.label,nclasses=search_data.dataset.dataset.num_class,alpha=sampler_alpha)
+            se_weights = make_weights_for_balanced_classes(search_data.dataset.label,nclasses=num_class,alpha=sampler_alpha)
             se_sampler = torch.utils.data.sampler.WeightedRandomSampler(se_weights, len(se_weights))
-            tr_weights = make_weights_for_balanced_classes(train_data.dataset.label,nclasses=train_data.dataset.dataset.num_class,alpha=sampler_alpha)
+            tr_weights = make_weights_for_balanced_classes(train_data.dataset.label,nclasses=num_class,alpha=sampler_alpha)
             tr_sampler = torch.utils.data.sampler.WeightedRandomSampler(tr_weights, len(tr_weights))
             print('search sampler: ',se_sampler) #!
             shuffle_opt=False
         elif bal_ssampler=='wmaxrel':
-            se_weights = make_weights_for_balanced_classes_maxrel(search_data.dataset.label,nclasses=search_data.dataset.dataset.num_class,alpha=sampler_alpha)
+            se_weights = make_weights_for_balanced_classes_maxrel(search_data.dataset.label,nclasses=num_class,alpha=sampler_alpha)
             se_sampler = torch.utils.data.sampler.WeightedRandomSampler(se_weights, len(se_weights))
-            tr_weights = make_weights_for_balanced_classes_maxrel(train_data.dataset.label,nclasses=train_data.dataset.dataset.num_class,alpha=sampler_alpha)
+            tr_weights = make_weights_for_balanced_classes_maxrel(train_data.dataset.label,nclasses=num_class,alpha=sampler_alpha)
             tr_sampler = torch.utils.data.sampler.WeightedRandomSampler(tr_weights, len(tr_weights))
             shuffle_opt=False
         else:

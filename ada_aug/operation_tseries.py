@@ -1515,7 +1515,8 @@ class AdaKeepAugment(KeepAugment): #
             raise
 
         return keepway_params, keeplen_params, keepseg_params
-    def Augment_search(self, t_series, model=None,selective='paste', apply_func=None,ops_names=None, keep_thres=None, seq_len=None, **kwargs):
+    def Augment_search(self, t_series, model=None,selective='paste', apply_func=None,ops_names=None, keep_thres=None, seq_len=None,
+            mask_idx=None, **kwargs):
         b,w,c = t_series.shape
         augment, selective = self.get_augment(apply_func,selective)
         slc_, t_series_ = self.get_slc(t_series,model)
@@ -1524,9 +1525,14 @@ class AdaKeepAugment(KeepAugment): #
         aug_t_s_list = []
         each_len, seg_number = self.length[0], self.possible_segment[0]
         keepway_params, keeplen_params, keepseg_params = self.make_params(self.adapt_target,each_len,seg_number,selective)
+        if torch.is_tensor(mask_idx): #mask idx: (~n_ops*subset)
+            mask_idx = mask_idx.detach().cpu().numpy()
+            ops_search = [n for n in zip(mask_idx, [ops_names[k] for k in mask_idx])]
+        else:
+            ops_search = [n for n in enumerate(ops_names)]
+        
         for i,(t_s, slc,each_seq_len) in enumerate(zip(t_series_, slc_,seq_len)):
             for (each_way,each_len, seg_number) in zip(keepway_params,keeplen_params,keepseg_params):
-
                 (selective, use_reverse) = each_way
                 info_aug, compare_func, info_bound, bound_func = self.get_selective(selective,thres=keep_thres[i],use_reverse=use_reverse)
                 #select a segment number
@@ -1539,7 +1545,7 @@ class AdaKeepAugment(KeepAugment): #
                 windowed_slc_each = windowed_slc[0]
                 win_start, win_end = 0,windowed_w
                 #find region
-                for k, ops_name in enumerate(ops_names):
+                for k, ops_name in enumerate(ops_search):
                     t_s_tmp = t_s.clone().detach().cpu()
                     region_list,inforegion_list = [],[]
                     for seg_idx in range(seg_number):
@@ -1591,7 +1597,8 @@ class AdaKeepAugment(KeepAugment): #
     
     #independent search, ops_names is this turn params and fix_idx is this turn fixs
     ###!!!Not a good implement!!!###
-    def Augment_search_ind(self, t_series, model=None,selective='paste', apply_func=None,ops_names=None,fix_idx=None, keep_thres=None,seq_len=None, **kwargs):
+    def Augment_search_ind(self, t_series, model=None,selective='paste', apply_func=None,ops_names=None,fix_idx=None, keep_thres=None,seq_len=None
+        ,mask_idx=None, **kwargs):
         b,w,c = t_series.shape
         augment, selective = self.get_augment(apply_func,selective)
         slc_, t_series_ = self.get_slc(t_series,model)
@@ -1605,6 +1612,12 @@ class AdaKeepAugment(KeepAugment): #
         #keep len or segment
         each_len, seg_number = self.length[0], self.possible_segment[0]
         keepway_params, keeplen_params, keepseg_params = self.make_params(self.adapt_target,each_len,seg_number,selective)
+        if torch.is_tensor(mask_idx): #mask idx: (~n_ops*subset)
+            mask_idx = mask_idx.detach().cpu().numpy()
+            ops_search = [n for n in zip(mask_idx, [ops_names[k] for k in mask_idx])]
+        else:
+            ops_search = [n for n in enumerate(ops_names)]
+        
         for i,(t_s, slc,each_seq_len) in enumerate(zip(t_series_, slc_,seq_len)):
             if stage_name=='trans': #from all possible to a fix number
                 keepway_params_l = [keepway_params[fix_idx[i]]]
@@ -1626,9 +1639,9 @@ class AdaKeepAugment(KeepAugment): #
                 win_start, win_end = 0,windowed_w
                 #find region
                 if stage_name=='keep': #from all possible to a fix number
-                    ops_names_l = [ops_names[fix_idx[i]]]
+                    ops_names_l = [ops_names[fix_idx[i]]] #only one
                 else:
-                    ops_names_l = ops_names
+                    ops_names_l = ops_search
                 for k, ops_name in enumerate(ops_names_l):
                     t_s_tmp = t_s.clone().detach().cpu()
                     region_list,inforegion_list = [],[]

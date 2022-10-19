@@ -508,6 +508,7 @@ class AdaAugkeep_TS(AdaAug):
         self.noaug_max = 0.5
         self.noaug_tensor = torch.zeros((1,self.n_ops)).float()
         self.noaug_tensor[0:0] = self.noaug_max #noaug
+        self.sub_mix = sub_mix
 
     def predict_aug_params(self, X, seq_len, mode,y=None,policy_apply=True):
         self.gf_model.eval()
@@ -558,7 +559,7 @@ class AdaAugkeep_TS(AdaAug):
         trans_image = self.after_transforms(trans_image)
         #trans_image = stop_gradient_keep(trans_image.cuda(), magnitudes[i][k], keep_thres[i]) #add keep thres
         return trans_image
-    def get_aug_valid_imgs(self, images, magnitudes,weights, keeplen_ws, keep_thres, seq_len=None):
+    def get_aug_valid_imgs(self, images, magnitudes,weights, keeplen_ws, keep_thres, seq_len=None,mask_idx=None):
         """Return the mixed latent feature
         Args:
             images ([Tensor]): [description]
@@ -576,10 +577,10 @@ class AdaAugkeep_TS(AdaAug):
             elif stage_name=='keep':
                 fix_idx = idx_matrix
             aug_imgs = self.Search_wrapper(images, model=self.gf_model,apply_func=self.get_aug_valid_img, keep_thres=keep_thres,
-                magnitudes=magnitudes,ops_names=self.ops_names,fix_idx=fix_idx,selective='paste',seq_len=seq_len)
+                magnitudes=magnitudes,ops_names=self.ops_names,fix_idx=fix_idx,selective='paste',seq_len=seq_len,mask_idx=mask_idx)
         else:
             aug_imgs = self.Search_wrapper(images, model=self.gf_model,apply_func=self.get_aug_valid_img, keep_thres=keep_thres,
-                magnitudes=magnitudes,ops_names=self.ops_names,selective='paste',seq_len=seq_len)
+                magnitudes=magnitudes,ops_names=self.ops_names,selective='paste',seq_len=seq_len,mask_idx=mask_idx)
         #(b*lens*ops,seq,ch) or 
         return aug_imgs
     def explore(self, images, seq_len, mix_feature=True,y=None,update_w=True):
@@ -592,13 +593,23 @@ class AdaAugkeep_TS(AdaAug):
         magnitudes, weights, keeplen_ws, keep_thres = self.predict_aug_params(images, seq_len,'explore',y=y)
         if not update_w:
             weights = weights.detach()
-        a_imgs = self.get_aug_valid_imgs(images, magnitudes,weights, keeplen_ws, keep_thres,seq_len=seq_len) #(b*lens*ops,seq,ch)
+        if self.sub_mix<1.0:
+            ops_mask, ops_mask_idx = make_subset(self.n_ops,self.sub_mix) #(n_ops)
+            n_ops_sub = len(ops_mask_idx)
+            weights_subset = torch.masked_select(weights,ops_mask.view(1,self.n_ops).bool().cuda()).reshape(-1,n_ops_sub) #(bs,n_ops_sub)
+            #reweight to sum=1
+            weights_subset = weights_subset / torch.sum(weights_subset.detach(),dim=1,keepdim=True)
+        else:
+            weights_subset = weights
+            n_ops_sub = self.n_ops
+            ops_mask_idx = None
+        a_imgs = self.get_aug_valid_imgs(images, magnitudes,weights, keeplen_ws, keep_thres,seq_len=seq_len,mask_idx=ops_mask_idx) #(b*lens*ops,seq,ch)
         a_features = self.gf_model.extract_features(a_imgs) #(b*keep_len*n_ops, n_hidden)
         stage_name = self.Augment_wrapper.all_stages[self.Augment_wrapper.stage] #
         if self.ind_mix:
             if stage_name=='trans':
-                ba_features = a_features.reshape(len(images), self.n_ops, -1)# batch, n_ops, n_hidden
-                out_w = weights
+                ba_features = a_features.reshape(len(images), n_ops_sub, -1)# batch, n_ops, n_hidden
+                out_w = weights_subset
             elif stage_name=='keep':
                 ba_features = a_features.reshape(len(images), self.adapt_len, -1)# batch, keep_lens, n_hidden
                 out_w = keeplen_ws
@@ -610,14 +621,14 @@ class AdaAugkeep_TS(AdaAug):
             else:
                 return ba_features, [out_w]
         else:
-            ba_features = a_features.reshape(len(images), self.n_ops, self.adapt_len, -1).permute(0,2,1,3) # batch, n_ops,keep_lens, n_hidden
+            ba_features = a_features.reshape(len(images), n_ops_sub, self.adapt_len, -1).permute(0,2,1,3) # batch, n_ops,keep_lens, n_hidden
             if mix_feature:
-                mixed_features = [w.matmul(feat) for w, feat in zip(weights, ba_features)] #[(keep_lens, n_hidden)]
+                mixed_features = [w.matmul(feat) for w, feat in zip(weights_subset, ba_features)] #[(keep_lens, n_hidden)]
                 mixed_features = [len_w.matmul(feat) for len_w,feat in zip(keeplen_ws,mixed_features)] #[(n_hidden)]
                 mixed_features = torch.stack(mixed_features, dim=0)
-                return mixed_features , [weights, keeplen_ws]
+                return mixed_features , [weights_subset, keeplen_ws]
             else:
-                return ba_features, [weights, keeplen_ws]
+                return ba_features, [weights_subset, keeplen_ws]
     def select_params(self,weights,keeplen_ws):
         if self.sampling == 'prob':
             idx_matrix = torch.multinomial(weights, self.k_ops)

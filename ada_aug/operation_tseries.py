@@ -1066,6 +1066,13 @@ def activate_bn_track_running_stats(model):
         if isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d)):
             m.track_running_stats = True
 
+def normal_slc(slc_):
+    b,w = slc_.shape #1d only
+    slc_ -= slc_.min(1, keepdim=True)[0]
+    slc_ /= slc_.max(1, keepdim=True)[0]
+    slc_ = slc_.view(b, w)
+    return slc_
+
 class KeepAugment(object): #need fix
     def __init__(self, mode, length,thres=0.6,transfrom=None,default_select=None, early=False, low = False,adapt_target='len',
         possible_segment=[1],grid_region=False, reverse=False,info_upper = 0.0, visualize=False,save_dir='./',
@@ -1308,7 +1315,7 @@ class KeepAugment(object): #need fix
             for param in model.parameters():
                 param.requires_grad = True
         return torch.stack(aug_t_s_list, dim=0) #(b*ops,seq,ch)
-    def get_importance(self, model, x, **_kwargs):
+    def get_importance(self, model, x,channel_wise=False, **_kwargs):
         for param in model.parameters():
             param.requires_grad = False
         if hasattr(model, 'lstm'):
@@ -1325,15 +1332,19 @@ class KeepAugment(object): #need fix
         score, _ = torch.max(preds, 1) #predict class
         score.mean().backward() #among batch mean
         slc_, _ = torch.max(torch.abs(x.grad), dim=2) #max of channel
-        
-        b,w = slc_.shape #1d only
-        slc_ = slc_.view(slc_.size(0), -1)
+        slc_ch, _ = torch.max(torch.abs(x.grad), dim=1) #max of channel
+        slc_ = normal_slc(slc_)
+        slc_ch = normal_slc(slc_ch)
+        '''b,w = slc_.shape #1d only
         slc_ -= slc_.min(1, keepdim=True)[0]
         slc_ /= slc_.max(1, keepdim=True)[0]
-        slc_ = slc_.view(b, w)
+        slc_ = slc_.view(b, w)'''
         if hasattr(model, 'lstm'):
             activate_bn_track_running_stats(model)
-        return slc_   
+        if channel_wise:
+            return slc_,slc_ch
+        else:
+            return slc_   
     def get_heartbeat(self,x):
         b, seq_len , channel = x.shape
         imp_map_list = []

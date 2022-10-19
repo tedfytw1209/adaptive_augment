@@ -1075,7 +1075,7 @@ def normal_slc(slc_):
 
 class KeepAugment(object): #need fix
     def __init__(self, mode, length,thres=0.6,transfrom=None,default_select=None, early=False, low = False,adapt_target='len',
-        possible_segment=[1],grid_region=False, reverse=False,info_upper = 0.0, visualize=False,save_dir='./',
+        possible_segment=[1],keep_leads=[12],grid_region=False, reverse=False,info_upper = 0.0, visualize=False,save_dir='./',
         sfreq=100,pw_len=0.2,tw_len=0.4,**_kwargs):
         assert mode in ['auto','b','p','t','rand'] #auto: all, b: heart beat(-0.2,0.4), p: p-wave(-0.2,0), t: t-wave(0,0.4)
         self.mode = mode
@@ -1095,6 +1095,7 @@ class KeepAugment(object): #need fix
         self.default_select = default_select
         self.thres = thres
         self.possible_segment = possible_segment
+        self.keep_leads = keep_leads
         self.grid_region = grid_region
         # normal, paste=> paste back important score higher then, cut=> not augment important region
         # when reverse, paste=> paste back important score lower then, cut=> augment important region
@@ -1387,7 +1388,7 @@ def stop_gradient_keep(trans_image, magnitude, keep_thre, region_list):
     return images
 class AdaKeepAugment(KeepAugment): #
     def __init__(self, mode, length,thres=0.6,transfrom=None,default_select=None, early=False, low = False,
-        possible_segment=[1],grid_region=False, reverse=False,info_upper = 0.0, thres_adapt=True, adapt_target='len',save_dir='./',
+        possible_segment=[1],keep_leads=[12],grid_region=False, reverse=False,info_upper = 0.0, thres_adapt=True, adapt_target='len',save_dir='./',
         sfreq=100,pw_len=0.2,tw_len=0.4,**_kwargs):
         assert mode in ['auto','b','p','t','rand'] #auto: all, b: heart beat(-0.2,0.4), p: p-wave(-0.2,0), t: t-wave(0,0.4)
         self.mode = mode
@@ -1411,6 +1412,7 @@ class AdaKeepAugment(KeepAugment): #
         self.thres = thres
         self.thres_adapt=thres_adapt
         self.possible_segment = possible_segment
+        self.keep_leads = keep_leads
         self.grid_region = grid_region
         self.reverse = reverse
         self.info_upper = info_upper

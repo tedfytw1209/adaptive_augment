@@ -1256,11 +1256,10 @@ class KeepAugment(object): #need fix
         seg_accum, windowed_accum = self.get_seg(seg_number,seg_len,w,windowed_w,windowed_len)
         if torch.is_tensor(mask_idx): #mask idx: (~n_ops*subset)
             mask_idx = mask_idx.detach().cpu().numpy()
-            print(mask_idx) #!tmp
-            print([ops_names[k] for k in mask_idx]) #!tmp
-            ops_search = zip(mask_idx, [ops_names[k] for k in mask_idx])
+            ops_search = [n for n in zip(mask_idx, [ops_names[k] for k in mask_idx])]
         else:
-            ops_search = enumerate(ops_names)
+            ops_search = [n for n in enumerate(ops_names)]
+        print(ops_search) #!tmp
         #print(slc_)
         #print(windowed_slc)
         #print(quant_scores)

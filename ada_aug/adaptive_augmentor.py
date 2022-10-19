@@ -331,10 +331,9 @@ class AdaAug_TS(AdaAug):
         if self.sub_mix<1.0:
             ops_mask, ops_mask_idx = make_subset(self.n_ops,self.sub_mix) #(n_ops)
             n_ops_sub = len(ops_mask_idx)
-            print('ops subset: ',n_ops_sub)
-            weights_subset = torch.masked_select(weights,ops_mask.view(1,self.n_ops)) #(bs,n_ops_sub)
+            weights_subset = torch.masked_select(weights,ops_mask.view(1,self.n_ops).bool().cuda()).reshape(-1,n_ops_sub) #(bs,n_ops_sub)
             #reweight to sum=1
-            weights_subset = weights_subset / weights_subset.detach().sum(dim=1)
+            weights_subset = weights_subset / torch.sum(weights_subset.detach(),dim=1,keepdim=True)
         else:
             weights_subset = weights
             n_ops_sub = self.n_ops

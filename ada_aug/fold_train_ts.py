@@ -92,6 +92,8 @@ parser.add_argument('--not_reweight', action='store_true', default=False, help='
 parser.add_argument('--lambda_aug', type=float, default=1.0, help="augment sample weight")
 parser.add_argument('--class_adapt', action='store_true', default=False, help='class adaptive')
 parser.add_argument('--class_embed', action='store_true', default=False, help='class embed') #tmp use
+parser.add_argument('--feature_mask', type=str, default='', help='add regular for noaugment ',
+        choices=['dropout','select',''])
 parser.add_argument('--noaug_reg', type=str, default='', help='add regular for noaugment ',
         choices=['cadd','add',''])
 parser.add_argument('--balance_loss', type=str, default='', help="loss type for model and policy training to acheive class balance")
@@ -238,7 +240,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             elif args.adapt_target=='way':
                 proj_add = 4 + 1
         self.h_model = Projection_TSeries(in_features=h_input,label_num=label_num,label_embed=label_embed,
-            n_layers=args.n_proj_layer, n_hidden=args.n_proj_hidden, augselect=args.augselect, proj_addition=proj_add).cuda()
+            n_layers=args.n_proj_layer, n_hidden=args.n_proj_hidden, augselect=args.augselect, proj_addition=proj_add,
+            feature_mask=args.feature_mask).cuda()
         utils.load_model(self.gf_model, os.path.join(self.config['BASE_PATH'],f'{args.gf_model_path}',f'fold{test_fold_idx}', 'gf_weights.pt'), location=0)
         utils.load_model(self.h_model, os.path.join(self.config['BASE_PATH'],f'{args.h_model_path}',f'fold{test_fold_idx}', 'h_weights.pt'), location=0)
         for param in self.gf_model.parameters():

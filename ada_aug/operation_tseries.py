@@ -1107,12 +1107,12 @@ class KeepAugment(object): #need fix
         self.save_dir = save_dir
         self.selective = None
         if adapt_target not in ['len','seg','way','ch']:
-            print('Keep Auto select: ',target)
             target = adapt_target
+            print('Keep Auto select: ',target)
             if 'cut' in target:
                 self.default_select = 'cut'
             else:
-                self.default_select = 'cut'
+                self.default_select = 'paste'
             if 're' in target:
                 self.reverse = True
             else:

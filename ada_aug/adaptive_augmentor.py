@@ -55,14 +55,17 @@ def stop_gradient_keep(trans_image, magnitude, keep_thre):
     images = images.detach() + adds
     return images
 
-def Normal_augment(t_series, model=None,selective='paste', apply_func=None, seq_len=None, **kwargs):
+def Normal_augment(t_series, model=None,selective='paste', apply_func=None, seq_len=None, visualize=False, **kwargs):
     trans_t_series=[]
     for i, (t_s,each_seq_len) in enumerate(zip(t_series,seq_len)):
         t_s = t_s.detach().cpu()
         trans_t_s = apply_func(t_s,i=i,seq_len=each_seq_len,**kwargs)
         trans_t_series.append(trans_t_s)
     aug_t_s = torch.stack(trans_t_series, dim=0)
-    return aug_t_s
+    if visualize:
+        return aug_t_s, None
+    else:
+        return aug_t_s
 def Normal_search(t_series, model=None,selective='paste', apply_func=None,
         ops_names=None, seq_len=None,mask_idx=None, **kwargs):
     trans_t_series=[]
@@ -357,7 +360,7 @@ class AdaAug_TS(AdaAug):
             m_pi = perturb_param(magnitude_i[idx], self.delta).detach().cpu().numpy()
             image = apply_augment(image, self.ops_names[idx], m_pi,seq_len=seq_len,aug_dict=self.aug_dict,**self.transfrom_dic)
         return self.after_transforms(image)
-    def get_training_aug_images(self, images, magnitudes, weights, seq_len=None):
+    def get_training_aug_images(self, images, magnitudes, weights, seq_len=None,visualize=False):
         # visualization
         if self.k_ops > 0:
             trans_images = []
@@ -371,7 +374,6 @@ class AdaAug_TS(AdaAug):
                 for idx in idx_matrix[i]:
                     m_pi = perturb_param(magnitudes[i][idx], self.delta).detach().cpu().numpy()
                     pil_image = apply_augment(pil_image, self.ops_names[idx], m_pi)
-
                 trans_images.append(self.after_transforms(pil_image))'''
             aug_imgs = self.Augment_wrapper(images, model=self.gf_model,apply_func=self.get_training_aug_image,
                     magnitudes=magnitudes,idx_matrix=idx_matrix,selective='paste',seq_len=seq_len)
@@ -384,7 +386,10 @@ class AdaAug_TS(AdaAug):
             aug_imgs = torch.stack(trans_images, dim=0).cuda()
         
         #aug_imgs = torch.stack(trans_images, dim=0).cuda()
-        return aug_imgs.cuda() #(b, seq, ch)
+        if visualize:
+            return aug_imgs.cuda(), idx_matrix #(b, seq, ch)
+        else:
+            return aug_imgs.cuda() #(b, seq, ch)
 
     def exploit(self, images, seq_len,y=None,policy_apply=True):
         if self.resize and 'lstm' not in self.config['gf_model_name']:

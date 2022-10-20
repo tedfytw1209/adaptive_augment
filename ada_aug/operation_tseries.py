@@ -1221,7 +1221,7 @@ class KeepAugment(object): #need fix
             quant_lead_sc = torch.quantile(slc_ch_each,lead_quant)
             lead_possible = torch.nonzero(slc_ch_each.ge(quant_lead_sc), as_tuple=True)[0]
             lead_potential = slc_ch_each[lead_possible]
-            lead_select = torch.multinomial(lead_potential,n_keep_lead)
+            lead_select = torch.sort(torch.multinomial(lead_potential,n_keep_lead))[0].detach()
             print('lead select: ',lead_select) #!tmp
             #if only lead keep
             if self.only_lead_keep:
@@ -1266,7 +1266,7 @@ class KeepAugment(object): #need fix
             
             for reg_i in range(len(inforegion_list)):
                 x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
-                t_s[x1: x2, lead_select] = inforegion_list[reg_i,lead_select]
+                t_s[x1: x2, lead_select.to(t_s.device)] = inforegion_list[reg_i][:,lead_select]
             aug_t_s_list.append(t_s)
         #back
         if self.mode=='auto':
@@ -1308,7 +1308,7 @@ class KeepAugment(object): #need fix
             quant_lead_sc = torch.quantile(slc_ch_each,lead_quant)
             lead_possible = torch.nonzero(slc_ch_each.ge(quant_lead_sc), as_tuple=True)[0]
             lead_potential = slc_ch_each[lead_possible]
-            lead_select = torch.multinomial(lead_potential,n_keep_lead)
+            lead_select = torch.sort(torch.multinomial(lead_potential,n_keep_lead))[0].detach()
             print('lead select: ',lead_select) #!tmp
             #find region
             for k, ops_name in ops_search:
@@ -1321,7 +1321,7 @@ class KeepAugment(object): #need fix
                     else:
                         t_s_aug = t_s_tmp.clone().detach().cpu()
                         t_s_tmp = augment(t_s_tmp,i=i,k=k,ops_name=ops_name,seq_len=each_seq_len,**kwargs) #some other augment if needed
-                    t_s_tmp[:, lead_select] = inforegion_list[:,lead_select]
+                    t_s_tmp[:, lead_select] = t_s_aug[:,lead_select]
                     aug_t_s_list.append(t_s_tmp)
                     continue
                 region_list,inforegion_list = [],[]
@@ -1354,7 +1354,7 @@ class KeepAugment(object): #need fix
                     #print('Size compare: ',t_s[x1: x2, :].shape,info_region.shape)
                 for reg_i in range(len(inforegion_list)):
                     x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
-                    t_s_tmp[x1: x2, lead_select] = inforegion_list[reg_i,lead_select]
+                    t_s_tmp[x1: x2, lead_select.to(t_s_tmp.device)] = inforegion_list[reg_i][:,lead_select].to(t_s_tmp.device)
                 aug_t_s_list.append(t_s_tmp)
         #back
         if self.mode=='auto':

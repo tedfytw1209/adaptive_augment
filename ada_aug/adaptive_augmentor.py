@@ -313,7 +313,7 @@ class AdaAug_TS(AdaAug):
         aug_imgs = self.Search_wrapper(images, model=self.gf_model,apply_func=self.get_aug_valid_img,
             magnitudes=magnitudes,ops_names=self.ops_names,selective='paste',seq_len=seq_len,mask_idx=mask_idx)
         #return torch.stack(trans_image_list, dim=0) #, torch.stack(trans_seqlen_list, dim=0) #(b*k_ops, seq, ch)
-        return aug_imgs
+        return aug_imgs.cuda()
 
     def explore(self, images, seq_len, mix_feature=True,y=None,update_w=True):
         """Return the mixed latent feature if mix_feature==True

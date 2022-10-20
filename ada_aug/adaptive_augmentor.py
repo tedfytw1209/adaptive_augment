@@ -80,8 +80,6 @@ def make_subset(n_ops,p):
     bernoulli = torch.distributions.bernoulli.Bernoulli(probs=1-p)
     select = bernoulli.sample([n_ops]).long()
     select_idxs = torch.nonzero(select, as_tuple=True)[0] #only one dim
-    print('Mask: ',select) #!tmp
-    print('Mask idx: ',select_idxs) #!tmp
     return select,select_idxs
 
 class AdaAug(nn.Module):

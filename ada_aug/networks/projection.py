@@ -86,7 +86,7 @@ class Projection_TSeries(nn.Module):
             if feature_mask=='dropout':
                 layers += [nn.Dropout(p=0.5)]
             elif feature_mask=='select':
-                layers += [SelectDropout(p=0.5,fea_len=n_hidden-n_label,label_len=n_label)] #custom dropout
+                layers += [SelectDropout(p=0.5,fea_len=n_hidden,label_len=n_label)] #custom dropout
             for _ in range(self.n_layers-1):
                 layers.append(nn.Linear(n_hidden + n_label, n_hidden))
                 layers.append(nn.ReLU())

@@ -109,8 +109,8 @@ class ICBEB(BaseDataset):
             each_lens = []
             for f in range(1,11):
                 data = np.load(os.path.join(self.dataset_path,self.labelgroup,X_from%f),allow_pickle=True)
-                data = input_resizeing(data)
-                label,seq_len = np.load(os.path.join(self.dataset_path,self.labelgroup,y_from%f),allow_pickle=True)
+                data,seq_len = input_resizeing(data)
+                label = np.load(os.path.join(self.dataset_path,self.labelgroup,y_from%f),allow_pickle=True)
                 datas.append(data)
                 labels.append(label)
                 each_len = len(label)

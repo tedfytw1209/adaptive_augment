@@ -1446,7 +1446,7 @@ class AdaKeepAugment(KeepAugment): #
             self.start_s,self.end_s = -0.2*sfreq,0.4*sfreq
         elif self.mode=='t':
             self.start_s,self.end_s = 0,0.4*sfreq
-        assert adapt_target in ['len','seg','way']
+        assert adapt_target in ['len','seg','way','ch']
         self.adapt_target = adapt_target
         self.way = [('cut',False),('cut',True),('paste',False),('paste',True)] #(selective,reverse)
         self.length = length #len is a list if adapt target 
@@ -1461,6 +1461,10 @@ class AdaKeepAugment(KeepAugment): #
         self.thres_adapt=thres_adapt
         self.possible_segment = possible_segment
         self.keep_leads = keep_leads
+        if adapt_target=='len' and self.keep_leads!=[12]: #adapt len
+            print(f'Keep len {self.length} with lead {self.keep_leads}')
+        elif adapt_target=='ch' and self.keep_leads!=[12]: #adapt leads
+            print(f'Using keep leads {self.keep_leads}')
         self.grid_region = grid_region
         self.reverse = reverse
         self.info_upper = info_upper
@@ -1478,13 +1482,14 @@ class AdaKeepAugment(KeepAugment): #
         slc_,slc_ch, t_series_ = self.get_slc(t_series,model)
         #windowed_slc = self.m_pool(slc_.view(b,1,w)).view(b,-1)
         #select a segment number
+        n_keep_lead = np.random.choice(self.keep_leads)
         seg_number = np.random.choice(self.possible_segment)
         total_len = self.length[0]
         #print(slc_)
         t_series_ = t_series_.detach().cpu()
         aug_t_s_list = []
         start, end = 0,w
-        for i,(t_s, slc,each_seq_len) in enumerate(zip(t_series_, slc_,seq_len)):
+        for i,(t_s, slc,slc_ch_each,each_seq_len) in enumerate(zip(t_series_, slc_,slc_ch,seq_len)):
             #len choose
             use_reverse = None
             if self.adapt_target=='len':
@@ -1495,6 +1500,8 @@ class AdaKeepAugment(KeepAugment): #
                 use_reverse = select_way[1]
             elif self.adapt_target=='seg':
                 seg_number = self.possible_segment[len_idx[i]]
+            elif self.adapt_target=='ch':
+                n_keep_lead = self.keep_leads[len_idx[i]]
             else:
                 raise 
             info_aug, compare_func, info_bound, bound_func = self.get_selective(selective,thres=keep_thres[i],use_reverse=use_reverse)
@@ -1506,6 +1513,13 @@ class AdaKeepAugment(KeepAugment): #
             seg_accum, windowed_accum = self.get_seg(seg_number,seg_len,w,windowed_w,windowed_len)
             windowed_slc_each = windowed_slc[0]
             win_start, win_end = 0,windowed_w
+            #keep lead select
+            lead_quant = min(info_aug,1.0 - n_keep_lead / 12.0)
+            quant_lead_sc = torch.quantile(slc_ch_each,lead_quant)
+            lead_possible = torch.nonzero(slc_ch_each.ge(quant_lead_sc), as_tuple=True)[0]
+            lead_potential = slc_ch_each[lead_possible]
+            lead_select = torch.multinomial(lead_potential,n_keep_lead)
+            print('lead select: ',lead_select) #!tmp
             #find region for each segment
             region_list,inforegion_list = [],[]
             for seg_idx in range(seg_number):
@@ -1551,31 +1565,38 @@ class AdaKeepAugment(KeepAugment): #
             #paste back
             for reg_i in range(len(inforegion_list)):
                 x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
-                t_s[x1: x2, :] = inforegion_list[reg_i]
+                t_s[x1: x2, lead_select] = inforegion_list[reg_i,lead_select]
             aug_t_s_list.append(t_s)
         #back
-        if self.mode=='auto':
+        if self.mode=='adapt': #bugfix10/20
             model.train()
             for param in model.parameters():
                 param.requires_grad = True
         return torch.stack(aug_t_s_list, dim=0) #(b,seq,ch)
-    def make_params(self,adapt_target,each_len=None,seg_number=None,selective=None):
+    def make_params(self,adapt_target,each_len=None,seg_number=None,selective=None,n_keep_lead=None):
         if adapt_target=='len': #search over keep len or keep segment
             keepway_params = [(selective,self.reverse) for i in range(len(self.length))]
             keeplen_params = self.length
             keepseg_params = [seg_number for i in range(len(self.length))]
+            keepleads_params = [n_keep_lead for i in range(len(self.length))]
         elif adapt_target=='way':
             keepway_params = self.way
             keeplen_params = [each_len for i in range(len(self.way))]
             keepseg_params = [seg_number for i in range(len(self.way))]
+            keepleads_params = [n_keep_lead for i in range(len(self.way))]
         elif adapt_target=='seg':
             keepway_params = [(selective,self.reverse) for i in range(len(self.possible_segment))]
             keeplen_params = [each_len for i in range(len(self.possible_segment))]
             keepseg_params = self.possible_segment
+            keepleads_params = [n_keep_lead for i in range(len(self.possible_segment))]
+        elif adapt_target=='ch':
+            keepway_params = [(selective,self.reverse) for i in range(len(self.keep_leads))]
+            keeplen_params = [each_len for i in range(len(self.keep_leads))]
+            keepseg_params = [seg_number for i in range(len(self.keep_leads))]
+            keepleads_params = self.keep_leads
         else:
             raise
-
-        return keepway_params, keeplen_params, keepseg_params
+        return keepway_params, keeplen_params, keepseg_params, keepleads_params
     def Augment_search(self, t_series, model=None,selective='paste', apply_func=None,ops_names=None, keep_thres=None, seq_len=None,
             mask_idx=None, **kwargs):
         b,w,c = t_series.shape
@@ -1584,16 +1605,16 @@ class AdaKeepAugment(KeepAugment): #
         magnitudes = kwargs['magnitudes']
         t_series_ = t_series_.detach().cpu()
         aug_t_s_list = []
-        each_len, seg_number = self.length[0], self.possible_segment[0]
-        keepway_params, keeplen_params, keepseg_params = self.make_params(self.adapt_target,each_len,seg_number,selective)
+        each_len, seg_number, n_keep_lead = self.length[0], self.possible_segment[0], self.keep_leads[0] #!!! tmp use
+        keepway_params, keeplen_params, keepseg_params, keepleads_params = self.make_params(self.adapt_target,each_len,seg_number,selective,n_keep_lead)
         if torch.is_tensor(mask_idx): #mask idx: (~n_ops*subset)
             mask_idx = mask_idx.detach().cpu().numpy()
             ops_search = [n for n in zip(mask_idx, [ops_names[k] for k in mask_idx])]
         else:
             ops_search = [n for n in enumerate(ops_names)]
         
-        for i,(t_s, slc,each_seq_len) in enumerate(zip(t_series_, slc_,seq_len)):
-            for (each_way,each_len, seg_number) in zip(keepway_params,keeplen_params,keepseg_params):
+        for i,(t_s, slc,slc_ch_each,each_seq_len) in enumerate(zip(t_series_, slc_,slc_ch,seq_len)):
+            for (each_way,each_len, seg_number, each_n_lead) in zip(keepway_params,keeplen_params,keepseg_params,keepleads_params):
                 (selective, use_reverse) = each_way
                 info_aug, compare_func, info_bound, bound_func = self.get_selective(selective,thres=keep_thres[i],use_reverse=use_reverse)
                 #select a segment number
@@ -1605,6 +1626,13 @@ class AdaKeepAugment(KeepAugment): #
                 seg_accum, windowed_accum = self.get_seg(seg_number,seg_len,w,windowed_w,windowed_len)
                 windowed_slc_each = windowed_slc[0]
                 win_start, win_end = 0,windowed_w
+                #keep lead select
+                lead_quant = min(info_aug,1.0 - each_n_lead / 12.0)
+                quant_lead_sc = torch.quantile(slc_ch_each,lead_quant)
+                lead_possible = torch.nonzero(slc_ch_each.ge(quant_lead_sc), as_tuple=True)[0]
+                lead_potential = slc_ch_each[lead_possible]
+                lead_select = torch.multinomial(lead_potential,each_n_lead)
+                print('lead select: ',lead_select) #!tmp
                 #find region
                 for k, ops_name in enumerate(ops_search):
                     t_s_tmp = t_s.clone().detach().cpu()
@@ -1646,7 +1674,7 @@ class AdaKeepAugment(KeepAugment): #
                         #print('Size compare: ',t_s[x1: x2, :].shape,info_region.shape)
                     for reg_i in range(len(inforegion_list)):
                         x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
-                        t_s_tmp[x1: x2, :] = inforegion_list[reg_i]
+                        t_s_tmp[x1: x2, lead_select] = inforegion_list[reg_i,lead_select]
                     t_s_tmp = stop_gradient_keep(t_s_tmp.cuda(), magnitudes[i][k], keep_thres[i],region_list) #add keep thres
                     aug_t_s_list.append(t_s_tmp)
         #back
@@ -1670,23 +1698,24 @@ class AdaKeepAugment(KeepAugment): #
         #keep param or transfrom param
         if stage_name=='trans':
             keeplen_params = fix_idx
-        #keep len or segment
-        each_len, seg_number = self.length[0], self.possible_segment[0]
-        keepway_params, keeplen_params, keepseg_params = self.make_params(self.adapt_target,each_len,seg_number,selective)
+        #keep len or segment, not consider multiple objective now!!!
+        each_len, seg_number, n_keep_lead = self.length[0], self.possible_segment[0], self.keep_leads[0] #!!! tmp use
+        keepway_params, keeplen_params, keepseg_params, keepleads_params = self.make_params(self.adapt_target,each_len,seg_number,selective,n_keep_lead)
         if torch.is_tensor(mask_idx): #mask idx: (~n_ops*subset)
             mask_idx = mask_idx.detach().cpu().numpy()
             ops_search = [n for n in zip(mask_idx, [ops_names[k] for k in mask_idx])]
         else:
             ops_search = [n for n in enumerate(ops_names)]
         
-        for i,(t_s, slc,each_seq_len) in enumerate(zip(t_series_, slc_,seq_len)):
+        for i,(t_s, slc,slc_ch_each,each_seq_len) in enumerate(zip(t_series_, slc_,slc_ch,seq_len)):
             if stage_name=='trans': #from all possible to a fix number
                 keepway_params_l = [keepway_params[fix_idx[i]]]
                 keeplen_params_l = [keeplen_params[fix_idx[i]]]
                 keepseg_params_l = [keepseg_params[fix_idx[i]]]
+                keepleads_params_l = [keepleads_params[fix_idx[i]]]
             else:
-                keepway_params_l,keeplen_params_l,keepseg_params_l = keepway_params,keeplen_params,keepseg_params
-            for (each_way,each_len, seg_number) in zip(keepway_params_l,keeplen_params_l,keepseg_params_l):
+                keepway_params_l,keeplen_params_l,keepseg_params_l,keepleads_params_l = keepway_params,keeplen_params,keepseg_params,keepleads_params
+            for (each_way,each_len, seg_number, each_n_lead) in zip(keepway_params_l,keeplen_params_l,keepseg_params_l,keepleads_params_l):
                 (selective, use_reverse) = each_way
                 info_aug, compare_func, info_bound, bound_func = self.get_selective(selective,thres=keep_thres[i],use_reverse=use_reverse)
                 #select a segment number
@@ -1698,6 +1727,13 @@ class AdaKeepAugment(KeepAugment): #
                 seg_accum, windowed_accum = self.get_seg(seg_number,seg_len,w,windowed_w,windowed_len)
                 windowed_slc_each = windowed_slc[0]
                 win_start, win_end = 0,windowed_w
+                #keep lead select
+                lead_quant = min(info_aug,1.0 - each_n_lead / 12.0)
+                quant_lead_sc = torch.quantile(slc_ch_each,lead_quant)
+                lead_possible = torch.nonzero(slc_ch_each.ge(quant_lead_sc), as_tuple=True)[0]
+                lead_potential = slc_ch_each[lead_possible]
+                lead_select = torch.multinomial(lead_potential,each_n_lead)
+                print('lead select: ',lead_select) #!tmp
                 #find region
                 if stage_name=='keep': #from all possible to a fix number
                     ops_names_l = [ops_names[fix_idx[i]]] #only one
@@ -1741,7 +1777,7 @@ class AdaKeepAugment(KeepAugment): #
                         #print('Size compare: ',t_s[x1: x2, :].shape,info_region.shape)
                     for reg_i in range(len(inforegion_list)):
                         x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
-                        t_s_tmp[x1: x2, :] = inforegion_list[reg_i]
+                        t_s_tmp[x1: x2, lead_select] = inforegion_list[reg_i,lead_select]
                     t_s_tmp = stop_gradient_keep(t_s_tmp.cuda(), magnitudes[i][k], keep_thres[i],region_list) #add keep thres
                     aug_t_s_list.append(t_s_tmp)
         #back

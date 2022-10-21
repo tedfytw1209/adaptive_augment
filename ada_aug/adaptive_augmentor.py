@@ -461,9 +461,9 @@ class AdaAug_TS(AdaAug):
                 if torch.is_tensor(slc):
                     ax2.plot(t,slc[idx])
                 if torch.is_tensor(info_reg):
-                    for i in range(info_reg.shape[1]):
-                        x1 = int(info_reg[idx,i,0])
-                        x2 = int(info_reg[idx,i,1])
+                    for s in range(info_reg.shape[1]):
+                        x1 = int(info_reg[idx,s,0])
+                        x2 = int(info_reg[idx,s,1])
                         ax2.plot(t[x1:x2],slc[idx,x1:x2],'ro')
                 if torch.is_tensor(ops_idx):
                     op_name = self.ops_names[ops_idx[idx][0]]

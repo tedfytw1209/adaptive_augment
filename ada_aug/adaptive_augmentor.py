@@ -417,8 +417,8 @@ class AdaAug_TS(AdaAug):
             slc_out,slc_ch = self.Augment_wrapper.visualize_slc(images, model=self.gf_model)
         print('Visualize for Debug')
         print(slc_ch)
-        self.print_imgs(imgs=images,label=target,title='id',slc=slc_out)
-        self.print_imgs(imgs=aug_imgs,label=target,title='aug',slc=slc_out)
+        self.print_imgs(imgs=images,label=target,title='id',slc=slc_out,info_reg=info_region,ops_idx=ops_idx)
+        self.print_imgs(imgs=aug_imgs,label=target,title='aug',slc=slc_out,info_reg=info_region,ops_idx=ops_idx)
         
     def forward(self, images, seq_len, mode, mix_feature=True,y=None,update_w=True,policy_apply=True):
         if mode == 'explore':
@@ -442,8 +442,10 @@ class AdaAug_TS(AdaAug):
             if torch.is_tensor(slc):
                 ax2.plot(t,slc[idx])
             if torch.is_tensor(info_reg):
-                x1,x2 = info_reg[idx,0,:]
-                ax2.plot(t[x1:x2],slc[idx,x1:x2])
+                for i in range(info_reg.shape[1]):
+                    x1 = int(info_reg[idx,i,0])
+                    x2 = int(info_reg[idx,i,1])
+                    ax2.plot(t[x1:x2],slc[idx,x1:x2],'ro')
             if torch.is_tensor(ops_idx):
                 op_name = self.ops_names[ops_idx[idx][0]]
             else:

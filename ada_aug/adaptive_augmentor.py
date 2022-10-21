@@ -77,9 +77,13 @@ def Normal_search(t_series, model=None,selective='paste', apply_func=None,
     return torch.stack(trans_t_series, dim=0) #, torch.stack(trans_seqlen_list, dim=0) #(b*k_ops, seq, ch)
 
 def make_subset(n_ops,p):
-    bernoulli = torch.distributions.bernoulli.Bernoulli(probs=1-p)
-    select = bernoulli.sample([n_ops]).long()
-    select_idxs = torch.nonzero(select, as_tuple=True)[0] #only one dim
+    sum_sel = 0
+    while sum_sel==0:
+        bernoulli = torch.distributions.bernoulli.Bernoulli(probs=1-p)
+        select = bernoulli.sample([n_ops]).long()
+        select_idxs = torch.nonzero(select, as_tuple=True)[0] #only one dim
+        sum_sel = select.sum()
+        print('select n_ops: ',sum_sel)
     return select,select_idxs
 
 class AdaAug(nn.Module):

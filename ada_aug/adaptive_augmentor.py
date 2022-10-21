@@ -78,9 +78,13 @@ def Normal_search(t_series, model=None,selective='paste', apply_func=None,
     return torch.stack(trans_t_series, dim=0) #, torch.stack(trans_seqlen_list, dim=0) #(b*k_ops, seq, ch)
 
 def make_subset(n_ops,p):
-    bernoulli = torch.distributions.bernoulli.Bernoulli(probs=1-p)
-    select = bernoulli.sample([n_ops]).long()
-    select_idxs = torch.nonzero(select, as_tuple=True)[0] #only one dim
+    sum_sel = 0
+    while sum_sel==0:
+        bernoulli = torch.distributions.bernoulli.Bernoulli(probs=1-p)
+        select = bernoulli.sample([n_ops]).long()
+        select_idxs = torch.nonzero(select, as_tuple=True)[0] #only one dim
+        sum_sel = select.sum()
+        print('select n_ops: ',sum_sel)
     return select,select_idxs
 
 class AdaAug(nn.Module):
@@ -314,7 +318,7 @@ class AdaAug_TS(AdaAug):
         aug_imgs = self.Search_wrapper(images, model=self.gf_model,apply_func=self.get_aug_valid_img,
             magnitudes=magnitudes,ops_names=self.ops_names,selective='paste',seq_len=seq_len,mask_idx=mask_idx)
         #return torch.stack(trans_image_list, dim=0) #, torch.stack(trans_seqlen_list, dim=0) #(b*k_ops, seq, ch)
-        return aug_imgs
+        return aug_imgs.cuda()
 
     def explore(self, images, seq_len, mix_feature=True,y=None,update_w=True):
         """Return the mixed latent feature if mix_feature==True

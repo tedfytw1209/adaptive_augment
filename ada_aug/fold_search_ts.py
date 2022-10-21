@@ -79,6 +79,7 @@ parser.add_argument('--n_proj_hidden', type=int, default=128, help="number of hi
 parser.add_argument('--mapselect', action='store_true', default=False, help='use map select for multilabel')
 parser.add_argument('--valselect', action='store_true', default=False, help='use valid select')
 parser.add_argument('--augselect', type=str, default='', help="augmentation selection")
+parser.add_argument('--policy_optim', type=str, default='adam', help="policy optim")
 parser.add_argument('--alpha', type=float, default=1.0, help="alpha adpat")
 parser.add_argument('--train_sampler', type=str, default='', help='for train sampler',
         choices=['weight','wmaxrel',''])
@@ -256,14 +257,34 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             n_layers=args.n_proj_layer, n_hidden=args.n_proj_hidden, augselect=args.augselect, proj_addition=proj_add,
             feature_mask=args.feature_mask).cuda()
         #  training settings
-        self.gf_optimizer = torch.optim.AdamW(self.gf_model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay) #follow ptbxl batchmark
+        self.gf_optimizer = torch.optim.AdamW(self.gf_model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
         self.scheduler = torch.optim.lr_scheduler.OneCycleLR(self.gf_optimizer, max_lr=args.learning_rate, 
             epochs = args.epochs, steps_per_epoch = len(self.train_queue)) #follow ptbxl batchmark
-        self.h_optimizer = torch.optim.Adam(
-            self.h_model.parameters(),
-            lr=args.proj_learning_rate,
-            betas=(0.9, 0.999),
-            weight_decay=args.proj_weight_decay)
+        if args.policy_optim=='adam': #can try weight decay=0 case
+            self.h_optimizer = torch.optim.Adam(
+                self.h_model.parameters(),
+                lr=args.proj_learning_rate,
+                betas=(0.9, 0.999),
+                weight_decay=args.proj_weight_decay)
+        elif args.policy_optim=='sgdm': #SGD momentum as CADDA
+            self.h_optimizer = torch.optim.SGD(
+                self.h_model.parameters(),
+                lr=args.proj_learning_rate,
+                momentum=0.9,
+                weight_decay=args.proj_weight_decay)
+        elif args.policy_optim=='sgd': #SGD
+            self.h_optimizer = torch.optim.SGD(
+                self.h_model.parameters(),
+                lr=args.proj_learning_rate,
+                weight_decay=args.proj_weight_decay)
+        elif args.policy_optim=='rmsprop': #RMSprop
+            self.h_optimizer = torch.optim.RMSprop(
+                self.h_model.parameters(),
+                lr=args.proj_learning_rate,
+                weight_decay=args.proj_weight_decay)
+        else:
+            print(f'{args.policy_optim} Unknown optimizer')
+            raise
         train_labels = self.train_queue.dataset.dataset.label
         search_labels = self.search_queue.dataset.dataset.label
         default_criterion = make_loss(multilabel=multilabel)

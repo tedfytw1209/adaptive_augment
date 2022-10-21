@@ -1191,10 +1191,10 @@ class KeepAugment(object): #need fix
             plt.clf()
             plt.plot(t, e_slc)
             plt.savefig(f'{self.save_dir}/img{idx}_slc.png')
-        return slc_
+        return slc_, slc_ch
 
     #kwargs for apply_func, batch_inputs
-    def __call__(self, t_series, model=None,selective='paste', apply_func=None, seq_len=None, **kwargs):
+    def __call__(self, t_series, model=None,selective='paste', apply_func=None, seq_len=None,visualize=False, **kwargs):
         b,w,c = t_series.shape
         augment, selective = self.get_augment(apply_func,selective)
         slc_,slc_ch, t_series_ = self.get_slc(t_series,model) #slc_:(bs,seqlen), slc_ch:(bs,chs)
@@ -1212,6 +1212,7 @@ class KeepAugment(object): #need fix
         seg_accum, windowed_accum = self.get_seg(seg_number,seg_len,w,windowed_w,windowed_len)
         #print(slc_)
         t_series_ = t_series_.detach().cpu()
+        info_region_record = np.zeros(b,seg_number,2)
         aug_t_s_list = []
         start, end = 0,w
         win_start, win_end = 0,windowed_w
@@ -1253,6 +1254,7 @@ class KeepAugment(object): #need fix
                         break
                 info_region = t_s[x1: x2,:].clone().detach().cpu()
                 inforegion_list.append(info_region)
+                info_region_record[i,seg_idx,:] = [x1,x2]
             #augment & paste back
             if selective=='cut':
                 t_s_aug = t_s.clone().detach().cpu()
@@ -1273,7 +1275,9 @@ class KeepAugment(object): #need fix
             model.train()
             for param in model.parameters():
                 param.requires_grad = True
-        return torch.stack(aug_t_s_list, dim=0) #(b,seq,ch)
+        out = torch.stack(aug_t_s_list, dim=0)
+        info_region_record = torch.from_numpy(info_region_record)
+        return out, info_region_record
     def Augment_search(self, t_series, model=None,selective='paste', apply_func=None,ops_names=None, seq_len=None,mask_idx=None, **kwargs):
         b,w,c = t_series.shape
         augment, selective = self.get_augment(apply_func,selective)

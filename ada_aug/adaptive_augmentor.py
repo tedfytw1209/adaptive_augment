@@ -55,17 +55,15 @@ def stop_gradient_keep(trans_image, magnitude, keep_thre):
     images = images.detach() + adds
     return images
 
-def Normal_augment(t_series, model=None,selective='paste', apply_func=None, seq_len=None, visualize=False, **kwargs):
+def Normal_augment(t_series, model=None,selective='paste', apply_func=None, seq_len=None, **kwargs):
     trans_t_series=[]
     for i, (t_s,each_seq_len) in enumerate(zip(t_series,seq_len)):
         t_s = t_s.detach().cpu()
         trans_t_s = apply_func(t_s,i=i,seq_len=each_seq_len,**kwargs)
         trans_t_series.append(trans_t_s)
     aug_t_s = torch.stack(trans_t_series, dim=0)
-    if visualize:
-        return aug_t_s, None
-    else:
-        return aug_t_s
+    return aug_t_s, None
+
 def Normal_search(t_series, model=None,selective='paste', apply_func=None,
         ops_names=None, seq_len=None,mask_idx=None, **kwargs):
     trans_t_series=[]
@@ -375,7 +373,7 @@ class AdaAug_TS(AdaAug):
                     m_pi = perturb_param(magnitudes[i][idx], self.delta).detach().cpu().numpy()
                     pil_image = apply_augment(pil_image, self.ops_names[idx], m_pi)
                 trans_images.append(self.after_transforms(pil_image))'''
-            aug_imgs = self.Augment_wrapper(images, model=self.gf_model,apply_func=self.get_training_aug_image,
+            aug_imgs,reg_idx = self.Augment_wrapper(images, model=self.gf_model,apply_func=self.get_training_aug_image,
                     magnitudes=magnitudes,idx_matrix=idx_matrix,selective='paste',seq_len=seq_len)
         else:
             trans_images = []
@@ -387,7 +385,7 @@ class AdaAug_TS(AdaAug):
         
         #aug_imgs = torch.stack(trans_images, dim=0).cuda()
         if visualize:
-            return aug_imgs.cuda(), idx_matrix #(b, seq, ch)
+            return aug_imgs.cuda(),reg_idx, idx_matrix #(aug_imgs, keep region, operation use)
         else:
             return aug_imgs.cuda() #(b, seq, ch)
 
@@ -414,10 +412,11 @@ class AdaAug_TS(AdaAug):
         target = y.detach().cpu()
         #resize_imgs = F.interpolate(images, size=self.search_d) if self.resize else images
         magnitudes, weights = self.predict_aug_params(resize_imgs, seq_len, 'exploit',y=policy_y)
-        aug_imgs = self.get_training_aug_images(images, magnitudes, weights,seq_len=seq_len)
+        aug_imgs, info_region, ops_idx = self.get_training_aug_images(images, magnitudes, weights,seq_len=seq_len,visualize=True)
         if self.use_keepaug:
-            slc_out = self.Augment_wrapper.visualize_slc(images, model=self.gf_model)
+            slc_out,slc_ch = self.Augment_wrapper.visualize_slc(images, model=self.gf_model)
         print('Visualize for Debug')
+        print(slc_ch)
         self.print_imgs(imgs=images,label=target,title='id',slc=slc_out)
         self.print_imgs(imgs=aug_imgs,label=target,title='aug',slc=slc_out)
         
@@ -431,7 +430,7 @@ class AdaAug_TS(AdaAug):
         elif mode == 'inference':
             return images
     
-    def print_imgs(self,imgs,label,title='',slc=None):
+    def print_imgs(self,imgs,label,title='',slc=None,info_reg=None,ops_idx=None):
         imgs = imgs.cpu().detach().numpy()
         t = np.linspace(0, 10, 1000)
         for idx,(img,e_lb) in enumerate(zip(imgs,label)):
@@ -442,9 +441,16 @@ class AdaAug_TS(AdaAug):
                 ax1.plot(t, img[:,i])
             if torch.is_tensor(slc):
                 ax2.plot(t,slc[idx])
+            if torch.is_tensor(info_reg):
+                x1,x2 = info_reg[idx,0,:]
+                ax2.plot(t[x1:x2],slc[idx,x1:x2])
+            if torch.is_tensor(ops_idx):
+                op_name = self.ops_names[ops_idx[idx][0]]
+            else:
+                op_name = ''
             if title:
-                plt.title(f'{title}_{e_lb}')
-            plt.savefig(f'{self.save_dir}/img{idx}_{title}_{e_lb}.png')
+                plt.title(f'{title}{op_name}_{e_lb}')
+            plt.savefig(f'{self.save_dir}/img{idx}_{title}{op_name}_{e_lb}.png')
     
     def update_alpha(self,class_acc):
         self.alpha = torch.tensor(class_acc).view(1,-1).cuda()

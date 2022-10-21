@@ -1312,7 +1312,7 @@ class KeepAugment(object): #need fix
             quant_lead_sc = torch.quantile(slc_ch_each,lead_quant)
             lead_possible = torch.nonzero(slc_ch_each.ge(quant_lead_sc), as_tuple=True)[0]
             lead_potential = slc_ch_each[lead_possible]
-            lead_select = torch.sort(torch.multinomial(lead_potential,n_keep_lead))[0].detach()
+            lead_select = torch.sort(lead_possible[torch.multinomial(lead_potential,n_keep_lead)])[0].detach()
             print('lead select: ',lead_select) #!tmp
             #find region
             for k, ops_name in ops_search:
@@ -1522,7 +1522,7 @@ class AdaKeepAugment(KeepAugment): #
             quant_lead_sc = torch.quantile(slc_ch_each,lead_quant)
             lead_possible = torch.nonzero(slc_ch_each.ge(quant_lead_sc), as_tuple=True)[0]
             lead_potential = slc_ch_each[lead_possible]
-            lead_select = torch.multinomial(lead_potential,n_keep_lead)
+            lead_select = torch.sort(lead_possible[torch.multinomial(lead_potential,n_keep_lead)])[0].detach()
             print('lead select: ',lead_select) #!tmp
             #find region for each segment
             region_list,inforegion_list = [],[]
@@ -1635,7 +1635,7 @@ class AdaKeepAugment(KeepAugment): #
                 quant_lead_sc = torch.quantile(slc_ch_each,lead_quant)
                 lead_possible = torch.nonzero(slc_ch_each.ge(quant_lead_sc), as_tuple=True)[0]
                 lead_potential = slc_ch_each[lead_possible]
-                lead_select = torch.multinomial(lead_potential,each_n_lead)
+                lead_select = torch.sort(lead_possible[torch.multinomial(lead_potential,each_n_lead)])[0].detach()
                 print('lead select: ',lead_select) #!tmp
                 #find region
                 for k, ops_name in enumerate(ops_search):
@@ -1736,7 +1736,7 @@ class AdaKeepAugment(KeepAugment): #
                 quant_lead_sc = torch.quantile(slc_ch_each,lead_quant)
                 lead_possible = torch.nonzero(slc_ch_each.ge(quant_lead_sc), as_tuple=True)[0]
                 lead_potential = slc_ch_each[lead_possible]
-                lead_select = torch.multinomial(lead_potential,each_n_lead)
+                lead_select = torch.sort(lead_possible[torch.multinomial(lead_potential,each_n_lead)])[0].detach()
                 print('lead select: ',lead_select) #!tmp
                 #find region
                 if stage_name=='keep': #from all possible to a fix number

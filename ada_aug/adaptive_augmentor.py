@@ -453,6 +453,25 @@ class AdaAug_TS(AdaAug):
             if title:
                 plt.title(f'{title}{op_name}_{e_lb}')
             plt.savefig(f'{self.save_dir}/img{idx}_{title}{op_name}_{e_lb}.png')
+            #plt one each
+            for i in  range(channel_num):
+                plt.clf()
+                fig, (ax1, ax2) = plt.subplots(2, sharex=True, gridspec_kw={'height_ratios': [2, 1]})
+                ax1.plot(t, img[:,i])
+                if torch.is_tensor(slc):
+                    ax2.plot(t,slc[idx])
+                if torch.is_tensor(info_reg):
+                    for i in range(info_reg.shape[1]):
+                        x1 = int(info_reg[idx,i,0])
+                        x2 = int(info_reg[idx,i,1])
+                        ax2.plot(t[x1:x2],slc[idx,x1:x2],'ro')
+                if torch.is_tensor(ops_idx):
+                    op_name = self.ops_names[ops_idx[idx][0]]
+                else:
+                    op_name = ''
+                if title:
+                    plt.title(f'{title}{op_name}_{e_lb}')
+                plt.savefig(f'{self.save_dir}/img{idx}ch{i}_{title}{op_name}_{e_lb}.png')
     
     def update_alpha(self,class_acc):
         self.alpha = torch.tensor(class_acc).view(1,-1).cuda()

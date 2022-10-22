@@ -1230,7 +1230,7 @@ class KeepAugment(object): #need fix
             #keep lead select, not efficent
             if n_keep_lead!=12: 
                 quant_lead_sc = torch.quantile(slc_ch_each,lead_quant)
-                lead_possible = torch.nonzero(slc_ch_each.ge(quant_lead_sc[i]), as_tuple=True)[0]
+                lead_possible = torch.nonzero(slc_ch_each.ge(quant_lead_sc), as_tuple=True)[0]
                 lead_potential = slc_ch_each[lead_possible]
                 lead_select = torch.sort(lead_possible[torch.multinomial(lead_potential,n_keep_lead)])[0].detach()
             else:

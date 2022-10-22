@@ -102,6 +102,7 @@ parser.add_argument('--keep_mode', type=str, default='auto', help='info keep mod
 parser.add_argument('--adapt_target', type=str, default='len', help='info keep mode',
         choices=['len','seg','way','ch','recut','repaste','recut','repaste'])
 parser.add_argument('--keep_seg', type=int, nargs='+', default=[1], help='info keep segment mode')
+parser.add_argument('--keep_lead', type=int, nargs='+', default=[12], help='leads (channel) keep, 12 means all lead keep')
 parser.add_argument('--keep_grid', action='store_true', default=False, help='info keep augment grid')
 parser.add_argument('--keep_thres', type=float, default=0.6, help="keep augment weight (lower protect more)")
 parser.add_argument('--thres_adapt', action='store_false', default=True, help="keep augment thres adapt")
@@ -130,8 +131,13 @@ description += args.noaug_reg
 if args.diff_aug and not args.not_reweight:
     description+='rew'
 if args.keep_aug:
+    keep_ch_str = ''.join([str(i) for i in args.keep_lead])
+    if keep_ch_str=='12':
+        keep_ch_str=''
+    else:
+        keep_ch_str='ch'+keep_ch_str
     keep_seg_str = ''.join([str(i) for i in args.keep_seg])
-    description+=f'keep{args.keep_mode}{keep_seg_str}'
+    description+=f'keep{args.keep_mode}{keep_seg_str}{keep_ch_str}'
 now_str = time.strftime("%Y%m%d-%H%M%S")
 args.save = '{}-{}-{}{}'.format(now_str, args.save,Aug_type,description+args.augselect+args.balance_loss)
 if debug:
@@ -261,7 +267,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                     'target_d': get_dataset_dimension(args.dataset),
                     'gf_model_name': args.gf_model_name}
         keepaug_config = {'keep_aug':args.keep_aug,'mode':args.keep_mode,'thres':args.keep_thres,'length':args.keep_len,'thres_adapt':args.thres_adapt,
-            'grid_region':args.keep_grid, 'possible_segment': args.keep_seg, 'info_upper': args.keep_bound, 'sfreq':self.sfreq, 'adapt_target':args.adapt_target}
+            'grid_region':args.keep_grid, 'possible_segment': args.keep_seg, 'info_upper': args.keep_bound, 'sfreq':self.sfreq,
+            'adapt_target':args.adapt_target,'keep_leads':args.keep_lead}
         trans_config = {'sfreq':self.sfreq}
         if args.keep_mode=='adapt':
             keepaug_config['mode'] = 'auto'

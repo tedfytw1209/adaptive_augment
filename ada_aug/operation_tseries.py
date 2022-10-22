@@ -1297,6 +1297,7 @@ class KeepAugment(object): #need fix
         #windowed_slc = self.m_pool(slc_.view(b,1,w)).view(b,-1)
         #select a segment number
         n_keep_lead = np.random.choice(self.keep_leads)
+        lead_quant = min(info_aug,1.0 - n_keep_lead / 12.0)
         seg_number = np.random.choice(self.possible_segment)
         seg_len = int(w / seg_number)
         info_len = int(self.length/seg_number)
@@ -1319,11 +1320,14 @@ class KeepAugment(object): #need fix
         win_start, win_end = 0,windowed_w
         for i,(t_s, slc,slc_ch_each, windowed_slc_each, each_seq_len) in enumerate(zip(t_series_, slc_,slc_ch, windowed_slc,seq_len)):
             #keep lead select
-            lead_quant = min(info_aug,1.0 - n_keep_lead / 12.0)
-            quant_lead_sc = torch.quantile(slc_ch_each,lead_quant)
-            lead_possible = torch.nonzero(slc_ch_each.ge(quant_lead_sc), as_tuple=True)[0]
-            lead_potential = slc_ch_each[lead_possible]
-            lead_select = torch.sort(lead_possible[torch.multinomial(lead_potential,n_keep_lead)])[0].detach()
+            if n_keep_lead!=12: 
+                quant_lead_sc = torch.quantile(slc_ch_each,lead_quant)
+                lead_possible = torch.nonzero(slc_ch_each.ge(quant_lead_sc), as_tuple=True)[0]
+                lead_potential = slc_ch_each[lead_possible]
+                lead_select = torch.sort(lead_possible[torch.multinomial(lead_potential,n_keep_lead)])[0].detach()
+            else:
+                lead_select = self.default_leads
+            
             #find region
             for k, ops_name in ops_search:
                 t_s_tmp = t_s.clone().detach().cpu()
@@ -1528,12 +1532,15 @@ class AdaKeepAugment(KeepAugment): #
             windowed_slc_each = windowed_slc[0]
             win_start, win_end = 0,windowed_w
             #keep lead select
-            lead_quant = min(info_aug,1.0 - n_keep_lead / 12.0)
-            quant_lead_sc = torch.quantile(slc_ch_each,lead_quant)
-            lead_possible = torch.nonzero(slc_ch_each.ge(quant_lead_sc), as_tuple=True)[0]
-            lead_potential = slc_ch_each[lead_possible]
-            lead_select = torch.sort(lead_possible[torch.multinomial(lead_potential,n_keep_lead)])[0].detach()
-            print('lead select: ',lead_select) #!tmp
+            if n_keep_lead!=12: 
+                lead_quant = min(info_aug,1.0 - n_keep_lead / 12.0)
+                quant_lead_sc = torch.quantile(slc_ch_each,lead_quant)
+                lead_possible = torch.nonzero(slc_ch_each.ge(quant_lead_sc), as_tuple=True)[0]
+                lead_potential = slc_ch_each[lead_possible]
+                lead_select = torch.sort(lead_possible[torch.multinomial(lead_potential,n_keep_lead)])[0].detach()
+            else:
+                lead_select = self.default_leads
+            #print('lead select: ',lead_select) #!tmp
             #find region for each segment
             region_list,inforegion_list = [],[]
             for seg_idx in range(seg_number):
@@ -1579,7 +1586,7 @@ class AdaKeepAugment(KeepAugment): #
             #paste back
             for reg_i in range(len(inforegion_list)):
                 x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
-                t_s[x1: x2, lead_select.to(t_s.device)] = inforegion_list[reg_i,lead_select.to(t_s.device)]
+                t_s[x1: x2, lead_select.to(t_s.device)] = inforegion_list[reg_i][:,lead_select.to(t_s.device)]
             aug_t_s_list.append(t_s)
         #back
         if self.mode=='adapt': #bugfix10/20
@@ -1641,11 +1648,14 @@ class AdaKeepAugment(KeepAugment): #
                 windowed_slc_each = windowed_slc[0]
                 win_start, win_end = 0,windowed_w
                 #keep lead select
-                lead_quant = min(info_aug,1.0 - each_n_lead / 12.0)
-                quant_lead_sc = torch.quantile(slc_ch_each,lead_quant)
-                lead_possible = torch.nonzero(slc_ch_each.ge(quant_lead_sc), as_tuple=True)[0]
-                lead_potential = slc_ch_each[lead_possible]
-                lead_select = torch.sort(lead_possible[torch.multinomial(lead_potential,each_n_lead)])[0].detach()
+                if n_keep_lead!=12:
+                    lead_quant = min(info_aug,1.0 - each_n_lead / 12.0)
+                    quant_lead_sc = torch.quantile(slc_ch_each,lead_quant)
+                    lead_possible = torch.nonzero(slc_ch_each.ge(quant_lead_sc), as_tuple=True)[0]
+                    lead_potential = slc_ch_each[lead_possible]
+                    lead_select = torch.sort(lead_possible[torch.multinomial(lead_potential,each_n_lead)])[0].detach()
+                else:
+                    lead_select = self.default_leads
                 print('lead select: ',lead_select) #!tmp
                 #find region
                 for k, ops_name in enumerate(ops_search):
@@ -1688,7 +1698,7 @@ class AdaKeepAugment(KeepAugment): #
                         #print('Size compare: ',t_s[x1: x2, :].shape,info_region.shape)
                     for reg_i in range(len(inforegion_list)):
                         x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
-                        t_s_tmp[x1: x2, lead_select.to(t_s_tmp.device)] = inforegion_list[reg_i,lead_select.to(t_s_tmp.device)]
+                        t_s_tmp[x1: x2, lead_select.to(t_s_tmp.device)] = inforegion_list[reg_i][:,lead_select.to(t_s_tmp.device)]
                     t_s_tmp = stop_gradient_keep(t_s_tmp.cuda(), magnitudes[i][k], keep_thres[i],region_list) #add keep thres
                     aug_t_s_list.append(t_s_tmp)
         #back
@@ -1742,12 +1752,15 @@ class AdaKeepAugment(KeepAugment): #
                 windowed_slc_each = windowed_slc[0]
                 win_start, win_end = 0,windowed_w
                 #keep lead select
-                lead_quant = min(info_aug,1.0 - each_n_lead / 12.0)
-                quant_lead_sc = torch.quantile(slc_ch_each,lead_quant)
-                lead_possible = torch.nonzero(slc_ch_each.ge(quant_lead_sc), as_tuple=True)[0]
-                lead_potential = slc_ch_each[lead_possible]
-                lead_select = torch.sort(lead_possible[torch.multinomial(lead_potential,each_n_lead)])[0].detach()
-                print('lead select: ',lead_select) #!tmp
+                if n_keep_lead!=12: 
+                    lead_quant = min(info_aug,1.0 - each_n_lead / 12.0)
+                    quant_lead_sc = torch.quantile(slc_ch_each,lead_quant)
+                    lead_possible = torch.nonzero(slc_ch_each.ge(quant_lead_sc), as_tuple=True)[0]
+                    lead_potential = slc_ch_each[lead_possible]
+                    lead_select = torch.sort(lead_possible[torch.multinomial(lead_potential,each_n_lead)])[0].detach()
+                else:
+                    lead_select = self.default_leads
+                #print('lead select: ',lead_select) #!tmp
                 #find region
                 if stage_name=='keep': #from all possible to a fix number
                     ops_names_l = [ops_names[fix_idx[i]]] #only one
@@ -1791,7 +1804,7 @@ class AdaKeepAugment(KeepAugment): #
                         #print('Size compare: ',t_s[x1: x2, :].shape,info_region.shape)
                     for reg_i in range(len(inforegion_list)):
                         x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
-                        t_s_tmp[x1: x2, lead_select.to(t_s_tmp.device)] = inforegion_list[reg_i,lead_select.to(t_s_tmp.device)]
+                        t_s_tmp[x1: x2, lead_select.to(t_s_tmp.device)] = inforegion_list[reg_i][:,lead_select.to(t_s_tmp.device)]
                     t_s_tmp = stop_gradient_keep(t_s_tmp.cuda(), magnitudes[i][k], keep_thres[i],region_list) #add keep thres
                     aug_t_s_list.append(t_s_tmp)
         #back

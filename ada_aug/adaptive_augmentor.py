@@ -497,6 +497,7 @@ class AdaAugkeep_TS(AdaAug):
             self.ops_names = self.ops_names + ECG_OPS_NAMES.copy()
         print('AdaAug Using ',self.ops_names)
         self.possible_segment = keepaug_config.get('possible_segment',[1])
+        self.n_leads_select = keepaug_config.get('keep_leads',[12])
         self.keep_lens = keepaug_config['length']
         if keepaug_config['adapt_target'] == 'len': # adapt len
             self.adapt_len = len(self.keep_lens)
@@ -507,6 +508,9 @@ class AdaAugkeep_TS(AdaAug):
         elif keepaug_config['adapt_target'] == 'way': #adapt segment
             self.adapt_len = 4 #!!! const now
             self.adapt_params = [('cut',False),('cut',True),('paste',False),('paste',True)] #(selective,reverse)
+        elif keepaug_config['adapt_target'] == 'ch': #adapt segment
+            self.adapt_len = len(self.n_leads_select)
+            self.adapt_params = self.n_leads_select
         else:
             print('KeepAdapt need multiple lens or segment to learn')
             exit()
@@ -517,6 +521,7 @@ class AdaAugkeep_TS(AdaAug):
         print('KeepAug params using ',self.adapt_params)
         print('KeepAug lens using ',self.keep_lens)
         print('KeepAug segments using ',self.possible_segment)
+        print('KeepAug lead using ',self.n_leads_select)
         print('Keep thres adapt: ',self.thres_adapt)
         self.n_ops = len(self.ops_names)
         self.transfrom_dic = transfrom_dic

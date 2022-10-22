@@ -1107,6 +1107,7 @@ class KeepAugment(object): #need fix
         self.save_dir = save_dir
         self.selective = None
         self.only_lead_keep = False
+        self.default_leads = torch.arange(12).long()
         if adapt_target not in ['len','seg','way','ch']:
             target = adapt_target
             print('Keep Auto select: ',target)
@@ -1202,6 +1203,15 @@ class KeepAugment(object): #need fix
         #windowed_slc = self.m_pool(slc_.view(b,1,w)).view(b,-1)
         #select a segment number
         n_keep_lead = np.random.choice(self.keep_leads)
+        lead_quant = min(info_aug,1.0 - n_keep_lead / 12.0)
+        
+        '''if n_keep_lead!=12: #next step
+            #keep lead select
+            lead_quant = min(info_aug,1.0 - n_keep_lead / 12.0)
+            quant_lead_sc = torch.quantile(slc_ch,lead_quant,dim=1)
+            lead_possible = torch.nonzero(slc_ch_each.ge(quant_lead_sc), as_tuple=True)[0]
+            lead_potential = slc_ch_each[lead_possible]
+            lead_select = torch.sort(lead_possible[torch.multinomial(lead_potential,n_keep_lead)])[0].detach()'''
         seg_number = np.random.choice(self.possible_segment)
         seg_len = int(w / seg_number)
         info_len = int(self.length/seg_number)
@@ -1217,13 +1227,14 @@ class KeepAugment(object): #need fix
         start, end = 0,w
         win_start, win_end = 0,windowed_w
         for i,(t_s, slc,slc_ch_each, windowed_slc_each, each_seq_len) in enumerate(zip(t_series_, slc_,slc_ch, windowed_slc, seq_len)):
-            #keep lead select
-            lead_quant = min(info_aug,1.0 - n_keep_lead / 12.0)
-            quant_lead_sc = torch.quantile(slc_ch_each,lead_quant)
-            lead_possible = torch.nonzero(slc_ch_each.ge(quant_lead_sc), as_tuple=True)[0]
-            lead_potential = slc_ch_each[lead_possible]
-            lead_select = torch.sort(lead_possible[torch.multinomial(lead_potential,n_keep_lead)])[0].detach()
-            print('lead select: ',lead_select) #!tmp
+            #keep lead select, not efficent
+            if n_keep_lead!=12: 
+                quant_lead_sc = torch.quantile(slc_ch_each,lead_quant)
+                lead_possible = torch.nonzero(slc_ch_each.ge(quant_lead_sc[i]), as_tuple=True)[0]
+                lead_potential = slc_ch_each[lead_possible]
+                lead_select = torch.sort(lead_possible[torch.multinomial(lead_potential,n_keep_lead)])[0].detach()
+            else:
+                lead_select = self.default_leads
             #if only lead keep
             if self.only_lead_keep:
                 #augment & paste back
@@ -1233,7 +1244,7 @@ class KeepAugment(object): #need fix
                 else:
                     t_s_aug = t_s.clone().detach().cpu()
                     t_s = augment(t_s,i=i,seq_len=each_seq_len,**kwargs) #some other augment if needed
-                t_s[:, lead_select] = t_s_aug[:,lead_select]
+                t_s[:, lead_select.to(t_s.device)] = t_s_aug[:,lead_select.to(t_s.device)]
                 aug_t_s_list.append(t_s)
                 continue
             #find region for each segment
@@ -1313,7 +1324,6 @@ class KeepAugment(object): #need fix
             lead_possible = torch.nonzero(slc_ch_each.ge(quant_lead_sc), as_tuple=True)[0]
             lead_potential = slc_ch_each[lead_possible]
             lead_select = torch.sort(lead_possible[torch.multinomial(lead_potential,n_keep_lead)])[0].detach()
-            print('lead select: ',lead_select) #!tmp
             #find region
             for k, ops_name in ops_search:
                 t_s_tmp = t_s.clone().detach().cpu()

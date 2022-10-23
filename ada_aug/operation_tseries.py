@@ -739,7 +739,7 @@ ECG_NOISE_LIST = [
         (High_pass, 0, 1),  # 14
         (Low_pass, 0, 1),  # 15
         (IIR_notch, 0, 1),  # 16
-        (Sigmoid_compress, 0, 1) # may have some bug
+        (Sigmoid_compress, 0, 1), # may have some bug
         ]
 ECG_NOISE_DICT = {fn.__name__: (fn, v1, v2) for fn, v1, v2 in ECG_NOISE_LIST}
 ECG_NOISE_MAG = ["Amplifying","Baseline_wander","dropout","random_time_mask",
@@ -763,7 +763,7 @@ GOOD_ECG_LIST = [
         (random_time_saturation, 0, 5),  # 11
         (High_pass, 0, 1),  # 14
         (Low_pass, 0, 1),  # 15
-        (Sigmoid_compress, 0, 1) # may have some bug
+        (Sigmoid_compress, 0, 1), # may have some bug
         (fft_surrogate, 0, 1),  # 2
         (random_time_mask, 0, 1),  # 5 impl
         (random_bandstop, 0, 2),  # 7
@@ -1517,6 +1517,7 @@ class AdaKeepAugment(KeepAugment): #
         self.thres_adapt=thres_adapt
         self.possible_segment = possible_segment
         self.keep_leads = keep_leads
+        self.default_leads = torch.arange(12).long()
         if adapt_target=='len' and self.keep_leads!=[12]: #adapt len
             print(f'Keep len {self.length} with lead {self.keep_leads}')
         elif adapt_target=='ch' and self.keep_leads!=[12]: #adapt leads
@@ -1577,7 +1578,7 @@ class AdaKeepAugment(KeepAugment): #
                 lead_potential = slc_ch_each[lead_possible]
                 lead_select = torch.sort(lead_possible[torch.multinomial(lead_potential,n_keep_lead)])[0].detach()
             else:
-                lead_select = self.default_leads
+                lead_select = self.default_leads.detach()
             #print('lead select: ',lead_select) #!tmp
             #find region for each segment
             region_list,inforegion_list = [],[]

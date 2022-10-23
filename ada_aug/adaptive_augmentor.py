@@ -703,7 +703,7 @@ class AdaAugkeep_TS(AdaAug):
             aug_imgs = torch.stack(trans_images, dim=0).cuda()
         
         #aug_imgs = torch.stack(trans_images, dim=0).cuda()
-        return aug_imgs.cuda() #(b, seq, ch)
+        return aug_imgs.detach().cuda() #(b, seq, ch)
     def exploit(self, images, seq_len,y=None,policy_apply=True):
         if self.resize and 'lstm' not in self.config['gf_model_name']:
             resize_imgs = F.interpolate(images, size=self.search_d)

@@ -739,8 +739,42 @@ ECG_NOISE_LIST = [
         (High_pass, 0, 1),  # 14
         (Low_pass, 0, 1),  # 15
         (IIR_notch, 0, 1),  # 16
+        (Sigmoid_compress, 0, 1) # may have some bug
         ]
 ECG_NOISE_DICT = {fn.__name__: (fn, v1, v2) for fn, v1, v2 in ECG_NOISE_LIST}
+ECG_NOISE_MAG = ["Amplifying","Baseline_wander","dropout","random_time_mask",
+    "add_gaussian_noise","Line_noise","Scaling","Time_shift","random_time_saturation",]
+ECG_NOISE_NOMAG = ["chest_leads_shuffle","channel_dropout","Lead_reversal",
+    "Band_pass","Gaussian_blur","High_pass","Low_pass","IIR_notch",
+    "Sigmoid_compress", #some bug
+]
+GOOD_ECG_NAMES = ["identity","Baseline_wander", "dropout", "random_time_saturation", "channel_dropout",
+    "High_pass", "Low_pass", "Sigmoid_compress", 'fft_surrogate', 'random_time_mask',
+    'random_bandstop', 'freq_shift', 'Time_Warp', 'Scaling', 'Magnitude_Warp',
+    'Window_Warp','Window_Slicing_Circle']
+BEST_ECG_NAMES = ["identity","Baseline_wander", "dropout", "random_time_saturation", "channel_dropout",
+    "Sigmoid_compress", 'random_time_mask', 'random_bandstop', 'Scaling', 'Magnitude_Warp',
+    'Window_Warp','Window_Slicing_Circle']
+GOOD_ECG_LIST = [
+        (identity, 0, 1),  # 0
+        (Baseline_wander, 0, 2),  # 2
+        (dropout, 0, 0.5),  # 4
+        (channel_dropout, 0, 1),  # 7
+        (random_time_saturation, 0, 5),  # 11
+        (High_pass, 0, 1),  # 14
+        (Low_pass, 0, 1),  # 15
+        (Sigmoid_compress, 0, 1) # may have some bug
+        (fft_surrogate, 0, 1),  # 2
+        (random_time_mask, 0, 1),  # 5 impl
+        (random_bandstop, 0, 2),  # 7
+        (freq_shift, 0, 5),  # 9
+        (Window_Slicing_Circle, 0, 1),  # 1
+        (Time_Warp, 0, 0.2),  # 3
+        (Scaling, 0, 1),  # 4
+        (Magnitude_Warp, 0, 0.4),  # 5
+        (Window_Warp, 0, 1),  # 6
+        ]
+GOOD_ECG_DICT = {fn.__name__: (fn, v1, v2) for fn, v1, v2 in GOOD_ECG_LIST}
 
 AUGMENT_DICT = {fn.__name__: (fn, v1, v2) for fn, v1, v2 in TS_AUGMENT_LIST+ECG_AUGMENT_LIST+TS_ADD_LIST+TS_EXP_LIST+INFO_EXP_LIST}
 selopt = ['cut','paste']
@@ -814,10 +848,14 @@ class RandAugment:
         self.n = n
         self.m = m      # [0, 1]
         self.augment_list = TS_AUGMENT_LIST
+        self.aug_dict = None
         if 'tsadd' in augselect:
             print('Augmentation add TS_ADD_LIST')
             self.augment_list += TS_ADD_LIST
-        if 'ecg' in augselect:
+        if 'ecg_noise' in augselect:
+            self.ops_names = ECG_NOISE_LIST.copy()
+            self.aug_dict = ECG_NOISE_DICT
+        elif 'ecg' in augselect:
             print('Augmentation add ECG_AUGMENT_LIST')
             self.augment_list += ECG_AUGMENT_LIST
         self.augment_ids = [i for i in range(len(self.augment_list))]

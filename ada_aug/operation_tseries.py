@@ -1697,7 +1697,7 @@ class AdaKeepAugment(KeepAugment): #
                     lead_select = self.default_leads
                 print('lead select: ',lead_select) #!tmp
                 #find region
-                for k, ops_name in enumerate(ops_search):
+                for k, ops_name in ops_search:
                     t_s_tmp = t_s.clone().detach().cpu()
                     region_list,inforegion_list = [],[]
                     for seg_idx in range(seg_number):
@@ -1805,7 +1805,7 @@ class AdaKeepAugment(KeepAugment): #
                     ops_names_l = [ops_names[fix_idx[i]]] #only one
                 else:
                     ops_names_l = ops_search
-                for k, ops_name in enumerate(ops_names_l):
+                for k, ops_name in ops_names_l:
                     t_s_tmp = t_s.clone().detach().cpu()
                     region_list,inforegion_list = [],[]
                     for seg_idx in range(seg_number):

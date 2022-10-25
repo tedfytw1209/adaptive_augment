@@ -1625,7 +1625,7 @@ class AdaKeepAugment(KeepAugment): #
             #paste back
             for reg_i in range(len(inforegion_list)):
                 x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
-                t_s[x1: x2, lead_select.to(t_s.device)] = inforegion_list[reg_i][:,lead_select.to(t_s.device)]
+                t_s[x1: x2, lead_select.to(t_s.device)] = inforegion_list[reg_i][:,lead_select]
             aug_t_s_list.append(t_s)
         #back
         if self.mode=='adapt': #bugfix10/20
@@ -1633,6 +1633,7 @@ class AdaKeepAugment(KeepAugment): #
             for param in model.parameters():
                 param.requires_grad = True
         return torch.stack(aug_t_s_list, dim=0) #(b,seq,ch)
+
     def make_params(self,adapt_target,each_len=None,seg_number=None,selective=None,n_keep_lead=None):
         if adapt_target=='len': #search over keep len or keep segment
             keepway_params = [(selective,self.reverse) for i in range(len(self.length))]
@@ -1737,7 +1738,7 @@ class AdaKeepAugment(KeepAugment): #
                         #print('Size compare: ',t_s[x1: x2, :].shape,info_region.shape)
                     for reg_i in range(len(inforegion_list)):
                         x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
-                        t_s_tmp[x1: x2, lead_select.to(t_s_tmp.device)] = inforegion_list[reg_i][:,lead_select.to(t_s_tmp.device)]
+                        t_s_tmp[x1: x2, lead_select.to(t_s_tmp.device)] = inforegion_list[reg_i][:,lead_select].to(t_s_tmp.device)
                     t_s_tmp = stop_gradient_keep(t_s_tmp.cuda(), magnitudes[i][k], keep_thres[i],region_list) #add keep thres
                     aug_t_s_list.append(t_s_tmp)
         #back
@@ -1843,7 +1844,7 @@ class AdaKeepAugment(KeepAugment): #
                         #print('Size compare: ',t_s[x1: x2, :].shape,info_region.shape)
                     for reg_i in range(len(inforegion_list)):
                         x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
-                        t_s_tmp[x1: x2, lead_select.to(t_s_tmp.device)] = inforegion_list[reg_i][:,lead_select.to(t_s_tmp.device)]
+                        t_s_tmp[x1: x2, lead_select.to(t_s_tmp.device)] = inforegion_list[reg_i][:,lead_select].to(t_s_tmp.device)
                     t_s_tmp = stop_gradient_keep(t_s_tmp.cuda(), magnitudes[i][k], keep_thres[i],region_list) #add keep thres
                     aug_t_s_list.append(t_s_tmp)
         #back

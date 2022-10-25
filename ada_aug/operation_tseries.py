@@ -1544,6 +1544,7 @@ class AdaKeepAugment(KeepAugment): #
         total_len = self.length[0]
         #print(slc_)
         t_series_ = t_series_.detach().cpu()
+        info_region_record = np.zeros((b,seg_number,2))
         aug_t_s_list = []
         start, end = 0,w
         for i,(t_s, slc,slc_ch_each,each_seq_len) in enumerate(zip(t_series_, slc_,slc_ch,seq_len)):
@@ -1612,6 +1613,7 @@ class AdaKeepAugment(KeepAugment): #
                         break'''
                 info_region = t_s[x1: x2,:].clone().detach().cpu()
                 inforegion_list.append(info_region)
+                info_region_record[i,seg_idx,:] = [x1,x2]
             #augment & paste back
             if selective=='cut':
                 t_s_aug = t_s.clone().detach().cpu()
@@ -1628,11 +1630,13 @@ class AdaKeepAugment(KeepAugment): #
                 t_s[x1: x2, lead_select.to(t_s.device)] = inforegion_list[reg_i][:,lead_select]
             aug_t_s_list.append(t_s)
         #back
-        if self.mode=='adapt': #bugfix10/20
+        if self.mode=='auto': #not bug
             model.train()
             for param in model.parameters():
                 param.requires_grad = True
-        return torch.stack(aug_t_s_list, dim=0) #(b,seq,ch)
+        out = torch.stack(aug_t_s_list, dim=0)
+        info_region_record = torch.from_numpy(info_region_record).long()
+        return out, info_region_record
 
     def make_params(self,adapt_target,each_len=None,seg_number=None,selective=None,n_keep_lead=None):
         if adapt_target=='len': #search over keep len or keep segment

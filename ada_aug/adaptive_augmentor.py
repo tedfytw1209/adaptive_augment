@@ -686,13 +686,13 @@ class AdaAugkeep_TS(AdaAug):
             m_pi = perturb_param(magnitude_i[idx], self.delta).detach().cpu().numpy()
             image = apply_augment(image, self.ops_names[idx], m_pi,seq_len=seq_len,aug_dict=self.aug_dict,**self.transfrom_dic)
         return self.after_transforms(image)
-    def get_training_aug_images(self, images, magnitudes, weights, keeplen_ws, keep_thres, seq_len=None):
+    def get_training_aug_images(self, images, magnitudes, weights, keeplen_ws, keep_thres, seq_len=None,visualize=True):
         # visualization
         if self.k_ops > 0:
             trans_images = []
             idx_matrix,len_idx = self.select_params(weights,keeplen_ws)
             keep_thres = keep_thres.view(-1).detach().cpu().numpy()
-            aug_imgs = self.Augment_wrapper(images, model=self.gf_model,apply_func=self.get_training_aug_image,magnitudes=magnitudes,
+            aug_imgs, reg_idx = self.Augment_wrapper(images, model=self.gf_model,apply_func=self.get_training_aug_image,magnitudes=magnitudes,
             idx_matrix=idx_matrix,len_idx=len_idx,keep_thres=keep_thres,selective='paste',seq_len=seq_len)
         else:
             trans_images = []
@@ -703,7 +703,10 @@ class AdaAugkeep_TS(AdaAug):
             aug_imgs = torch.stack(trans_images, dim=0).cuda()
         
         #aug_imgs = torch.stack(trans_images, dim=0).cuda()
-        return aug_imgs.cuda() #(b, seq, ch)
+        if visualize:
+            return aug_imgs.cuda(),reg_idx, idx_matrix #(aug_imgs, keep region, operation use)
+        else:
+            return aug_imgs.cuda() #(b, seq, ch)
     def exploit(self, images, seq_len,y=None,policy_apply=True):
         if self.resize and 'lstm' not in self.config['gf_model_name']:
             resize_imgs = F.interpolate(images, size=self.search_d)
@@ -719,20 +722,21 @@ class AdaAugkeep_TS(AdaAug):
             self.print_imgs(imgs=aug_imgs,title='aug')
             exit()
         return aug_imgs
-    def visualize_result(self, images, seq_len,y=None):
+    def visualize_result(self, images, seq_len,policy_y=None,y=None):
         if self.resize and 'lstm' not in self.config['gf_model_name']:
             resize_imgs = F.interpolate(images, size=self.search_d)
         else:
             resize_imgs = images
+        target = y.detach().cpu()
         #resize_imgs = F.interpolate(images, size=self.search_d) if self.resize else images
-        magnitudes, weights, keeplen_ws, keep_thres = self.predict_aug_params(resize_imgs, seq_len, 'exploit',y=y)
-        #print(magnitudes.shape, weights.shape, keeplen_ws.shape, keep_thres.shape)
-        aug_imgs = self.get_training_aug_images(images, magnitudes, weights, keeplen_ws, keep_thres,seq_len=seq_len)
-        print('Visualize for Debug')
-        self.print_imgs(imgs=images,title='id')
-        self.print_imgs(imgs=aug_imgs,title='aug')
+        magnitudes, weights = self.predict_aug_params(resize_imgs, seq_len, 'exploit',y=policy_y)
+        aug_imgs, info_region, ops_idx = self.get_training_aug_images(images, magnitudes, weights,seq_len=seq_len,visualize=True)
         if self.use_keepaug:
-            self.Augment_wrapper.visualize_slc(images, model=self.gf_model)
+            slc_out,slc_ch = self.Augment_wrapper.visualize_slc(images, model=self.gf_model)
+        print('Visualize for Debug')
+        print(slc_ch)
+        self.print_imgs(imgs=images,label=target,title='id',slc=slc_out,info_reg=info_region,ops_idx=ops_idx)
+        self.print_imgs(imgs=aug_imgs,label=target,title='aug',slc=slc_out,info_reg=info_region,ops_idx=ops_idx)
 
     def forward(self, images, seq_len, mode, mix_feature=True,y=None,update_w=True,policy_apply=True):
         if mode == 'explore':
@@ -744,14 +748,45 @@ class AdaAugkeep_TS(AdaAug):
         elif mode == 'inference':
             return images
     
-    def print_imgs(self,imgs,title):
+    def print_imgs(self,imgs,label,title='',slc=None,info_reg=None,ops_idx=None):
         imgs = imgs.cpu().detach().numpy()
         t = np.linspace(0, 10, 1000)
-        for idx,img in enumerate(imgs):
+        for idx,(img,e_lb) in enumerate(zip(imgs,label)):
             plt.clf()
+            fig, (ax1, ax2) = plt.subplots(2, sharex=True, gridspec_kw={'height_ratios': [2, 1]})
             channel_num = img.shape[-1]
             for i in  range(channel_num):
-                plt.plot(t, img[:,i])
+                ax1.plot(t, img[:,i])
+            if torch.is_tensor(slc):
+                ax2.plot(t,slc[idx])
+            if torch.is_tensor(info_reg):
+                for i in range(info_reg.shape[1]):
+                    x1 = int(info_reg[idx,i,0])
+                    x2 = int(info_reg[idx,i,1])
+                    ax2.plot(t[x1:x2],slc[idx,x1:x2],'ro')
+            if torch.is_tensor(ops_idx):
+                op_name = self.ops_names[ops_idx[idx][0]]
+            else:
+                op_name = ''
             if title:
-                plt.title(title)
-            plt.savefig(f'{self.save_dir}/img{idx}_{title}.png')
+                plt.title(f'{title}{op_name}_{e_lb}')
+            plt.savefig(f'{self.save_dir}/img{idx}_{title}{op_name}_{e_lb}.png')
+            #plt one each
+            for i in  range(channel_num):
+                plt.clf()
+                fig, (ax1, ax2) = plt.subplots(2, sharex=True, gridspec_kw={'height_ratios': [2, 1]})
+                ax1.plot(t, img[:,i])
+                if torch.is_tensor(slc):
+                    ax2.plot(t,slc[idx])
+                if torch.is_tensor(info_reg):
+                    for s in range(info_reg.shape[1]):
+                        x1 = int(info_reg[idx,s,0])
+                        x2 = int(info_reg[idx,s,1])
+                        ax2.plot(t[x1:x2],slc[idx,x1:x2],'ro')
+                if torch.is_tensor(ops_idx):
+                    op_name = self.ops_names[ops_idx[idx][0]]
+                else:
+                    op_name = ''
+                if title:
+                    plt.title(f'{title}{op_name}_{e_lb}')
+                plt.savefig(f'{self.save_dir}/img{idx}ch{i}_{title}{op_name}_{e_lb}.png')

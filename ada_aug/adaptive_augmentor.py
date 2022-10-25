@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from torchvision import transforms
 
 import matplotlib.pyplot as plt
-from operation_tseries import apply_augment,TS_ADD_NAMES,ECG_OPS_NAMES,KeepAugment,AdaKeepAugment, \
+from operation_tseries import GOOD_ECG_LIST, GOOD_ECG_NAMES, apply_augment,TS_ADD_NAMES,ECG_OPS_NAMES,KeepAugment,AdaKeepAugment, \
     ECG_NOISE_NAMES,ECG_NOISE_DICT
 import operation
 from networks import get_model
@@ -221,6 +221,9 @@ class AdaAug_TS(AdaAug):
         #other already define in AdaAug
         self.aug_dict = None
         self.ops_names = TS_OPS_NAMES.copy()
+        if augselect=='goodtrans': #only use good transfrom
+            self.ops_names = GOOD_ECG_NAMES.copy()
+            self.aug_dict = GOOD_ECG_LIST
         if 'tsadd' in augselect:
             self.ops_names = self.ops_names + TS_ADD_NAMES.copy()
         if 'ecg_noise' in augselect:
@@ -456,6 +459,9 @@ class AdaAugkeep_TS(AdaAug):
         #other already define in AdaAug
         self.aug_dict = None
         self.ops_names = TS_OPS_NAMES.copy()
+        if augselect=='goodtrans':
+            self.ops_names = GOOD_ECG_NAMES.copy()
+            self.aug_dict = GOOD_ECG_LIST
         if 'tsadd' in augselect:
             self.ops_names = self.ops_names + TS_ADD_NAMES.copy()
         if 'ecg_noise' in augselect:

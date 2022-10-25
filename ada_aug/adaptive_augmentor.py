@@ -700,7 +700,7 @@ class AdaAugkeep_TS(AdaAug):
                 pil_image = image.detach().cpu()
                 trans_image = self.after_transforms(pil_image)
                 trans_images.append(trans_image)
-            aug_imgs = torch.stack(trans_images, dim=0)
+            aug_imgs = torch.stack(trans_images, dim=0).cuda()
         
         #aug_imgs = torch.stack(trans_images, dim=0).cuda()
         return aug_imgs.cuda() #(b, seq, ch)

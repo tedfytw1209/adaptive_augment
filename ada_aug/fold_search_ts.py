@@ -343,7 +343,6 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             'keep_leads':args.keep_lead}
         trans_config = {'sfreq':self.sfreq}
         if args.keep_mode=='adapt':
-            keepaug_config['mode'] = 'auto'
             self.adaaug = AdaAugkeep_TS(after_transforms=after_transforms,
                 n_class=n_class,
                 gf_model=self.gf_model,

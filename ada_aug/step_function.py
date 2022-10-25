@@ -327,7 +327,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     tr_output_matrix = torch.zeros(n_class,n_class).float()
     sea_output_matrix = torch.zeros(n_class,n_class).float()
     softmax_m = nn.Softmax(dim=1)
-    
+    print(criterion)
     print(loss_type)
     print(adv_criterion)
     if adv_criterion==None:
@@ -394,7 +394,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
             aug_images = adaaug(input, seq_len, mode='exploit', y=policy_y, policy_apply=policy_apply)
         else:
             aug_images = input
-        aug_images = aug_images.cuda()
+        aug_images = aug_images.detach().cuda()
         gf_model.train()
         gf_optimizer.zero_grad()
         logits = gf_model(aug_images, seq_len)
@@ -423,6 +423,8 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
             else:
                 aug_loss = (lambda_aug * aug_loss).mean() / 2
         loss = ori_loss + aug_loss
+        print(ori_loss)
+        print(aug_loss)
         loss.backward()
         nn.utils.clip_grad_norm_(gf_model.parameters(), grad_clip)
         gf_optimizer.step()

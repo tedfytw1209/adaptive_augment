@@ -1134,6 +1134,7 @@ class KeepAugment(object): #need fix
         self.thres = thres
         self.possible_segment = possible_segment
         self.keep_leads = keep_leads
+        self.leads_multi = [int(12/n) for n in keep_leads]
         self.grid_region = grid_region
         # normal, paste=> paste back important score higher then, cut=> not augment important region
         # when reverse, paste=> paste back important score lower then, cut=> augment important region
@@ -1145,8 +1146,9 @@ class KeepAugment(object): #need fix
         self.save_dir = save_dir
         self.selective = None
         self.only_lead_keep = False
+        self.fix_points = False
         self.default_leads = torch.arange(12).long()
-        if adapt_target not in ['len','seg','way','ch']:
+        if adapt_target not in ['fea','len','seg','way','ch']:
             target = adapt_target
             print('Keep Auto select: ',target)
             if 'cut' in target:
@@ -1157,6 +1159,9 @@ class KeepAugment(object): #need fix
                 self.reverse = True
             else:
                 self.reverse = False
+        elif adapt_target=='fea' and self.keep_leads!=[12]: #adapt len
+            print(f'Keep len {self.length} with lead {self.keep_leads} with fix points keep')
+            self.fix_points = True
         elif adapt_target=='len' and self.keep_leads!=[12]: #adapt len
             print(f'Keep len {self.length} with lead {self.keep_leads}')
         elif adapt_target=='ch' and self.keep_leads!=[12]: #adapt leads
@@ -1243,7 +1248,7 @@ class KeepAugment(object): #need fix
         n_keep_lead = np.random.choice(self.keep_leads)
         lead_quant = min(info_aug,1.0 - n_keep_lead / 12.0)
         
-        '''if n_keep_lead!=12: #next step
+        '''if n_keep_lead!=12: #next step opt speed
             #keep lead select
             lead_quant = min(info_aug,1.0 - n_keep_lead / 12.0)
             quant_lead_sc = torch.quantile(slc_ch,lead_quant,dim=1)
@@ -1252,7 +1257,10 @@ class KeepAugment(object): #need fix
             lead_select = torch.sort(lead_possible[torch.multinomial(lead_potential,n_keep_lead)])[0].detach()'''
         seg_number = np.random.choice(self.possible_segment)
         seg_len = int(w / seg_number)
-        info_len = int(self.length/seg_number)
+        if self.fix_points:
+            info_len = int(self.length * 12 /(seg_number*n_keep_lead))
+        else:
+            info_len = int(self.length/seg_number)
         windowed_slc = torch.nn.functional.avg_pool1d(slc_.view(b,1,w),kernel_size=info_len, stride=1, padding=0).view(b,-1)
         windowed_w = windowed_slc.shape[1]
         windowed_len = int(windowed_w / seg_number)
@@ -1338,7 +1346,10 @@ class KeepAugment(object): #need fix
         lead_quant = min(info_aug,1.0 - n_keep_lead / 12.0)
         seg_number = np.random.choice(self.possible_segment)
         seg_len = int(w / seg_number)
-        info_len = int(self.length/seg_number)
+        if self.fix_points:
+            info_len = int(self.length * 12 /(seg_number*n_keep_lead))
+        else:
+            info_len = int(self.length/seg_number)
         windowed_slc = torch.nn.functional.avg_pool1d(slc_.view(b,1,w),kernel_size=info_len, stride=1, padding=0).view(b,-1)
         windowed_w = windowed_slc.shape[1]
         windowed_len = int(windowed_w / seg_number)
@@ -1365,7 +1376,6 @@ class KeepAugment(object): #need fix
                 lead_select = torch.sort(lead_possible[torch.multinomial(lead_potential,n_keep_lead)])[0].detach()
             else:
                 lead_select = self.default_leads
-            
             #find region
             for k, ops_name in ops_search:
                 t_s_tmp = t_s.clone().detach().cpu()
@@ -1502,7 +1512,7 @@ class AdaKeepAugment(KeepAugment): #
             self.start_s,self.end_s = -0.2*sfreq,0.4*sfreq
         elif self.mode=='t':
             self.start_s,self.end_s = 0,0.4*sfreq
-        assert adapt_target in ['len','seg','way','ch']
+        assert adapt_target in ['fea','len','seg','way','ch']
         self.adapt_target = adapt_target
         self.way = [('cut',False),('cut',True),('paste',False),('paste',True)] #(selective,reverse)
         self.length = length #len is a list if adapt target 
@@ -1517,9 +1527,14 @@ class AdaKeepAugment(KeepAugment): #
         self.thres_adapt=thres_adapt
         self.possible_segment = possible_segment
         self.keep_leads = keep_leads
+        self.leads_multi = [int(l / np.min(self.length)) for l in self.length]
         self.default_leads = torch.arange(12).long()
         if adapt_target=='len' and self.keep_leads!=[12]: #adapt len
             print(f'Keep len {self.length} with lead {self.keep_leads}')
+        elif adapt_target=='fea': #adapt len
+            print(f'Keep len {self.length} with correspond lead')
+            print(f'Possible leads not used: ',self.keep_leads)
+            print(f'Multipler for each length: ',self.leads_multi)
         elif adapt_target=='ch' and self.keep_leads!=[12]: #adapt leads
             print(f'Using keep leads {self.keep_leads}')
         self.grid_region = grid_region
@@ -1552,6 +1567,10 @@ class AdaKeepAugment(KeepAugment): #
             use_reverse = None
             if self.adapt_target=='len':
                 total_len = self.length[len_idx[i]]
+            elif self.adapt_target=='fea':
+                total_len = self.length[len_idx[i]]
+                #rewrite n_leads to fix keep points
+                n_keep_lead = int(n_keep_lead / self.leads_multi[len_idx[i]])
             elif self.adapt_target=='way':
                 select_way = self.way[len_idx[i]]
                 selective = select_way[0]
@@ -1644,6 +1663,11 @@ class AdaKeepAugment(KeepAugment): #
             keeplen_params = self.length
             keepseg_params = [seg_number for i in range(len(self.length))]
             keepleads_params = [n_keep_lead for i in range(len(self.length))]
+        elif adapt_target=='fea': #fix keep points
+            keepway_params = [(selective,self.reverse) for i in range(len(self.length))]
+            keeplen_params = self.length
+            keepseg_params = [seg_number for i in range(len(self.length))]
+            keepleads_params = [int(n_keep_lead / self.leads_multi[i]) for i in range(len(self.leads_multi))]
         elif adapt_target=='way':
             keepway_params = self.way
             keeplen_params = [each_len for i in range(len(self.way))]

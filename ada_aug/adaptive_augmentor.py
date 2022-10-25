@@ -594,6 +594,8 @@ class AdaAugkeep_TS(AdaAug):
             self.history.add(k, mean_lambda, mean_p, mean_len, mean_thre, std_lambda, std_p, std_len, std_thre)
 
     def get_aug_valid_img(self, image, magnitudes,keep_thres,i=None,k=None,ops_name=None, seq_len=None):
+        #print('mag shape: ',magnitudes.shape)
+        #print(f'i: {i}, k: {k}, op name: {ops_name}')
         trans_image = apply_augment(image, ops_name, magnitudes[i][k].detach().cpu().numpy(),seq_len=seq_len,aug_dict=self.aug_dict,**self.transfrom_dic)
         trans_image = self.after_transforms(trans_image)
         #trans_image = stop_gradient_keep(trans_image.cuda(), magnitudes[i][k], keep_thres[i]) #add keep thres
@@ -686,7 +688,7 @@ class AdaAugkeep_TS(AdaAug):
             m_pi = perturb_param(magnitude_i[idx], self.delta).detach().cpu().numpy()
             image = apply_augment(image, self.ops_names[idx], m_pi,seq_len=seq_len,aug_dict=self.aug_dict,**self.transfrom_dic)
         return self.after_transforms(image)
-    def get_training_aug_images(self, images, magnitudes, weights, keeplen_ws, keep_thres, seq_len=None,visualize=True):
+    def get_training_aug_images(self, images, magnitudes, weights, keeplen_ws, keep_thres, seq_len=None,visualize=False):
         # visualization
         if self.k_ops > 0:
             trans_images = []
@@ -700,8 +702,7 @@ class AdaAugkeep_TS(AdaAug):
                 pil_image = image.detach().cpu()
                 trans_image = self.after_transforms(pil_image)
                 trans_images.append(trans_image)
-            aug_imgs = torch.stack(trans_images, dim=0).cuda()
-        
+            aug_imgs = torch.stack(trans_images, dim=0)
         #aug_imgs = torch.stack(trans_images, dim=0).cuda()
         if visualize:
             return aug_imgs.cuda(),reg_idx, idx_matrix #(aug_imgs, keep region, operation use)
@@ -729,8 +730,9 @@ class AdaAugkeep_TS(AdaAug):
             resize_imgs = images
         target = y.detach().cpu()
         #resize_imgs = F.interpolate(images, size=self.search_d) if self.resize else images
-        magnitudes, weights = self.predict_aug_params(resize_imgs, seq_len, 'exploit',y=policy_y)
-        aug_imgs, info_region, ops_idx = self.get_training_aug_images(images, magnitudes, weights,seq_len=seq_len,visualize=True)
+        magnitudes, weights, keeplen_ws, keep_thres = self.predict_aug_params(resize_imgs, seq_len, 'exploit',y=policy_y)
+        aug_imgs, info_region, ops_idx = self.get_training_aug_images(images, magnitudes, weights,keeplen_ws, keep_thres,
+                seq_len=seq_len,visualize=True)
         if self.use_keepaug:
             slc_out,slc_ch = self.Augment_wrapper.visualize_slc(images, model=self.gf_model)
         print('Visualize for Debug')

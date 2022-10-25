@@ -1807,9 +1807,10 @@ class AdaKeepAugment(KeepAugment): #
                 #print('lead select: ',lead_select) #!tmp
                 #find region
                 if stage_name=='keep': #from all possible to a fix number
-                    ops_names_l = [ops_names[fix_idx[i]]] #only one
+                    ops_names_l = [(fix_idx[i].detach().cpu().numpy()[0],ops_names[fix_idx[i]])] #fix bug 10/25
                 else:
                     ops_names_l = ops_search
+                print(ops_names_l)
                 for k, ops_name in ops_names_l:
                     t_s_tmp = t_s.clone().detach().cpu()
                     region_list,inforegion_list = [],[]

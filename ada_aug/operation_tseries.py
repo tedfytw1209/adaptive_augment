@@ -741,6 +741,29 @@ ECG_NOISE_LIST = [
         (IIR_notch, 0, 1),  # 16
         ]
 ECG_NOISE_DICT = {fn.__name__: (fn, v1, v2) for fn, v1, v2 in ECG_NOISE_LIST}
+GOOD_ECG_NAMES = ["identity", "Amplifying", "Baseline_wander", "random_time_saturation", 
+    "chest_leads_shuffle", "channel_dropout", "Band_pass", "High_pass", 'fft_surrogate', 
+    'channel_shuffle', 'add_gaussian_noise', 'random_bandstop', 'Window_Slicing', 
+    'Time_Warp', 'sign_flip', 'Window_Slicing_Circle']
+GOOD_ECG_LIST = [
+        (identity, 0, 1),  # 0
+        (Amplifying, 0, 0.5),  # 1
+        (Baseline_wander, 0, 2),  # 2
+        (chest_leads_shuffle, 0, 1),  # 3
+        (channel_dropout, 0, 1),  # 7
+        (random_time_saturation, 0, 5),  # 11
+        (Band_pass, 0, 1),  # 12
+        (High_pass, 0, 1),  # 14
+        (fft_surrogate, 0, 1),  # 2
+        (channel_shuffle, 0, 1),  # 4
+        (add_gaussian_noise, 0, 0.2),  # 6
+        (random_bandstop, 0, 2),  # 7
+        (sign_flip, 0, 1),  # 8
+        (Window_Slicing, 0, 1),  # 0
+        (Window_Slicing_Circle, 0, 1),  # 1
+        (Time_Warp, 0, 0.2),  # 3
+        ]
+GOOD_ECG_DICT = {fn.__name__: (fn, v1, v2) for fn, v1, v2 in GOOD_ECG_LIST}
 
 AUGMENT_DICT = {fn.__name__: (fn, v1, v2) for fn, v1, v2 in TS_AUGMENT_LIST+ECG_AUGMENT_LIST+TS_ADD_LIST+TS_EXP_LIST+INFO_EXP_LIST}
 selopt = ['cut','paste']

@@ -272,7 +272,7 @@ class AdaAug_TS(AdaAug):
             magnitudes = torch.rand(bs,self.n_ops)
             weights = torch.ones(bs,self.n_ops) / self.n_ops
         if self.noaug_add: #add noaug reweights
-            if self.class_adaptive: #alpha: (1,n_class), y: (batch_szie,n_class)=>(batch_size,1)
+            if self.class_adaptive: #alpha: (1,n_class), y: (batch_szie,n_class)=>(batch_size,1) one hotted
                 batch_alpha = torch.sum(self.alpha * y,dim=-1,keepdim=True) / torch.sum(y,dim=-1,keepdim=True)
             else:
                 batch_alpha = self.alpha.view(-1)
@@ -450,6 +450,7 @@ class AdaAug_TS(AdaAug):
     
     def update_alpha(self,class_acc):
         self.alpha = torch.tensor(class_acc).view(1,-1).cuda()
+        print('new alpha for noaug cadd: ',self.alpha)
 
 class AdaAugkeep_TS(AdaAug):
     def __init__(self, after_transforms, n_class, gf_model, h_model, save_dir=None, visualize=False,

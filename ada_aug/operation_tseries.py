@@ -1258,8 +1258,8 @@ class KeepAugment(object): #need fix
         seg_number = np.random.choice(self.possible_segment)
         seg_len = int(w / seg_number)
         if self.fix_points:
-            info_len = int(self.length * 12 /(seg_number*n_keep_lead))
-            print(f'keep len={self.length}, keeplead={n_keep_lead}')
+            info_len = min(int(self.length * 12 /(seg_number*n_keep_lead)),w)
+            print(f'keep len={info_len}, keeplead={n_keep_lead}')
         else:
             info_len = int(self.length/seg_number)
         windowed_slc = torch.nn.functional.avg_pool1d(slc_.view(b,1,w),kernel_size=info_len, stride=1, padding=0).view(b,-1)
@@ -1348,7 +1348,7 @@ class KeepAugment(object): #need fix
         seg_number = np.random.choice(self.possible_segment)
         seg_len = int(w / seg_number)
         if self.fix_points:
-            info_len = int(self.length * 12 /(seg_number*n_keep_lead))
+            info_len = min(int(self.length * 12 /(seg_number*n_keep_lead)),w)
             print(f'keep len={self.length}, keeplead={n_keep_lead}')
         else:
             info_len = int(self.length/seg_number)
@@ -1567,13 +1567,14 @@ class AdaKeepAugment(KeepAugment): #
         for i,(t_s, slc,slc_ch_each,each_seq_len) in enumerate(zip(t_series_, slc_,slc_ch,seq_len)):
             #len choose
             use_reverse = None
+            n_keep_lead_n = n_keep_lead
             if self.adapt_target=='len':
                 total_len = self.length[len_idx[i]]
             elif self.adapt_target=='fea':
                 total_len = self.length[len_idx[i]]
                 #rewrite n_leads to fix keep points
-                n_keep_lead = int(n_keep_lead / self.leads_multi[len_idx[i]])
-                print(f'keep len={total_len}, keeplead={n_keep_lead}')
+                n_keep_lead_n = int(n_keep_lead / self.leads_multi[len_idx[i]])
+                print(f'keep len={total_len}, keeplead={n_keep_lead_n}')
             elif self.adapt_target=='way':
                 select_way = self.way[len_idx[i]]
                 selective = select_way[0]
@@ -1581,7 +1582,7 @@ class AdaKeepAugment(KeepAugment): #
             elif self.adapt_target=='seg':
                 seg_number = self.possible_segment[len_idx[i]]
             elif self.adapt_target=='ch':
-                n_keep_lead = self.keep_leads[len_idx[i]]
+                n_keep_lead_n = self.keep_leads[len_idx[i]]
             else:
                 raise 
             info_aug, compare_func, info_bound, bound_func = self.get_selective(selective,thres=keep_thres[i],use_reverse=use_reverse)
@@ -1594,12 +1595,12 @@ class AdaKeepAugment(KeepAugment): #
             windowed_slc_each = windowed_slc[0]
             win_start, win_end = 0,windowed_w
             #keep lead select
-            if n_keep_lead!=12: 
-                lead_quant = min(info_aug,1.0 - n_keep_lead / 12.0)
+            if n_keep_lead_n!=12: 
+                lead_quant = min(info_aug,1.0 - n_keep_lead_n / 12.0)
                 quant_lead_sc = torch.quantile(slc_ch_each,lead_quant)
                 lead_possible = torch.nonzero(slc_ch_each.ge(quant_lead_sc), as_tuple=True)[0]
                 lead_potential = slc_ch_each[lead_possible]
-                lead_select = torch.sort(lead_possible[torch.multinomial(lead_potential,n_keep_lead)])[0].detach()
+                lead_select = torch.sort(lead_possible[torch.multinomial(lead_potential,n_keep_lead_n)])[0].detach()
             else:
                 lead_select = self.default_leads.detach()
             #print('lead select: ',lead_select) #!tmp

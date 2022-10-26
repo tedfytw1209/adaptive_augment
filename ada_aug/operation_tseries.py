@@ -1259,6 +1259,7 @@ class KeepAugment(object): #need fix
         seg_len = int(w / seg_number)
         if self.fix_points:
             info_len = int(self.length * 12 /(seg_number*n_keep_lead))
+            print(f'keep len={self.length}, keeplead={n_keep_lead}')
         else:
             info_len = int(self.length/seg_number)
         windowed_slc = torch.nn.functional.avg_pool1d(slc_.view(b,1,w),kernel_size=info_len, stride=1, padding=0).view(b,-1)
@@ -1348,6 +1349,7 @@ class KeepAugment(object): #need fix
         seg_len = int(w / seg_number)
         if self.fix_points:
             info_len = int(self.length * 12 /(seg_number*n_keep_lead))
+            print(f'keep len={self.length}, keeplead={n_keep_lead}')
         else:
             info_len = int(self.length/seg_number)
         windowed_slc = torch.nn.functional.avg_pool1d(slc_.view(b,1,w),kernel_size=info_len, stride=1, padding=0).view(b,-1)
@@ -1571,6 +1573,7 @@ class AdaKeepAugment(KeepAugment): #
                 total_len = self.length[len_idx[i]]
                 #rewrite n_leads to fix keep points
                 n_keep_lead = int(n_keep_lead / self.leads_multi[len_idx[i]])
+                print(f'keep len={total_len}, keeplead={n_keep_lead}')
             elif self.adapt_target=='way':
                 select_way = self.way[len_idx[i]]
                 selective = select_way[0]
@@ -1704,6 +1707,7 @@ class AdaKeepAugment(KeepAugment): #
         
         for i,(t_s, slc,slc_ch_each,each_seq_len) in enumerate(zip(t_series_, slc_,slc_ch,seq_len)):
             for (each_way,each_len, seg_number, each_n_lead) in zip(keepway_params,keeplen_params,keepseg_params,keepleads_params):
+                print(f'way={each_way}, seg={seg_number}, len={each_len}, lead={each_n_lead}')
                 (selective, use_reverse) = each_way
                 info_aug, compare_func, info_bound, bound_func = self.get_selective(selective,thres=keep_thres[i],use_reverse=use_reverse)
                 #select a segment number
@@ -1808,6 +1812,7 @@ class AdaKeepAugment(KeepAugment): #
             else:
                 keepway_params_l,keeplen_params_l,keepseg_params_l,keepleads_params_l = keepway_params,keeplen_params,keepseg_params,keepleads_params
             for (each_way,each_len, seg_number, each_n_lead) in zip(keepway_params_l,keeplen_params_l,keepseg_params_l,keepleads_params_l):
+                print(f'way={each_way}, seg={seg_number}, len={each_len}, lead={each_n_lead}')
                 (selective, use_reverse) = each_way
                 info_aug, compare_func, info_bound, bound_func = self.get_selective(selective,thres=keep_thres[i],use_reverse=use_reverse)
                 #select a segment number
@@ -1834,7 +1839,7 @@ class AdaKeepAugment(KeepAugment): #
                     ops_names_l = [(fix_idx[i].detach().cpu().numpy()[0],ops_names[fix_idx[i]])] #fix bug 10/25
                 else:
                     ops_names_l = ops_search
-                print(ops_names_l)
+                #print(ops_names_l)
                 for k, ops_name in ops_names_l:
                     t_s_tmp = t_s.clone().detach().cpu()
                     region_list,inforegion_list = [],[]

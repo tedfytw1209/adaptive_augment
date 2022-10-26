@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from config import OPS_NAMES,TS_OPS_NAMES
-from operation_tseries import TS_ADD_NAMES,ECG_OPS_NAMES,ECG_NOISE_NAMES
+from operation_tseries import GOOD_ECG_NAMES, TS_ADD_NAMES,ECG_OPS_NAMES,ECG_NOISE_NAMES
 
 class SelectDropout(nn.Module):
     def __init__(self, p: float = 0.5, fea_len: int = 128, label_len: int = 32):
@@ -54,6 +54,8 @@ class Projection_TSeries(nn.Module):
         feature_mask="", input_act=False):
         super(Projection_TSeries, self).__init__()
         self.ops_names = TS_OPS_NAMES.copy()
+        if augselect=='goodtrans': #only use good transfrom
+            self.ops_names = GOOD_ECG_NAMES.copy()
         if 'tsadd' in augselect:
             self.ops_names = self.ops_names + TS_ADD_NAMES.copy()
         if 'ecg_noise' in augselect:

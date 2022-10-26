@@ -749,6 +749,29 @@ ECG_NOISE_NOMAG = ["chest_leads_shuffle","channel_dropout","Lead_reversal",
     "Sigmoid_compress", #some bug
 ]
 
+GOOD_ECG_NAMES = ["identity", "Amplifying", "Baseline_wander", "random_time_saturation", 
+    "chest_leads_shuffle", "channel_dropout", "Band_pass", "High_pass", 'fft_surrogate', 
+    'channel_shuffle', 'add_gaussian_noise', 'random_bandstop', 'Window_Slicing', 
+    'Time_Warp', 'sign_flip', 'Window_Slicing_Circle']
+GOOD_ECG_LIST = [
+        (identity, 0, 1),  # 0
+        (Amplifying, 0, 0.5),  # 1
+        (Baseline_wander, 0, 2),  # 2
+        (chest_leads_shuffle, 0, 1),  # 3
+        (channel_dropout, 0, 1),  # 7
+        (random_time_saturation, 0, 5),  # 11
+        (Band_pass, 0, 1),  # 12
+        (High_pass, 0, 1),  # 14
+        (fft_surrogate, 0, 1),  # 2
+        (channel_shuffle, 0, 1),  # 4
+        (add_gaussian_noise, 0, 0.2),  # 6
+        (random_bandstop, 0, 2),  # 7
+        (sign_flip, 0, 1),  # 8
+        (Window_Slicing, 0, 1),  # 0
+        (Window_Slicing_Circle, 0, 1),  # 1
+        (Time_Warp, 0, 0.2),  # 3
+        ]
+GOOD_ECG_DICT = {fn.__name__: (fn, v1, v2) for fn, v1, v2 in GOOD_ECG_LIST}
 
 AUGMENT_DICT = {fn.__name__: (fn, v1, v2) for fn, v1, v2 in TS_AUGMENT_LIST+ECG_AUGMENT_LIST+TS_ADD_LIST+TS_EXP_LIST+INFO_EXP_LIST}
 selopt = ['cut','paste']
@@ -1088,7 +1111,7 @@ def normal_slc(slc_):
 class KeepAugment(object): #need fix
     def __init__(self, mode, length,thres=0.6,transfrom=None,default_select=None, early=False, low = False,adapt_target='len',
         possible_segment=[1],keep_leads=[12],grid_region=False, reverse=False,info_upper = 0.0, visualize=False,save_dir='./',
-        sfreq=100,pw_len=0.2,tw_len=0.4,**_kwargs):
+        sfreq=100,pw_len=0.2,tw_len=0.4,keep_prob=1,**_kwargs):
         assert mode in ['auto','b','p','t','rand'] #auto: all, b: heart beat(-0.2,0.4), p: p-wave(-0.2,0), t: t-wave(0,0.4)
         self.mode = mode
         if self.mode=='p':
@@ -1142,6 +1165,7 @@ class KeepAugment(object): #need fix
             print(f'Using keep leads {self.keep_leads}')
             self.only_lead_keep = True
         
+        self.keep_prob = keep_prob
         #'torch.nn.functional.avg_pool1d' use this for segment
         ##self.m_pool = torch.nn.AvgPool1d(kernel_size=self.length, stride=1, padding=0) #for winodow sum
         print(f'Apply InfoKeep Augment: mode={self.mode}, threshold={self.thres}, transfrom={self.trans}')

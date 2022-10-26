@@ -99,6 +99,7 @@ parser.add_argument('--noaug_reg', type=str, default='', help='add regular for n
 parser.add_argument('--balance_loss', type=str, default='', help="loss type for model and policy training to acheive class balance")
 parser.add_argument('--keep_aug', action='store_true', default=False, help='info keep augment')
 parser.add_argument('--keep_mode', type=str, default='auto', help='info keep mode',choices=['auto','adapt','b','p','t','rand'])
+parser.add_argument('--keep_prob', type=float, default=1, help='info keep probabilty')
 parser.add_argument('--adapt_target', type=str, default='len', help='info keep mode',
         choices=['fea','len','seg','way','ch','recut','repaste','recut','repaste'])
 parser.add_argument('--keep_seg', type=int, nargs='+', default=[1], help='info keep segment mode')
@@ -400,6 +401,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 wandb.log(plot_conf_wandb(self.result_table_dic['test_output'],title='test_output'))
             self.adaaug.save_history(self.class2label)
             figure = self.adaaug.plot_history()
+            wandb.finish()
 
         call_back_dic = {'train_acc': train_acc, 'valid_acc': valid_acc, 'test_acc': test_acc}
         return call_back_dic

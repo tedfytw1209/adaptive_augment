@@ -519,7 +519,8 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 aug_weight = aug_weights[0] # (bs, n_ops), 0 is NOAUG
                 noaug_target = torch.zeros(target_search.shape).cuda().long()
                 if lambda_noaug>0: #need test
-                    noaug_loss = lambda_noaug * (1.0 - train_perfrom) * noaug_criterion(aug_weight,noaug_target)
+                    #noaug_loss = lambda_noaug * (1.0 - train_perfrom) * noaug_criterion(aug_weight,noaug_target) #10/26 change
+                    noaug_loss = lambda_noaug * noaug_criterion(aug_weight,noaug_target)
                     noaug_reg_sum += noaug_loss.detach().item()
                 else:
                     noaug_loss = 0

@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from torchvision import transforms
 
 import matplotlib.pyplot as plt
-from operation_tseries import apply_augment,TS_ADD_NAMES,ECG_OPS_NAMES,KeepAugment,AdaKeepAugment, \
+from operation_tseries import GOOD_ECG_DICT, GOOD_ECG_LIST, GOOD_ECG_NAMES, apply_augment,TS_ADD_NAMES,ECG_OPS_NAMES,KeepAugment,AdaKeepAugment, \
     ECG_NOISE_NAMES,ECG_NOISE_DICT
 import operation
 from networks import get_model
@@ -222,6 +222,9 @@ class AdaAug_TS(AdaAug):
         #other already define in AdaAug
         self.aug_dict = None
         self.ops_names = TS_OPS_NAMES.copy()
+        if augselect=='goodtrans': #only use good transfrom
+            self.ops_names = GOOD_ECG_NAMES.copy()
+            self.aug_dict = GOOD_ECG_DICT
         if 'tsadd' in augselect:
             self.ops_names = self.ops_names + TS_ADD_NAMES.copy()
         if 'ecg_noise' in augselect:
@@ -267,10 +270,11 @@ class AdaAug_TS(AdaAug):
             magnitudes = torch.sigmoid(magnitudes)
             weights = torch.nn.functional.softmax(weights/T, dim=-1)
         else: #all unifrom distribution when not using policy
+            print('Using random augments when warm up')
             magnitudes = torch.rand(bs,self.n_ops)
             weights = torch.ones(bs,self.n_ops) / self.n_ops
         if self.noaug_add: #add noaug reweights
-            if self.class_adaptive: #alpha: (1,n_class), y: (batch_szie,n_class)=>(batch_size,1)
+            if self.class_adaptive: #alpha: (1,n_class), y: (batch_szie,n_class)=>(batch_size,1) one hotted
                 batch_alpha = torch.sum(self.alpha * y,dim=-1,keepdim=True) / torch.sum(y,dim=-1,keepdim=True)
             else:
                 batch_alpha = self.alpha.view(-1)
@@ -478,6 +482,7 @@ class AdaAug_TS(AdaAug):
     
     def update_alpha(self,class_acc):
         self.alpha = torch.tensor(class_acc).view(1,-1).cuda()
+        print('new alpha for noaug cadd: ',self.alpha)
 
 class AdaAugkeep_TS(AdaAug):
     def __init__(self, after_transforms, n_class, gf_model, h_model, save_dir=None, visualize=False,
@@ -487,6 +492,9 @@ class AdaAugkeep_TS(AdaAug):
         #other already define in AdaAug
         self.aug_dict = None
         self.ops_names = TS_OPS_NAMES.copy()
+        if augselect=='goodtrans':
+            self.ops_names = GOOD_ECG_NAMES.copy()
+            self.aug_dict = GOOD_ECG_DICT
         if 'tsadd' in augselect:
             self.ops_names = self.ops_names + TS_ADD_NAMES.copy()
         if 'ecg_noise' in augselect:

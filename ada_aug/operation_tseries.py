@@ -1721,7 +1721,7 @@ class AdaKeepAugment(KeepAugment): #
                 windowed_slc_each = windowed_slc[0]
                 win_start, win_end = 0,windowed_w
                 #keep lead select
-                if n_keep_lead!=12:
+                if each_n_lead!=12:
                     lead_quant = min(info_aug,1.0 - each_n_lead / 12.0)
                     quant_lead_sc = torch.quantile(slc_ch_each,lead_quant)
                     lead_possible = torch.nonzero(slc_ch_each.ge(quant_lead_sc), as_tuple=True)[0]
@@ -1826,7 +1826,7 @@ class AdaKeepAugment(KeepAugment): #
                 windowed_slc_each = windowed_slc[0]
                 win_start, win_end = 0,windowed_w
                 #keep lead select
-                if n_keep_lead!=12: 
+                if each_n_lead!=12: 
                     lead_quant = min(info_aug,1.0 - each_n_lead / 12.0)
                     quant_lead_sc = torch.quantile(slc_ch_each,lead_quant)
                     lead_possible = torch.nonzero(slc_ch_each.ge(quant_lead_sc), as_tuple=True)[0]

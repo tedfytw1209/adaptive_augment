@@ -1099,7 +1099,7 @@ def normal_slc(slc_):
 class KeepAugment(object): #need fix
     def __init__(self, mode, length,thres=0.6,transfrom=None,default_select=None, early=False, low = False,adapt_target='len',
         possible_segment=[1],keep_leads=[12],grid_region=False, reverse=False,info_upper = 0.0, visualize=False,save_dir='./',
-        sfreq=100,pw_len=0.2,tw_len=0.4,**_kwargs):
+        sfreq=100,pw_len=0.2,tw_len=0.4,keep_prob=1,**_kwargs):
         assert mode in ['auto','b','p','t','rand'] #auto: all, b: heart beat(-0.2,0.4), p: p-wave(-0.2,0), t: t-wave(0,0.4)
         self.mode = mode
         if self.mode=='p':
@@ -1144,7 +1144,7 @@ class KeepAugment(object): #need fix
             print(f'Keep len {self.length} with lead {self.keep_leads}')
         elif adapt_target=='ch' and self.keep_leads!=[12]: #adapt leads
             print(f'Using keep leads {self.keep_leads}')
-        
+        self.keep_prob = keep_prob
         #'torch.nn.functional.avg_pool1d' use this for segment
         ##self.m_pool = torch.nn.AvgPool1d(kernel_size=self.length, stride=1, padding=0) #for winodow sum
         print(f'Apply InfoKeep Augment: mode={self.mode}, threshold={self.thres}, transfrom={self.trans}')

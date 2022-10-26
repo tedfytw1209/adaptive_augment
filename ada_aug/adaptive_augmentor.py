@@ -269,6 +269,7 @@ class AdaAug_TS(AdaAug):
             magnitudes = torch.sigmoid(magnitudes)
             weights = torch.nn.functional.softmax(weights/T, dim=-1)
         else: #all unifrom distribution when not using policy
+            print('Using random augments when warm up')
             magnitudes = torch.rand(bs,self.n_ops)
             weights = torch.ones(bs,self.n_ops) / self.n_ops
         if self.noaug_add: #add noaug reweights
@@ -372,13 +373,11 @@ class AdaAug_TS(AdaAug):
                 idx_matrix = torch.multinomial(weights, self.k_ops)
             elif self.sampling == 'max':
                 idx_matrix = torch.topk(weights, self.k_ops, dim=1)[1] #where op index the highest weight
-
             '''for i, image in enumerate(images):
                 pil_image = image.detach().cpu()
                 for idx in idx_matrix[i]:
                     m_pi = perturb_param(magnitudes[i][idx], self.delta).detach().cpu().numpy()
                     pil_image = apply_augment(pil_image, self.ops_names[idx], m_pi)
-
                 trans_images.append(self.after_transforms(pil_image))'''
             aug_imgs = self.Augment_wrapper(images, model=self.gf_model,apply_func=self.get_training_aug_image,
                     magnitudes=magnitudes,idx_matrix=idx_matrix,selective='paste',seq_len=seq_len)

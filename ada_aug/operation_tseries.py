@@ -1574,7 +1574,7 @@ class AdaKeepAugment(KeepAugment): #
                 total_len = self.length[len_idx[i]]
                 #rewrite n_leads to fix keep points
                 n_keep_lead_n = int(n_keep_lead / self.leads_multi[len_idx[i]])
-                print(f'keep len={total_len}, keeplead={n_keep_lead_n}')
+                #print(f'keep len={total_len}, keeplead={n_keep_lead_n}')
             elif self.adapt_target=='way':
                 select_way = self.way[len_idx[i]]
                 selective = select_way[0]
@@ -1834,7 +1834,7 @@ class AdaKeepAugment(KeepAugment): #
                     lead_select = torch.sort(lead_possible[torch.multinomial(lead_potential,each_n_lead)])[0].detach()
                 else:
                     lead_select = self.default_leads
-                #print('lead select: ',lead_select) #!tmp
+                print('lead select: ',lead_select) #!tmp
                 #find region
                 if stage_name=='keep': #from all possible to a fix number
                     ops_names_l = [(fix_idx[i].detach().cpu().numpy()[0],ops_names[fix_idx[i]])] #fix bug 10/25

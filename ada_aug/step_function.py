@@ -251,6 +251,8 @@ def infer(valid_queue, model, criterion, multilabel=False, n_class=10,mode='test
     
     return perfrom, objs.avg, perfrom2, objs.avg, out_dic, table_dic
 
+def sub_loss(ori_loss, aug_loss, lambda_aug): #will become to small
+    return lambda_aug * (aug_loss - ori_loss.detach())
 def relative_loss(ori_loss, aug_loss, lambda_aug):
     return lambda_aug * (ori_loss.detach() / aug_loss)
 def minus_loss(ori_loss, aug_loss, lambda_aug):

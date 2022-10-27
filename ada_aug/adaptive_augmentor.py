@@ -506,23 +506,24 @@ class AdaAugkeep_TS(AdaAug):
         self.possible_segment = keepaug_config.get('possible_segment',[1])
         self.n_leads_select = keepaug_config.get('keep_leads',[12])
         self.keep_lens = keepaug_config['length']
-        if keepaug_config['adapt_target'] == 'len': # adapt len
+        self.adapt_target = keepaug_config['adapt_target']
+        if self.adapt_target == 'len': # adapt len
             self.adapt_len = len(self.keep_lens)
             self.adapt_params = self.keep_lens
-        if keepaug_config['adapt_target'] == 'fea': # adapt len with fix keep points
+        if self.adapt_target == 'fea': # adapt len with fix keep points
             self.adapt_len = len(self.keep_lens)
             self.adapt_params = self.keep_lens
-        elif keepaug_config['adapt_target'] == 'seg': #adapt segment
+        elif self.adapt_target == 'seg': #adapt segment
             self.adapt_len = len(self.possible_segment)
             self.adapt_params = self.possible_segment
-        elif keepaug_config['adapt_target'] == 'way': #adapt segment
+        elif self.adapt_target == 'way': #adapt segment
             self.adapt_len = 4 #!!! const now
             self.adapt_params = [('cut',False),('cut',True),('paste',False),('paste',True)] #(selective,reverse)
-        elif keepaug_config['adapt_target'] == 'ch': #adapt segment
+        elif self.adapt_target == 'ch': #adapt segment
             self.adapt_len = len(self.n_leads_select)
             self.adapt_params = self.n_leads_select
         else:
-            print('KeepAdapt need multiple lens or segment to learn')
+            print(f'KeepAdapt need multiple lens or segment to learn, get {self.adapt_target}')
             exit()
         self.thres_adapt = keepaug_config.get('thres_adapt',True)
         self.ind_mix = ind_mix
@@ -539,7 +540,6 @@ class AdaAugkeep_TS(AdaAug):
         self.history = PolicyHistoryKeep(self.ops_names,self.adapt_params, self.save_dir, self.n_class)
         self.config = config
         self.use_keepaug = keepaug_config['keep_aug']
-        self.adapt_target = keepaug_config['adapt_target']
         self.keepaug_config = keepaug_config
         if self.use_keepaug:
             self.Augment_wrapper = AdaKeepAugment(save_dir=save_dir,**keepaug_config)

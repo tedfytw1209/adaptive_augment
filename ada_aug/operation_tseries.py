@@ -1289,7 +1289,7 @@ class KeepAugment(object): #need fix
                 else:
                     t_s_aug = t_s.clone().detach().cpu()
                     t_s = augment(t_s,i=i,seq_len=each_seq_len,**kwargs) #some other augment if needed
-                t_s[:, lead_select.to(t_s.device)] = t_s_aug[:,lead_select.to(t_s.device)]
+                t_s[:, lead_select.to(t_s.device)] = t_s_aug[:,lead_select.to(t_s.device)].to(t_s.device)
                 aug_t_s_list.append(t_s)
                 continue
             #find region for each segment

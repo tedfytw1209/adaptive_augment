@@ -510,7 +510,7 @@ class AdaAugkeep_TS(AdaAug):
         if self.adapt_target == 'len': # adapt len
             self.adapt_len = len(self.keep_lens)
             self.adapt_params = self.keep_lens
-        if self.adapt_target == 'fea': # adapt len with fix keep points
+        elif self.adapt_target == 'fea': # adapt len with fix keep points
             self.adapt_len = len(self.keep_lens)
             self.adapt_params = self.keep_lens
         elif self.adapt_target == 'seg': #adapt segment

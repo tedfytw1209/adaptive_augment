@@ -1503,7 +1503,7 @@ def stop_gradient_keep(trans_image, magnitude, keep_thre, region_list):
 class AdaKeepAugment(KeepAugment): #
     def __init__(self, mode, length,thres=0.6,transfrom=None,default_select=None, early=False, low = False,
         possible_segment=[1],keep_leads=[12],grid_region=False, reverse=False,info_upper = 0.0, thres_adapt=True, adapt_target='len',save_dir='./',
-        sfreq=100,pw_len=0.2,tw_len=0.4,**_kwargs):
+        sfreq=100,pw_len=0.2,tw_len=0.4,keep_prob=1,**_kwargs):
         assert mode in ['auto','b','p','t','rand'] #auto: all, b: heart beat(-0.2,0.4), p: p-wave(-0.2,0), t: t-wave(0,0.4)
         self.mode = mode
         if self.mode=='p':
@@ -1545,6 +1545,7 @@ class AdaKeepAugment(KeepAugment): #
         self.all_stages = ['trans','keep']
         self.stage = 0
         self.save_dir = save_dir
+        self.keep_prob = keep_prob #can learn this
         #'torch.nn.functional.avg_pool1d' use this for segment
         print(f'Apply InfoKeep Augment: mode={self.mode},target={self.adapt_target}, threshold={self.thres}, transfrom={self.trans}')
     #kwargs for apply_func, batch_inputs

@@ -339,6 +339,9 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     sim_loss_func = ab_loss
     if loss_type=='minus':
         diff_loss_func = minus_loss
+    elif loss_type=='minusdiff':
+        diff_loss_func = minus_loss
+        diff_update_w = False
     elif loss_type=='relative':
         diff_loss_func = relative_loss
         sim_loss_func = rel_loss

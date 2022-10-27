@@ -1242,10 +1242,10 @@ class KeepAugment(object): #need fix
         slc_,slc_ch, t_series_ = self.get_slc(t_series,model) #slc_:(bs,seqlen), slc_ch:(bs,chs)
         info_aug, compare_func, info_bound, bound_func = self.get_selective(selective)
         #windowed_slc = self.m_pool(slc_.view(b,1,w)).view(b,-1)
+        apply_keep = torch.rand(b) #prob for apply keep
         #select a segment number
         n_keep_lead = np.random.choice(self.keep_leads)
         lead_quant = min(info_aug,1.0 - n_keep_lead / 12.0)
-        
         '''if n_keep_lead!=12: #next step opt speed
             #keep lead select
             lead_quant = min(info_aug,1.0 - n_keep_lead / 12.0)
@@ -1257,7 +1257,7 @@ class KeepAugment(object): #need fix
         seg_len = int(w / seg_number)
         if self.fix_points:
             info_len = min(int(self.length * 12 /(seg_number*n_keep_lead)),w)
-            print(f'keep len={info_len}, keeplead={n_keep_lead}')
+            #print(f'keep len={info_len}, keeplead={n_keep_lead}')
         else:
             info_len = int(self.length/seg_number)
         windowed_slc = torch.nn.functional.avg_pool1d(slc_.view(b,1,w),kernel_size=info_len, stride=1, padding=0).view(b,-1)
@@ -1321,10 +1321,11 @@ class KeepAugment(object): #need fix
                     inforegion_list.append(info_region)
             else:
                 t_s = augment(t_s,i=i,seq_len=each_seq_len,**kwargs) #some other augment if needed
-            
-            for reg_i in range(len(inforegion_list)):
-                x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
-                t_s[x1: x2, lead_select.to(t_s.device)] = inforegion_list[reg_i][:,lead_select]
+            if apply_keep[i] >= self.keep_prob: #maybe not fast
+                print(f'rand{apply_keep[i]}>{self.keep_prob}')
+                for reg_i in range(len(inforegion_list)):
+                    x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
+                    t_s[x1: x2, lead_select.to(t_s.device)] = inforegion_list[reg_i][:,lead_select]
             aug_t_s_list.append(t_s)
         #back
         if self.mode=='auto':

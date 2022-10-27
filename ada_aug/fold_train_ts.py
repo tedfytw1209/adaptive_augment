@@ -102,6 +102,8 @@ parser.add_argument('--keep_mode', type=str, default='auto', help='info keep mod
 parser.add_argument('--keep_prob', type=float, default=1, help='info keep probabilty')
 parser.add_argument('--adapt_target', type=str, default='len', help='info keep mode',
         choices=['fea','len','seg','way','ch','recut','repaste','recut','repaste'])
+parser.add_argument('--keep_back', type=str, default='', help='info keep how to paste back',
+        choices=['fix','rpeak',''])
 parser.add_argument('--keep_seg', type=int, nargs='+', default=[1], help='info keep segment mode')
 parser.add_argument('--keep_lead', type=int, nargs='+', default=[12], help='leads (channel) keep, 12 means all lead keep')
 parser.add_argument('--keep_grid', action='store_true', default=False, help='info keep augment grid')

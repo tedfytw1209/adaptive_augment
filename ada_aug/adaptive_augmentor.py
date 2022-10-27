@@ -658,12 +658,17 @@ class AdaAugkeep_TS(AdaAug):
         a_features = self.gf_model.extract_features(a_imgs) #(b*keep_len*n_ops, n_hidden)
         stage_name = self.Augment_wrapper.all_stages[self.Augment_wrapper.stage] #
         if self.ind_mix:
+            print('Stage: ',stage_name)
             if stage_name=='trans':
                 ba_features = a_features.reshape(len(images), n_ops_sub, -1)# batch, n_ops, n_hidden
                 out_w = weights_subset
+                print(self.ops_names)
+                print(weights_subset.shape,weights_subset)
             elif stage_name=='keep':
                 ba_features = a_features.reshape(len(images), self.adapt_len, -1)# batch, keep_lens, n_hidden
                 out_w = keeplen_ws
+                print(self.keep_lens)
+                print(keeplen_ws.shape,keeplen_ws)
             self.Augment_wrapper.change_stage() #finish
             if mix_feature:
                 mixed_features = [w.matmul(feat) for w, feat in zip(out_w, ba_features)]
@@ -673,9 +678,15 @@ class AdaAugkeep_TS(AdaAug):
                 return ba_features, [out_w]
         else:
             ba_features = a_features.reshape(len(images), n_ops_sub, self.adapt_len, -1).permute(0,2,1,3) # batch, n_ops,keep_lens, n_hidden
+            #print
+            print(keeplen_ws.shape,keeplen_ws)
+            print(weights_subset.shape,weights_subset)
+            print(ba_features.shape)
             if mix_feature:
                 mixed_features = [w.matmul(feat) for w, feat in zip(weights_subset, ba_features)] #[(keep_lens, n_hidden)]
+                print(mixed_features[0].shape, mixed_features)
                 mixed_features = [len_w.matmul(feat) for len_w,feat in zip(keeplen_ws,mixed_features)] #[(n_hidden)]
+                print(mixed_features[0].shape, mixed_features)
                 mixed_features = torch.stack(mixed_features, dim=0)
                 return mixed_features , [weights_subset, keeplen_ws]
             else:

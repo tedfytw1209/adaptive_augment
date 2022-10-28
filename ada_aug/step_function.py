@@ -22,7 +22,7 @@ from gradient_match import hyper_step
 
 def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_clip, adaaug, multilabel=False,n_class=10,
         difficult_aug=False,reweight=True,lambda_aug = 1.0,class_adaptive=False,map_select=False,visualize=False,training=True,
-        teach_rew=None):
+        teach_rew=None,policy_apply=True):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
     top5 = utils.AvgrageMeter()
@@ -42,7 +42,7 @@ def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_
                 policy_y = nn.functional.one_hot(target, num_classes=n_class).cuda().float()
             else:
                 policy_y = target.cuda().float()
-        aug_images = adaaug(input, seq_len, mode='exploit',y=policy_y)
+        aug_images = adaaug(input, seq_len, mode='exploit',y=policy_y,policy_apply=policy_apply)
         model.train()
         optimizer.zero_grad()
         logits = model(aug_images, seq_len)

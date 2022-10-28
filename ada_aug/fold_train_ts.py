@@ -83,6 +83,7 @@ parser.add_argument('--restore', action='store_true', default=False, help='resto
 parser.add_argument('--mapselect', action='store_true', default=False, help='use map select for multilabel')
 parser.add_argument('--valselect', action='store_true', default=False, help='use valid select')
 parser.add_argument('--notwarmup', action='store_true', default=False, help='use valid select')
+parser.add_argument('--randaug', action='store_true', default=False, help="mimic randaug training")
 parser.add_argument('--augselect', type=str, default='', help="augmentation selection")
 parser.add_argument('--alpha', type=float, default=1.0, help="alpha adpat")
 parser.add_argument('--train_sampler', type=str, default='', help='for train sampler',
@@ -319,6 +320,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         self.mapselect = self.config['mapselect']
         self.pre_train_acc = 0.0
         self.result_table_dic = {}
+        self.policy_apply = not args.randaug
     def step(self):#use step replace _train
         if self._iteration==0:
             wandb.config.update(self.config)
@@ -334,7 +336,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         args = self.config['args']
         step_dic={'epoch':Curr_epoch}
         diff_dic = {'difficult_aug':self.diff_augment,'reweight':self.diff_reweight,'lambda_aug':args.lambda_aug, 'class_adaptive':args.class_adapt
-                ,'visualize':args.visualize,'teach_rew':self.teach_model}
+                ,'visualize':args.visualize,'teach_rew':self.teach_model,'policy_apply':self.policy_apply}
         if Curr_epoch>self.config['epochs']:
             all_epochs = self.config['epochs']-1
             print(f'Trained epochs {Curr_epoch} Iteration: {self._iteration} already reach {all_epochs}, Skip step')

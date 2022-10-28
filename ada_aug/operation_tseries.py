@@ -1322,10 +1322,11 @@ class KeepAugment(object): #need fix
             else:
                 t_s = augment(t_s,i=i,seq_len=each_seq_len,**kwargs) #some other augment if needed
             if apply_keep[i] < self.keep_prob: #maybe not fast
-                print(f'rand{apply_keep[i]}>{self.keep_prob}')
                 for reg_i in range(len(inforegion_list)):
                     x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
                     t_s[x1: x2, lead_select.to(t_s.device)] = inforegion_list[reg_i][:,lead_select]
+            else:
+                print(f'rand{apply_keep[i]}>{self.keep_prob}')
             aug_t_s_list.append(t_s)
         #back
         if self.mode=='auto':

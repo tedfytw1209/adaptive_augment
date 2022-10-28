@@ -629,6 +629,18 @@ TS_AUGMENT_LIST = [
         (sign_flip, 0, 1),  # 8
         (freq_shift, 0, 5),  # 9
         ]
+TS_KEEP_DICT = {
+    'identity':True, 
+    'time_reverse':False, #time reverse
+    'fft_surrogate':True,
+    'channel_dropout':True,
+    'channel_shuffle':True,
+    'random_time_mask':True,
+    'add_gaussian_noise':True,
+    'random_bandstop':True,
+    'sign_flip':True,
+    'freq_shift':True,
+}
 ECG_OPS_NAMES = [
     'RR_permutation',
     'QRS_resample',

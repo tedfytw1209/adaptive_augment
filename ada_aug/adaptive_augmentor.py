@@ -262,7 +262,7 @@ class AdaAug_TS(AdaAug):
             if hasattr(self.gf_model, 'lstm'):
                 self.gf_model.lstm.train() #!!!maybe for bn is better
             self.h_model.train()
-            T = 1.0
+            T = self.temp
         a_params = self.h_model(self.gf_model.extract_features(X.cuda(),seq_len),y=y)
         bs, _ = a_params.shape
         if policy_apply:
@@ -568,7 +568,7 @@ class AdaAugkeep_TS(AdaAug):
             if hasattr(self.gf_model, 'lstm'):
                 self.gf_model.lstm.train() #!!!maybe for bn is better
             self.h_model.train()
-            T = 1.0
+            T = self.temp
         a_params = self.h_model(self.gf_model.extract_features(X.cuda(),seq_len),y=y)
         bs, _ = a_params.shape
         #mags: mag for ops, weights: weight for ops, keeplen_ws: keeplen weights, keep_thres: keep threshold

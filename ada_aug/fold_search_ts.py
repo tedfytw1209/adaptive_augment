@@ -338,7 +338,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         adaaug_config = {'sampling': 'prob',
                     'k_ops': self.config['k_ops'], #as paper
                     'delta': 0.0, 
-                    'temp': 1.0, 
+                    'temp': args.temperature, 
                     'search_d': get_dataset_dimension(args.dataset),
                     'target_d': get_dataset_dimension(args.dataset),
                     'gf_model_name': args.model_name,

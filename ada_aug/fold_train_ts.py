@@ -165,6 +165,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         #self.trainer = TSeriesModelTrainer(self.config)
         os.environ['WANDB_START_METHOD'] = 'thread'
         args = self.config['args']
+        #random seed setting
+        utils.reproducibility(args.seed)
         #  dataset settings for search
         n_channel = get_num_channel(args.dataset)
         n_class = get_num_class(args.dataset,args.labelgroup)

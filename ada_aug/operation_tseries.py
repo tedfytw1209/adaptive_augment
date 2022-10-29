@@ -1120,6 +1120,9 @@ def normal_slc(slc_):
     slc_ = slc_.view(b, w)
     return slc_
 
+def leads_group_select():
+    pass
+
 class KeepAugment(object): #need fix
     def __init__(self, mode, length,thres=0.6,transfrom=None,default_select=None, early=False, low = False,adapt_target='len',
         possible_segment=[1],keep_leads=[12],grid_region=False, reverse=False,info_upper = 0.0, visualize=False,save_dir='./',

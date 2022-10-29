@@ -630,16 +630,16 @@ TS_AUGMENT_LIST = [
         (freq_shift, 0, 5),  # 9
         ]
 TS_KEEP_DICT = {
-    'identity':True, 
-    'time_reverse':False, #time reverse
-    'fft_surrogate':True,
-    'channel_dropout':True,
-    'channel_shuffle':True,
-    'random_time_mask':True,
-    'add_gaussian_noise':True,
-    'random_bandstop':True,
-    'sign_flip':True,
-    'freq_shift':True,
+    0:True, 
+    1:False, #time reverse
+    2:True,
+    3:True,
+    4:True,
+    5:True,
+    6:True,
+    7:True,
+    8:True,
+    9:True,
 }
 ECG_OPS_NAMES = [
     'RR_permutation',
@@ -1123,7 +1123,7 @@ def normal_slc(slc_):
 class KeepAugment(object): #need fix
     def __init__(self, mode, length,thres=0.6,transfrom=None,default_select=None, early=False, low = False,adapt_target='len',
         possible_segment=[1],keep_leads=[12],grid_region=False, reverse=False,info_upper = 0.0, visualize=False,save_dir='./',
-        sfreq=100,pw_len=0.2,tw_len=0.4,keep_prob=1,**_kwargs):
+        sfreq=100,pw_len=0.2,tw_len=0.4,keep_prob=1,keep_back='',**_kwargs):
         assert mode in ['auto','b','p','t','rand'] #auto: all, b: heart beat(-0.2,0.4), p: p-wave(-0.2,0), t: t-wave(0,0.4)
         self.mode = mode
         if self.mode=='p':
@@ -1176,7 +1176,14 @@ class KeepAugment(object): #need fix
         elif adapt_target=='ch' and self.keep_leads!=[12]: #adapt leads
             print(f'Using keep leads {self.keep_leads}')
             self.only_lead_keep = True
-        
+        self.keep_dict = {}
+        self.rpeak_correct = False
+        if keep_back=='fix':
+            self.keep_dict = TS_KEEP_DICT
+        elif keep_back=='rpeak': #no need for our transform set
+            print('Using rpeak correction')
+            self.rpeak_correct = True
+        self.keep_back = keep_back
         self.keep_prob = keep_prob
         #'torch.nn.functional.avg_pool1d' use this for segment
         ##self.m_pool = torch.nn.AvgPool1d(kernel_size=self.length, stride=1, padding=0) #for winodow sum
@@ -1333,12 +1340,17 @@ class KeepAugment(object): #need fix
                     inforegion_list.append(info_region)
             else:
                 t_s = augment(t_s,i=i,seq_len=each_seq_len,**kwargs) #some other augment if needed
-            if apply_keep[i] < self.keep_prob: #maybe not fast
+            #fix keep prob
+            idx = kwargs['idx_matrix'][i,0] #ops used !!!tmp only use first ops
+            use_keep = self.keep_dict.get(idx,True)
+            #keep prob
+            if apply_keep[i] < self.keep_prob and use_keep: #maybe not fast
                 for reg_i in range(len(inforegion_list)):
                     x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
                     t_s[x1: x2, lead_select.to(t_s.device)] = inforegion_list[reg_i][:,lead_select]
             else:
-                print(f'rand{apply_keep[i]}>{self.keep_prob}')
+                print(f'randam{apply_keep[i]}>{self.keep_prob}')
+                print(f'ops idx{idx} use keep {use_keep}')
             aug_t_s_list.append(t_s)
         #back
         if self.mode=='auto':
@@ -1432,9 +1444,15 @@ class KeepAugment(object): #need fix
                 else:
                     t_s_tmp = augment(t_s_tmp,i=i,k=k,ops_name=ops_name,seq_len=each_seq_len,**kwargs) #some other augment if needed
                     #print('Size compare: ',t_s[x1: x2, :].shape,info_region.shape)
-                for reg_i in range(len(inforegion_list)):
-                    x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
-                    t_s_tmp[x1: x2, lead_select.to(t_s_tmp.device)] = inforegion_list[reg_i][:,lead_select].to(t_s_tmp.device)
+                #fix keep prob
+                idx = k #ops used !!!tmp only use first ops
+                use_keep = self.keep_dict.get(idx,True)
+                if use_keep:
+                    for reg_i in range(len(inforegion_list)):
+                        x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
+                        t_s_tmp[x1: x2, lead_select.to(t_s_tmp.device)] = inforegion_list[reg_i][:,lead_select].to(t_s_tmp.device)
+                else:
+                    print(f'ops idx{idx} use keep {use_keep}')
                 aug_t_s_list.append(t_s_tmp)
         #back
         if self.mode=='auto':
@@ -1469,7 +1487,7 @@ class KeepAugment(object): #need fix
         b, seq_len , channel = x.shape
         imp_map_list = []
         for x_each in x:
-            select_lead = 0 #!!!tmp
+            select_lead = 3 # normally use lead 3 to detect rrpeaks
             rpeaks_array = self.detectors.pan_tompkins_detector(x_each[:,select_lead])
             imp_map = np.zeros((seq_len,), np.float32) #maybe need smooth!!!
             for rpeak_point in rpeaks_array:
@@ -1517,7 +1535,7 @@ def stop_gradient_keep(trans_image, magnitude, keep_thre, region_list):
 class AdaKeepAugment(KeepAugment): #
     def __init__(self, mode, length,thres=0.6,transfrom=None,default_select=None, early=False, low = False,
         possible_segment=[1],keep_leads=[12],grid_region=False, reverse=False,info_upper = 0.0, thres_adapt=True, adapt_target='len',save_dir='./',
-        sfreq=100,pw_len=0.2,tw_len=0.4,keep_prob=1,**_kwargs):
+        sfreq=100,pw_len=0.2,tw_len=0.4,keep_prob=1,keep_back='',**_kwargs):
         assert mode in ['auto','b','p','t','rand'] #auto: all, b: heart beat(-0.2,0.4), p: p-wave(-0.2,0), t: t-wave(0,0.4)
         self.mode = mode
         if self.mode=='p':
@@ -1529,6 +1547,7 @@ class AdaKeepAugment(KeepAugment): #
         assert adapt_target in ['fea','len','seg','way','ch']
         self.adapt_target = adapt_target
         self.way = [('cut',False),('cut',True),('paste',False),('paste',True)] #(selective,reverse)
+        self.keep_prob = [True,False]
         self.length = length #len is a list if adapt target 
         self.early = early
         self.low = low
@@ -1560,6 +1579,14 @@ class AdaKeepAugment(KeepAugment): #
         self.stage = 0
         self.save_dir = save_dir
         self.keep_prob = keep_prob #can learn this
+        self.keep_dict = {}
+        self.rpeak_correct = False
+        if keep_back=='fix':
+            self.keep_dict = TS_KEEP_DICT
+        elif keep_back=='rpeak':
+            print('Using rpeak correction')
+            self.rpeak_correct = True
+        self.keep_back = keep_back
         #'torch.nn.functional.avg_pool1d' use this for segment
         print(f'Apply InfoKeep Augment: mode={self.mode},target={self.adapt_target}, threshold={self.thres}, transfrom={self.trans}')
     #kwargs for apply_func, batch_inputs
@@ -1660,10 +1687,16 @@ class AdaKeepAugment(KeepAugment): #
                     inforegion_list.append(info_region)
             else:
                 t_s = augment(t_s,i=i,seq_len=each_seq_len,**kwargs) #some other augment if needed
+            #fix keep prob
+            idx = kwargs['idx_matrix'][i,0] #ops used !!!tmp only use first ops
+            use_keep = self.keep_dict.get(idx,True)
             #paste back
-            for reg_i in range(len(inforegion_list)):
-                x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
-                t_s[x1: x2, lead_select.to(t_s.device)] = inforegion_list[reg_i][:,lead_select]
+            if use_keep:
+                for reg_i in range(len(inforegion_list)):
+                    x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
+                    t_s[x1: x2, lead_select.to(t_s.device)] = inforegion_list[reg_i][:,lead_select]
+            else:
+                print(f'ops idx{idx} use keep {use_keep}')
             aug_t_s_list.append(t_s)
         #back
         if self.mode=='auto': #not bug
@@ -1782,9 +1815,14 @@ class AdaKeepAugment(KeepAugment): #
                     else:
                         t_s_tmp = augment(t_s_tmp,i=i,k=k,ops_name=ops_name,keep_thres=keep_thres,seq_len=each_seq_len,**kwargs) #some other augment if needed
                         #print('Size compare: ',t_s[x1: x2, :].shape,info_region.shape)
-                    for reg_i in range(len(inforegion_list)):
-                        x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
-                        t_s_tmp[x1: x2, lead_select.to(t_s_tmp.device)] = inforegion_list[reg_i][:,lead_select].to(t_s_tmp.device)
+                    idx = k #ops used !!!tmp only use first ops
+                    use_keep = self.keep_dict.get(idx,True)
+                    if use_keep:
+                        for reg_i in range(len(inforegion_list)):
+                            x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
+                            t_s_tmp[x1: x2, lead_select.to(t_s_tmp.device)] = inforegion_list[reg_i][:,lead_select].to(t_s_tmp.device)
+                    else:
+                        print(f'ops idx{idx} use keep {use_keep}')
                     t_s_tmp = stop_gradient_keep(t_s_tmp.cuda(), magnitudes[i][k], keep_thres[i],region_list) #add keep thres
                     aug_t_s_list.append(t_s_tmp)
         #back
@@ -1889,9 +1927,15 @@ class AdaKeepAugment(KeepAugment): #
                     else:
                         t_s_tmp = augment(t_s_tmp,i=i,k=k,ops_name=ops_name,keep_thres=keep_thres,seq_len=each_seq_len,**kwargs) #some other augment if needed
                         #print('Size compare: ',t_s[x1: x2, :].shape,info_region.shape)
-                    for reg_i in range(len(inforegion_list)):
-                        x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
-                        t_s_tmp[x1: x2, lead_select.to(t_s_tmp.device)] = inforegion_list[reg_i][:,lead_select].to(t_s_tmp.device)
+                    #fix keep prob
+                    idx = k #ops used !!!tmp only use first ops
+                    use_keep = self.keep_dict.get(idx,True)
+                    if use_keep:
+                        for reg_i in range(len(inforegion_list)):
+                            x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
+                            t_s_tmp[x1: x2, lead_select.to(t_s_tmp.device)] = inforegion_list[reg_i][:,lead_select].to(t_s_tmp.device)
+                    else:
+                        print(f'ops idx{idx} use keep {use_keep}')
                     t_s_tmp = stop_gradient_keep(t_s_tmp.cuda(), magnitudes[i][k], keep_thres[i],region_list) #add keep thres
                     aug_t_s_list.append(t_s_tmp)
         #back

@@ -1119,14 +1119,59 @@ def normal_slc(slc_):
     slc_ /= slc_.max(1, keepdim=True)[0]
     slc_ = slc_.view(b, w)
     return slc_
-
-def leads_group_select():
-    pass
+#12leads: (1,2,3,aVL,aVR,aVF),v1~v6
+def leads_group_select(slc_ch_each,n_keep_lead,lead_quant,default_leads):
+    if n_keep_lead==12:
+        lead_select = default_leads
+    elif n_keep_lead>6:
+        lead_sorted, lead_idx = torch.sort(slc_ch_each[6:],descending=True) #high to low v1~v6
+        lead_idx = lead_idx + 6
+        lead_select = torch.cat((default_leads[:6] ,lead_idx[:n_keep_lead-6]))
+    elif n_keep_lead==6: #all limbs or all chest
+        rd_bin = np.random.randint(2)
+        lead_select = default_leads[rd_bin*6:(rd_bin+1)*6] #0~5 or 6~11
+    else:
+        lead_sorted, lead_idx = torch.sort(slc_ch_each[6:],descending=True) #high to low v1~v6
+        lead_idx = lead_idx + 6
+        lead_select = lead_idx[:n_keep_lead]
+    print('leads_group_select leads slc: ',slc_ch_each) #!tmp
+    print(f'n_leads: {n_keep_lead}, lead select: {lead_select}') #!tmp
+    return lead_select
+#topk select, multinomial select
+def leads_topk_select(slc_ch_each,n_keep_lead,lead_quant,default_leads):
+    if n_keep_lead==12:
+        lead_select = default_leads
+    else:
+        lead_sorted, lead_idx = torch.topk(slc_ch_each,n_keep_lead,sorted=False)
+        lead_select = lead_idx
+    print('leads_topk_select leads slc: ',slc_ch_each) #!tmp
+    print(f'n_leads: {n_keep_lead}, lead select: {lead_select}') #!tmp
+    return lead_select
+def leads_multinomial_select(slc_ch_each,n_keep_lead,lead_quant,default_leads):
+    if n_keep_lead==12:
+        lead_select = default_leads
+    else:
+        lead_sorted, lead_idx = torch.sort(torch.multinomial(slc_ch_each,n_keep_lead))[0]
+        lead_select = lead_sorted
+    print('leads_multinomial_select leads slc: ',slc_ch_each) #!tmp
+    print(f'n_leads: {n_keep_lead}, lead select: {lead_select}') #!tmp
+    return lead_select
+def leads_threshold_select(slc_ch_each,n_keep_lead,lead_quant,default_leads):
+    if n_keep_lead!=12: 
+        quant_lead_sc = torch.quantile(slc_ch_each,lead_quant)
+        lead_possible = torch.nonzero(slc_ch_each.ge(quant_lead_sc), as_tuple=True)[0]
+        lead_potential = slc_ch_each[lead_possible]
+        lead_select = torch.sort(lead_possible[torch.multinomial(lead_potential,n_keep_lead)])[0]
+    else:
+        lead_select = default_leads
+    print('leads_threshold_select leads slc: ',slc_ch_each) #!tmp
+    print(f'n_leads: {n_keep_lead}, lead select: {lead_select}') #!tmp
+    return lead_select
 
 class KeepAugment(object): #need fix
     def __init__(self, mode, length,thres=0.6,transfrom=None,default_select=None, early=False, low = False,adapt_target='len',
         possible_segment=[1],keep_leads=[12],grid_region=False, reverse=False,info_upper = 0.0, visualize=False,save_dir='./',
-        sfreq=100,pw_len=0.2,tw_len=0.4,keep_prob=1,keep_back='',**_kwargs):
+        sfreq=100,pw_len=0.2,tw_len=0.4,keep_prob=1,keep_back='',lead_sel='thres',**_kwargs):
         assert mode in ['auto','b','p','t','rand'] #auto: all, b: heart beat(-0.2,0.4), p: p-wave(-0.2,0), t: t-wave(0,0.4)
         self.mode = mode
         if self.mode=='p':
@@ -1160,6 +1205,16 @@ class KeepAugment(object): #need fix
         self.only_lead_keep = False
         self.fix_points = False
         self.default_leads = torch.arange(12).long()
+        self.leads_sel = lead_sel
+        #['max','prob','thres','group']
+        if lead_sel=='max':
+            self.lead_select_func = leads_topk_select
+        elif lead_sel=='prob':
+            self.lead_select_func = leads_multinomial_select
+        elif lead_sel=='group':
+            self.lead_select_func = leads_group_select
+        else:
+            self.lead_select_func = leads_threshold_select
         if adapt_target not in ['fea','len','seg','way','keep','ch']:
             target = adapt_target
             print('Keep Auto select: ',target)
@@ -1295,13 +1350,7 @@ class KeepAugment(object): #need fix
         win_start, win_end = 0,windowed_w
         for i,(t_s, slc,slc_ch_each, windowed_slc_each, each_seq_len) in enumerate(zip(t_series_, slc_,slc_ch, windowed_slc, seq_len)):
             #keep lead select, not efficent
-            if n_keep_lead!=12: 
-                quant_lead_sc = torch.quantile(slc_ch_each,lead_quant)
-                lead_possible = torch.nonzero(slc_ch_each.ge(quant_lead_sc), as_tuple=True)[0]
-                lead_potential = slc_ch_each[lead_possible]
-                lead_select = torch.sort(lead_possible[torch.multinomial(lead_potential,n_keep_lead)])[0].detach()
-            else:
-                lead_select = self.default_leads
+            lead_select = self.lead_select_func(slc_ch_each,n_keep_lead,lead_quant,self.default_leads).detach()
             #if only lead keep
             if self.only_lead_keep:
                 #augment & paste back
@@ -1398,13 +1447,7 @@ class KeepAugment(object): #need fix
         win_start, win_end = 0,windowed_w
         for i,(t_s, slc,slc_ch_each, windowed_slc_each, each_seq_len) in enumerate(zip(t_series_, slc_,slc_ch, windowed_slc,seq_len)):
             #keep lead select
-            if n_keep_lead!=12: 
-                quant_lead_sc = torch.quantile(slc_ch_each,lead_quant)
-                lead_possible = torch.nonzero(slc_ch_each.ge(quant_lead_sc), as_tuple=True)[0]
-                lead_potential = slc_ch_each[lead_possible]
-                lead_select = torch.sort(lead_possible[torch.multinomial(lead_potential,n_keep_lead)])[0].detach()
-            else:
-                lead_select = self.default_leads
+            lead_select = self.lead_select_func(slc_ch_each,n_keep_lead,lead_quant,self.default_leads).detach()
             #find region
             for k, ops_name in ops_search:
                 t_s_tmp = t_s.clone().detach().cpu()
@@ -1480,7 +1523,7 @@ class KeepAugment(object): #need fix
         score, _ = torch.max(preds, 1) #predict class
         score.mean().backward() #among batch mean
         slc_, _ = torch.max(torch.abs(x.grad), dim=2) #max of channel
-        slc_ch, _ = torch.max(torch.abs(x.grad), dim=1) #max of channel
+        slc_ch, _ = torch.mean(torch.abs(x.grad), dim=1) #mean of len, 10/29
         slc_ = normal_slc(slc_)
         slc_ch = normal_slc(slc_ch)
         if hasattr(model, 'lstm'):
@@ -1538,7 +1581,7 @@ def stop_gradient_keep(trans_image, magnitude, keep_thre, region_list):
 class AdaKeepAugment(KeepAugment): #
     def __init__(self, mode, length,thres=0.6,transfrom=None,default_select=None, early=False, low = False,
         possible_segment=[1],keep_leads=[12],grid_region=False, reverse=False,info_upper = 0.0, thres_adapt=True, adapt_target='len',save_dir='./',
-        sfreq=100,pw_len=0.2,tw_len=0.4,keep_prob=1,keep_back='',**_kwargs):
+        sfreq=100,pw_len=0.2,tw_len=0.4,keep_prob=1,keep_back='',lead_sel='thres',**_kwargs):
         assert mode in ['auto','b','p','t','rand'] #auto: all, b: heart beat(-0.2,0.4), p: p-wave(-0.2,0), t: t-wave(0,0.4)
         self.mode = mode
         if self.mode=='p':
@@ -1567,6 +1610,16 @@ class AdaKeepAugment(KeepAugment): #
         self.keep_leads = keep_leads
         self.leads_multi = [int(l / np.min(self.length)) for l in self.length]
         self.default_leads = torch.arange(12).long()
+        self.leads_sel = lead_sel
+        #['max','prob','thres','group']
+        if lead_sel=='max':
+            self.lead_select_func = leads_topk_select
+        elif lead_sel=='prob':
+            self.lead_select_func = leads_multinomial_select
+        elif lead_sel=='group':
+            self.lead_select_func = leads_group_select
+        else:
+            self.lead_select_func = leads_threshold_select
         if adapt_target=='len' and self.keep_leads!=[12]: #adapt len
             print(f'Keep len {self.length} with lead {self.keep_leads}')
         elif adapt_target=='fea': #adapt len
@@ -1645,14 +1698,8 @@ class AdaKeepAugment(KeepAugment): #
             windowed_slc_each = windowed_slc[0]
             win_start, win_end = 0,windowed_w
             #keep lead select
-            if n_keep_lead_n!=12: 
-                lead_quant = min(info_aug,1.0 - n_keep_lead_n / 12.0)
-                quant_lead_sc = torch.quantile(slc_ch_each,lead_quant)
-                lead_possible = torch.nonzero(slc_ch_each.ge(quant_lead_sc), as_tuple=True)[0]
-                lead_potential = slc_ch_each[lead_possible]
-                lead_select = torch.sort(lead_possible[torch.multinomial(lead_potential,n_keep_lead_n)])[0].detach()
-            else:
-                lead_select = self.default_leads.detach()
+            lead_quant = min(info_aug,1.0 - n_keep_lead_n / 12.0)
+            lead_select = self.lead_select_func(slc_ch_each,n_keep_lead_n,lead_quant,self.default_leads).detach()
             #print('lead select: ',lead_select) #!tmp
             #find region for each segment
             region_list,inforegion_list = [],[]
@@ -1781,14 +1828,8 @@ class AdaKeepAugment(KeepAugment): #
                 windowed_slc_each = windowed_slc[0]
                 win_start, win_end = 0,windowed_w
                 #keep lead select
-                if each_n_lead!=12:
-                    lead_quant = min(info_aug,1.0 - each_n_lead / 12.0)
-                    quant_lead_sc = torch.quantile(slc_ch_each,lead_quant)
-                    lead_possible = torch.nonzero(slc_ch_each.ge(quant_lead_sc), as_tuple=True)[0]
-                    lead_potential = slc_ch_each[lead_possible]
-                    lead_select = torch.sort(lead_possible[torch.multinomial(lead_potential,each_n_lead)])[0].detach()
-                else:
-                    lead_select = self.default_leads
+                lead_quant = min(info_aug,1.0 - each_n_lead / 12.0)
+                lead_select = self.lead_select_func(slc_ch_each,each_n_lead,lead_quant,self.default_leads).detach()
                 #print('lead select: ',lead_select) #!tmp
                 #find region
                 for k, ops_name in ops_search:
@@ -1894,14 +1935,8 @@ class AdaKeepAugment(KeepAugment): #
                 windowed_slc_each = windowed_slc[0]
                 win_start, win_end = 0,windowed_w
                 #keep lead select
-                if each_n_lead!=12: 
-                    lead_quant = min(info_aug,1.0 - each_n_lead / 12.0)
-                    quant_lead_sc = torch.quantile(slc_ch_each,lead_quant)
-                    lead_possible = torch.nonzero(slc_ch_each.ge(quant_lead_sc), as_tuple=True)[0]
-                    lead_potential = slc_ch_each[lead_possible]
-                    lead_select = torch.sort(lead_possible[torch.multinomial(lead_potential,each_n_lead)])[0].detach()
-                else:
-                    lead_select = self.default_leads
+                lead_quant = min(info_aug,1.0 - each_n_lead / 12.0)
+                lead_select = self.lead_select_func(slc_ch_each,each_n_lead,lead_quant,self.default_leads).detach()
                 #find region
                 if stage_name=='keep': #from all possible to a fix number
                     ops_names_l = [(fix_idx[i].detach().cpu().numpy()[0],ops_names[fix_idx[i]])] #fix bug 10/25

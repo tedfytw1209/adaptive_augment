@@ -520,8 +520,11 @@ class AdaAugkeep_TS(AdaAug):
             self.adapt_len = len(self.possible_segment)
             self.adapt_params = self.possible_segment
         elif self.adapt_target == 'way': #adapt segment
-            self.adapt_len = 4 #!!! const now
-            self.adapt_params = [('cut',False),('cut',True),('paste',False),('paste',True)] #(selective,reverse)
+            self.adapt_params = [('cut',False),('cut',True),('paste',False),('paste',True)] #(selective,reverse), 
+            self.adapt_len = len(self.adapt_params)
+        elif self.adapt_target == 'keep': #adapt segment
+            self.adapt_params = [('paste',False),('paste',True)] #(selective, keep or not ), 
+            self.adapt_len = len(self.adapt_params)
         elif self.adapt_target == 'ch': #adapt segment
             self.adapt_len = len(self.n_leads_select)
             self.adapt_params = self.n_leads_select

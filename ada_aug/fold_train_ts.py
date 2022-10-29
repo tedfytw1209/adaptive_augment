@@ -102,7 +102,7 @@ parser.add_argument('--keep_aug', action='store_true', default=False, help='info
 parser.add_argument('--keep_mode', type=str, default='auto', help='info keep mode',choices=['auto','adapt','b','p','t','rand'])
 parser.add_argument('--keep_prob', type=float, default=1, help='info keep probabilty')
 parser.add_argument('--adapt_target', type=str, default='len', help='info keep mode',
-        choices=['fea','len','seg','way','ch','recut','repaste','recut','repaste'])
+        choices=['fea','len','seg','way','keep','ch','recut','repaste','recut','repaste'])
 parser.add_argument('--keep_back', type=str, default='', help='info keep how to paste back',
         choices=['fix','rpeak',''])
 parser.add_argument('--keep_seg', type=int, nargs='+', default=[1], help='info keep segment mode')
@@ -251,6 +251,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 proj_add = len(args.keep_seg) + 1
             elif args.adapt_target=='way':
                 proj_add = 4 + 1
+            elif args.adapt_target=='keep':
+                proj_add = 2 + 1
         self.h_model = Projection_TSeries(in_features=h_input,label_num=label_num,label_embed=label_embed,
             n_layers=args.n_proj_layer, n_hidden=args.n_proj_hidden, augselect=args.augselect, proj_addition=proj_add,
             feature_mask=args.feature_mask).cuda()

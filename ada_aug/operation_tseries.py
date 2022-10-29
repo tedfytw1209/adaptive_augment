@@ -1157,7 +1157,7 @@ class KeepAugment(object): #need fix
         self.only_lead_keep = False
         self.fix_points = False
         self.default_leads = torch.arange(12).long()
-        if adapt_target not in ['fea','len','seg','way','ch']:
+        if adapt_target not in ['fea','len','seg','way','keep','ch']:
             target = adapt_target
             print('Keep Auto select: ',target)
             if 'cut' in target:
@@ -1544,9 +1544,11 @@ class AdaKeepAugment(KeepAugment): #
             self.start_s,self.end_s = -0.2*sfreq,0.4*sfreq
         elif self.mode=='t':
             self.start_s,self.end_s = 0,0.4*sfreq
-        assert adapt_target in ['fea','len','seg','way','ch']
+        assert adapt_target in ['fea','len','seg','way','keep','ch']
         self.adapt_target = adapt_target
         self.way = [('cut',False),('cut',True),('paste',False),('paste',True)] #(selective,reverse)
+        if adapt_target=='keep':
+            self.way = [('paste',False),('paste',True)] #(selective, keep or not )
         self.keep_prob = [True,False]
         self.length = length #len is a list if adapt target 
         self.early = early
@@ -1607,6 +1609,7 @@ class AdaKeepAugment(KeepAugment): #
         for i,(t_s, slc,slc_ch_each,each_seq_len) in enumerate(zip(t_series_, slc_,slc_ch,seq_len)):
             #len choose
             use_reverse = None
+            adapt_keep = True
             n_keep_lead_n = n_keep_lead
             if self.adapt_target=='len':
                 total_len = self.length[len_idx[i]]
@@ -1619,6 +1622,10 @@ class AdaKeepAugment(KeepAugment): #
                 select_way = self.way[len_idx[i]]
                 selective = select_way[0]
                 use_reverse = select_way[1]
+            elif self.adapt_target=='keep':
+                select_way = self.way[len_idx[i]]
+                selective = select_way[0]
+                adapt_keep = select_way[1]
             elif self.adapt_target=='seg':
                 seg_number = self.possible_segment[len_idx[i]]
             elif self.adapt_target=='ch':
@@ -1691,7 +1698,7 @@ class AdaKeepAugment(KeepAugment): #
             idx = kwargs['idx_matrix'][i,0] #ops used !!!tmp only use first ops
             use_keep = self.keep_dict.get(idx,True)
             #paste back
-            if use_keep:
+            if use_keep and adapt_keep:
                 for reg_i in range(len(inforegion_list)):
                     x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
                     t_s[x1: x2, lead_select.to(t_s.device)] = inforegion_list[reg_i][:,lead_select]
@@ -1718,7 +1725,7 @@ class AdaKeepAugment(KeepAugment): #
             keeplen_params = self.length
             keepseg_params = [seg_number for i in range(len(self.length))]
             keepleads_params = [int(n_keep_lead / self.leads_multi[i]) for i in range(len(self.leads_multi))]
-        elif adapt_target=='way':
+        elif adapt_target=='way' or adapt_target=='keep':
             keepway_params = self.way
             keeplen_params = [each_len for i in range(len(self.way))]
             keepseg_params = [seg_number for i in range(len(self.way))]
@@ -1751,11 +1758,15 @@ class AdaKeepAugment(KeepAugment): #
             ops_search = [n for n in zip(mask_idx, [ops_names[k] for k in mask_idx])]
         else:
             ops_search = [n for n in enumerate(ops_names)]
-        
+        use_reverse = None
+        adapt_keep = True
         for i,(t_s, slc,slc_ch_each,each_seq_len) in enumerate(zip(t_series_, slc_,slc_ch,seq_len)):
             for (each_way,each_len, seg_number, each_n_lead) in zip(keepway_params,keeplen_params,keepseg_params,keepleads_params):
                 #print(f'way={each_way}, seg={seg_number}, len={each_len}, lead={each_n_lead}')
-                (selective, use_reverse) = each_way
+                if self.adapt_target=='keep':
+                    (selective, adapt_keep) = each_way
+                else:
+                    (selective, use_reverse) = each_way
                 info_aug, compare_func, info_bound, bound_func = self.get_selective(selective,thres=keep_thres[i],use_reverse=use_reverse)
                 #select a segment number
                 info_len = int(each_len/seg_number)
@@ -1817,7 +1828,7 @@ class AdaKeepAugment(KeepAugment): #
                         #print('Size compare: ',t_s[x1: x2, :].shape,info_region.shape)
                     idx = k #ops used !!!tmp only use first ops
                     use_keep = self.keep_dict.get(idx,True)
-                    if use_keep:
+                    if use_keep and adapt_keep:
                         for reg_i in range(len(inforegion_list)):
                             x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
                             t_s_tmp[x1: x2, lead_select.to(t_s_tmp.device)] = inforegion_list[reg_i][:,lead_select].to(t_s_tmp.device)
@@ -1846,6 +1857,9 @@ class AdaKeepAugment(KeepAugment): #
         #keep param or transfrom param
         if stage_name=='trans':
             keeplen_params = fix_idx
+        #can not use ind for adapt target==keep
+        if self.adapt_target=='keep':
+            raise BaseException("can not use ind for adapt target==keep")
         #keep len or segment, not consider multiple objective now!!!
         each_len, seg_number, n_keep_lead = self.length[0], self.possible_segment[0], self.keep_leads[0] #!!! tmp use
         keepway_params, keeplen_params, keepseg_params, keepleads_params = self.make_params(self.adapt_target,each_len,seg_number,selective,n_keep_lead)

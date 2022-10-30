@@ -217,7 +217,7 @@ class AdaAug(nn.Module):
 class AdaAug_TS(AdaAug):
     def __init__(self, after_transforms, n_class, gf_model, h_model, save_dir=None, visualize=False,
                     config=default_config,keepaug_config=default_config, multilabel=False, augselect='',class_adaptive=False,
-                    sub_mix=1.0,search_temp=1.0,noaug_add=False,transfrom_dic={}):
+                    sub_mix=1.0,search_temp=1.0,noaug_add=False,transfrom_dic={},preprocessors=[]):
         super(AdaAug_TS, self).__init__(after_transforms, n_class, gf_model, h_model, save_dir, config)
         #other already define in AdaAug
         self.aug_dict = None
@@ -253,6 +253,7 @@ class AdaAug_TS(AdaAug):
         self.noaug_tensor = self.noaug_max * F.one_hot(torch.tensor([0]), num_classes=self.n_ops).float()
         self.sub_mix = sub_mix
         self.search_temp = search_temp
+        self.preprocessors=preprocessors
 
     def predict_aug_params(self, X, seq_len, mode,y=None,policy_apply=True):
         self.gf_model.eval()
@@ -490,7 +491,7 @@ class AdaAug_TS(AdaAug):
 class AdaAugkeep_TS(AdaAug):
     def __init__(self, after_transforms, n_class, gf_model, h_model, save_dir=None, visualize=False,
                     config=default_config,keepaug_config=default_config, multilabel=False, augselect='',class_adaptive=False,ind_mix=False,
-                    sub_mix=1.0,search_temp=1.0,noaug_add=False,transfrom_dic={}):
+                    sub_mix=1.0,search_temp=1.0,noaug_add=False,transfrom_dic={},preprocessors=[]):
         super(AdaAugkeep_TS, self).__init__(after_transforms, n_class, gf_model, h_model, save_dir, config)
         #other already define in AdaAug
         self.aug_dict = None
@@ -565,6 +566,7 @@ class AdaAugkeep_TS(AdaAug):
         self.noaug_tensor[0:0] = self.noaug_max #noaug
         self.sub_mix = sub_mix
         self.search_temp = search_temp
+        self.preprocessors=preprocessors
 
     def predict_aug_params(self, X, seq_len, mode,y=None,policy_apply=True):
         self.gf_model.eval()

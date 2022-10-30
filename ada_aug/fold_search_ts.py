@@ -218,7 +218,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             print('Default Train 1~8 /Valid 9/Test 10 fold split')
         else:
             print('Warning: Random splitting train/test')
-        self.train_queue, self.valid_queue, self.search_queue, self.test_queue, self.tr_search_queue = get_ts_dataloaders(
+        self.train_queue, self.valid_queue, self.search_queue, self.test_queue, self.tr_search_queue, preprocessors = get_ts_dataloaders(
             args.dataset, args.batch_size, args.num_workers,
             args.dataroot, args.cutout, args.cutout_length,
             split=args.train_portion, split_idx=0, target_lb=-1,
@@ -369,7 +369,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 search_temp=args.sear_temp,
                 sub_mix=sub_mix,
                 noaug_add=self.noaug_add,
-                transfrom_dic=trans_config)
+                transfrom_dic=trans_config,
+                preprocessors=preprocessors)
         else:
             keepaug_config['length'] = keepaug_config['length'][0]
             self.adaaug = AdaAug_TS(after_transforms=after_transforms,
@@ -386,7 +387,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 search_temp=args.sear_temp,
                 sub_mix=sub_mix,
                 noaug_add=self.noaug_add,
-                transfrom_dic=trans_config)
+                transfrom_dic=trans_config,
+                preprocessors=preprocessors)
         #to self
         self.n_channel = n_channel
         self.n_class = n_class

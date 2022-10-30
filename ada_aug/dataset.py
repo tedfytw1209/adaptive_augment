@@ -349,7 +349,7 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
             kwargs['labelgroup']=labelgroup
     else:
         ValueError(f'Invalid dataset name={dataset}')
-    
+    ss = None
     if (not default_split or dataset_name=='chapman') and len(fold_assign)==0: #chapman didn't have default split now!!!
         dataset = dataset_func(dataroot,multilabel=multilabel,**kwargs)
         total = len(dataset)
@@ -518,7 +518,7 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
     print(f'  |test: {len(testloader)*batch}')
     if search and search_dataset is not None:
         print(f'  |search: {len(searchloader)*search_divider}')
-    return trainloader, validloader, searchloader, testloader, tr_searchloader
+    return trainloader, validloader, searchloader, testloader, tr_searchloader, [ss]
 
 def unpickle(file):
     import pickle

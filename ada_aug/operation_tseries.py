@@ -187,7 +187,6 @@ def add_gaussian_noise(X, std, random_state=None, *args, **kwargs):
     return transformed_X
 
 def exp_add_gaussian_noise(X, std, random_state=None, *args, **kwargs):
-    # XXX: Maybe have rng passed as argument here
     rng = check_random_state(random_state)
     noise = torch.from_numpy(
         rng.normal(
@@ -808,6 +807,11 @@ SELECTIVE_DICT = {
     'RR_permutation':selopt[1], #!undefine
     'QRS_resample':selopt[1], #!undefine
 }
+#leads version
+LEADS_AUGMENT_DICT = {k:(Leads_Warpper(v[0]),v[1],v[2]) for (k,v) in AUGMENT_DICT.items()}
+LEADS_ECG_NOISE_DICT = {k:(Leads_Warpper(v[0]),v[1],v[2]) for (k,v) in ECG_NOISE_DICT.items()}
+LEADS_GOOD_ECG_DICT = {k:(Leads_Warpper(v[0]),v[1],v[2]) for (k,v) in GOOD_ECG_DICT.items()}
+#augment func
 def get_augment(name,aug_dict=None):
     if aug_dict==None:
         return AUGMENT_DICT[name]
@@ -1119,6 +1123,35 @@ def normal_slc(slc_):
     slc_ /= slc_.max(1, keepdim=True)[0]
     slc_ = slc_.view(b, w)
     return slc_
+#12leads: (1,2,3,aVL,aVR,aVF),v1~v6 leads warp: assert limbs leads correlation
+class Leads_Warpper(object): #need test
+    def __init__(self, augment):
+        self.augment = augment
+        self.__name__ = augment.__name__ #set name as origin augment name
+    def __call__(self,X, magnitude,random_state=None,sfreq=100,seq_len=None,preprocessor=None, *args, **kwargs):
+        #batch_size, n_channels, seq_len = X.shape
+        x_shape = X.shape
+        X = X.cpu().numpy()
+        #preprocess back
+        if preprocessor!=None:
+            X_ori = preprocessor.inverse_transform(X.flatten()[:,np.newaxis]).reshape(x_shape)
+        else:
+            X_ori = X
+        #augment
+        X_aug = self.augment(X_ori, magnitude,random_state=random_state,sfreq=sfreq,seq_len=seq_len)
+        #limbs leads assert, 1,2 as main
+        X_aug[:,:,2] = X_aug[:,:,1] - X_aug[:,:,0] #l3= l2 - l1
+        X_aug[:,:,3] = (X_aug[:,:,0] - X_aug[:,:,2])/2 #aVL=(l1-l3)/2
+        X_aug[:,:,4] = -(X_aug[:,:,0] + X_aug[:,:,1])/2 #-aVR=(l1+l2)/2
+        X_aug[:,:,5] = (X_aug[:,:,1] + X_aug[:,:,2])/2 #aVF=(l2+l3)/2
+        #preprocess back
+        if preprocessor!=None:
+            X_new = preprocessor.transform(X_aug.flatten()[:,np.newaxis]).reshape(x_shape)
+        else:
+            X_new = X_aug
+        X_new = torch.from_numpy(X_new).float()
+        return X_new
+
 #12leads: (1,2,3,aVL,aVR,aVF),v1~v6
 def leads_group_select(slc_ch_each,n_keep_lead,lead_quant,default_leads):
     if n_keep_lead==12:

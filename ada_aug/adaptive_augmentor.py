@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from torchvision import transforms
 
 import matplotlib.pyplot as plt
-from operation_tseries import GOOD_ECG_DICT, GOOD_ECG_LIST, GOOD_ECG_NAMES, apply_augment,TS_ADD_NAMES,ECG_OPS_NAMES,KeepAugment,AdaKeepAugment, \
+from operation_tseries import AUGMENT_DICT, GOOD_ECG_DICT, GOOD_ECG_LIST, GOOD_ECG_NAMES, LEADS_AUGMENT_DICT, LEADS_ECG_NOISE_DICT, LEADS_GOOD_ECG_DICT, apply_augment,TS_ADD_NAMES,ECG_OPS_NAMES,KeepAugment,AdaKeepAugment, \
     ECG_NOISE_NAMES,ECG_NOISE_DICT
 import operation
 from networks import get_model
@@ -86,7 +86,30 @@ def make_subset(n_ops,p):
         sum_sel = select.sum()
         print('select n_ops: ',sum_sel)
     return select,select_idxs
-
+#
+def select_augments(augselect):
+    if 'lead' in augselect:
+        aug_dict = LEADS_AUGMENT_DICT
+    else:
+        aug_dict = AUGMENT_DICT
+    ops_names = TS_OPS_NAMES.copy()
+    if augselect.startswith('goodtrans'): #only use good transfrom
+        ops_names = GOOD_ECG_NAMES.copy()
+        if 'lead' in augselect:
+            aug_dict = LEADS_GOOD_ECG_DICT
+        else:
+            aug_dict = GOOD_ECG_DICT
+    if 'tsadd' in augselect:
+        ops_names = ops_names + TS_ADD_NAMES.copy()
+    if 'ecg_noise' in augselect:
+        ops_names = ECG_NOISE_NAMES.copy()
+        if 'lead' in augselect:
+            aug_dict = LEADS_ECG_NOISE_DICT
+        else:
+            aug_dict = ECG_NOISE_DICT
+    elif 'ecg' in augselect:
+        ops_names = ops_names + ECG_OPS_NAMES.copy()
+    return ops_names, aug_dict
 class AdaAug(nn.Module):
     def __init__(self, after_transforms, n_class, gf_model, h_model, save_dir=None, 
                     config=default_config):
@@ -220,19 +243,9 @@ class AdaAug_TS(AdaAug):
                     sub_mix=1.0,search_temp=1.0,noaug_add=False,transfrom_dic={},preprocessors=[]):
         super(AdaAug_TS, self).__init__(after_transforms, n_class, gf_model, h_model, save_dir, config)
         #other already define in AdaAug
-        self.aug_dict = None
-        self.ops_names = TS_OPS_NAMES.copy()
-        if augselect=='goodtrans': #only use good transfrom
-            self.ops_names = GOOD_ECG_NAMES.copy()
-            self.aug_dict = GOOD_ECG_DICT
-        if 'tsadd' in augselect:
-            self.ops_names = self.ops_names + TS_ADD_NAMES.copy()
-        if 'ecg_noise' in augselect:
-            self.ops_names = ECG_NOISE_NAMES.copy()
-            self.aug_dict = ECG_NOISE_DICT
-        elif 'ecg' in augselect:
-            self.ops_names = self.ops_names + ECG_OPS_NAMES.copy()
+        self.ops_names,self.aug_dict = select_augments(augselect)
         print('AdaAug Using ',self.ops_names)
+        print('AdaAug Aug dict ',self.aug_dict)
         self.n_ops = len(self.ops_names)
         self.transfrom_dic = transfrom_dic
         self.history = PolicyHistory(self.ops_names, self.save_dir, self.n_class)
@@ -494,19 +507,9 @@ class AdaAugkeep_TS(AdaAug):
                     sub_mix=1.0,search_temp=1.0,noaug_add=False,transfrom_dic={},preprocessors=[]):
         super(AdaAugkeep_TS, self).__init__(after_transforms, n_class, gf_model, h_model, save_dir, config)
         #other already define in AdaAug
-        self.aug_dict = None
-        self.ops_names = TS_OPS_NAMES.copy()
-        if augselect=='goodtrans':
-            self.ops_names = GOOD_ECG_NAMES.copy()
-            self.aug_dict = GOOD_ECG_DICT
-        if 'tsadd' in augselect:
-            self.ops_names = self.ops_names + TS_ADD_NAMES.copy()
-        if 'ecg_noise' in augselect:
-            self.ops_names = ECG_NOISE_NAMES.copy()
-            self.aug_dict = ECG_NOISE_DICT
-        elif 'ecg' in augselect:
-            self.ops_names = self.ops_names + ECG_OPS_NAMES.copy()
+        self.ops_names,self.aug_dict = select_augments(augselect)
         print('AdaAug Using ',self.ops_names)
+        print('AdaAug Aug dict ',self.aug_dict)
         self.possible_segment = keepaug_config.get('possible_segment',[1])
         self.n_leads_select = keepaug_config.get('keep_leads',[12])
         self.keep_lens = keepaug_config['length']

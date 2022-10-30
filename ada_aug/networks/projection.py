@@ -54,7 +54,7 @@ class Projection_TSeries(nn.Module):
         feature_mask="", input_act=False):
         super(Projection_TSeries, self).__init__()
         self.ops_names = TS_OPS_NAMES.copy()
-        if augselect=='goodtrans': #only use good transfrom
+        if augselect.startswith('goodtrans'): #only use good transfrom
             self.ops_names = GOOD_ECG_NAMES.copy()
         if 'tsadd' in augselect:
             self.ops_names = self.ops_names + TS_ADD_NAMES.copy()

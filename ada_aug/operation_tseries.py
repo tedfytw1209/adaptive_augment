@@ -807,10 +807,6 @@ SELECTIVE_DICT = {
     'RR_permutation':selopt[1], #!undefine
     'QRS_resample':selopt[1], #!undefine
 }
-#leads version
-LEADS_AUGMENT_DICT = {k:(Leads_Warpper(v[0]),v[1],v[2]) for (k,v) in AUGMENT_DICT.items()}
-LEADS_ECG_NOISE_DICT = {k:(Leads_Warpper(v[0]),v[1],v[2]) for (k,v) in ECG_NOISE_DICT.items()}
-LEADS_GOOD_ECG_DICT = {k:(Leads_Warpper(v[0]),v[1],v[2]) for (k,v) in GOOD_ECG_DICT.items()}
 #augment func
 def get_augment(name,aug_dict=None):
     if aug_dict==None:
@@ -1131,27 +1127,33 @@ class Leads_Warpper(object): #need test
     def __call__(self,X, magnitude,random_state=None,sfreq=100,seq_len=None,preprocessor=None, *args, **kwargs):
         #batch_size, n_channels, seq_len = X.shape
         x_shape = X.shape
-        X = X.cpu().numpy()
-        #preprocess back
+        #preprocess back !!!waste time
         if preprocessor!=None:
+            X = X.cpu().numpy()
             X_ori = preprocessor.inverse_transform(X.flatten()[:,np.newaxis]).reshape(x_shape)
+            X_ori = torch.from_numpy(X_ori).float()
         else:
             X_ori = X
         #augment
         X_aug = self.augment(X_ori, magnitude,random_state=random_state,sfreq=sfreq,seq_len=seq_len)
+        print(X_aug.mean(2))
         #limbs leads assert, 1,2 as main
-        X_aug[:,:,2] = X_aug[:,:,1] - X_aug[:,:,0] #l3= l2 - l1
-        X_aug[:,:,3] = (X_aug[:,:,0] - X_aug[:,:,2])/2 #aVL=(l1-l3)/2
-        X_aug[:,:,4] = -(X_aug[:,:,0] + X_aug[:,:,1])/2 #-aVR=(l1+l2)/2
-        X_aug[:,:,5] = (X_aug[:,:,1] + X_aug[:,:,2])/2 #aVF=(l2+l3)/2
+        X_aug[:,2,:] = X_aug[:,1,:] - X_aug[:,0,:] #l3= l2 - l1
+        X_aug[:,3,:] = (X_aug[:,0,:] - X_aug[:,2,:])/2 #aVL=(l1-l3)/2
+        X_aug[:,4,:] = -(X_aug[:,0,:] + X_aug[:,1,:])/2 #-aVR=(l1+l2)/2
+        X_aug[:,5,:] = (X_aug[:,1,:] + X_aug[:,2,:])/2 #aVF=(l2+l3)/2
         #preprocess back
         if preprocessor!=None:
+            X_aug = X_aug.cpu().numpy()
             X_new = preprocessor.transform(X_aug.flatten()[:,np.newaxis]).reshape(x_shape)
+            X_aug = torch.from_numpy(X_aug).float()
         else:
             X_new = X_aug
-        X_new = torch.from_numpy(X_new).float()
         return X_new
-
+#leads version
+LEADS_AUGMENT_DICT = {k:(Leads_Warpper(v[0]),v[1],v[2]) for (k,v) in AUGMENT_DICT.items()}
+LEADS_ECG_NOISE_DICT = {k:(Leads_Warpper(v[0]),v[1],v[2]) for (k,v) in ECG_NOISE_DICT.items()}
+LEADS_GOOD_ECG_DICT = {k:(Leads_Warpper(v[0]),v[1],v[2]) for (k,v) in GOOD_ECG_DICT.items()}
 #12leads: (1,2,3,aVL,aVR,aVF),v1~v6
 def leads_group_select(slc_ch_each,n_keep_lead,lead_quant,default_leads):
     if n_keep_lead==12:
@@ -2057,26 +2059,25 @@ if __name__ == '__main__':
     'wisdm' : 10,
     'chapman' : 10,
     }
-    dataset = PTBXL(dataset_path='../CWDA_research/CWDA/datasets/Datasets/ptbxl-dataset',mode='test',labelgroup='all',multilabel=False)
-    #dataset = PTBXL(dataset_path='../Dataset/ptbxl-dataset',mode='test',labelgroup='all',multilabel=False)
+    folds = [i for i in range(10)]
+    fold_9_list = [folds[:8],[folds[8]],[folds[9]]]
+    print(fold_9_list)
+    #dataset = PTBXL(dataset_path='../CWDA_research/CWDA/datasets/Datasets/ptbxl-dataset',mode=fold_9_list,labelgroup='all',multilabel=False)
+    dataset = PTBXL(dataset_path='../Dataset/ptbxl-dataset',mode='test',labelgroup='all',multilabel=False)
     print(dataset[0])
     print(dataset[0][0].shape)
-    sample = dataset[100]
+    sample = dataset[0]
     x = sample[0]
+    print(x.shape)
+    print(x)
+    print(x.mean(0))
     t = np.linspace(0, TimeS_dict['ptbxl'], 1000)
     label = sample[2]
     print(t.shape)
     print(x.shape)
-    x_tensor = torch.from_numpy(x).float()
     test_ops = [
-    "Time_shift",
-    "random_time_saturation",
-    "Band_pass",
-    "Gaussian_blur",
-    "High_pass",
-    "Low_pass",
-    "IIR_notch",
-    "Sigmoid_compress",
+    'identity',
+    'add_gaussian_noise'
     ]
     '''rng = check_random_state(None)
     rd_start = rng.uniform(0, 2*np.pi, size=(1, 1))
@@ -2088,13 +2089,15 @@ if __name__ == '__main__':
     sin_wave = 2 * np.sin(factor)
     plot_line(t,sin_wave)'''
     #
-    plot_line(t,x,title='identity')
+    plot_line(t,x[:,:3],title='identity')
     for name in test_ops:
-        for m in [0.8]:
-            trans_aug = TransfromAugment([name],m=m,n=1,p=1,aug_dict=ECG_NOISE_DICT)
+        for m in [0.5]:
+            x_tensor = torch.from_numpy(x).float().clone()
+            trans_aug = TransfromAugment([name],m=m,n=1,p=1,aug_dict=LEADS_AUGMENT_DICT)
             x_aug = trans_aug(x_tensor).numpy()
+            print(x_aug.mean(0))
             print(x_aug.shape)
-            plot_line(t,x_aug,f'{name}_m:{m}')
+            plot_line(t,x_aug[:,:3],f'{name}_m:{m}')
     #beat aug
     '''plot_line(t,x,title='identity')
     for each_mode in ['b','p','t']:

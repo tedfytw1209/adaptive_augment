@@ -814,7 +814,7 @@ def get_augment(name,aug_dict=None):
     else:
         return aug_dict[name]
 
-def apply_augment(img, name, level, rd_seed=None,sfreq=100,seq_len=None,aug_dict=None):
+def apply_augment(img, name, level, rd_seed=None,sfreq=100,seq_len=None,preprocessor=None,aug_dict=None):
     augment_fn, low, high = get_augment(name,aug_dict=aug_dict)
     assert 0 <= level
     assert level <= 1
@@ -826,7 +826,7 @@ def apply_augment(img, name, level, rd_seed=None,sfreq=100,seq_len=None,aug_dict
     tmp_img = img[:,:,:seq_len]
     aug_value = level * (high - low) + low
     #print('Device: ',aug_value.device)
-    aug_img = augment_fn(tmp_img, aug_value,random_state=rd_seed,sfreq=sfreq,seq_len=seq_len)
+    aug_img = augment_fn(tmp_img, aug_value,random_state=rd_seed,sfreq=sfreq,seq_len=seq_len,preprocessor=preprocessor)
     img[:,:,:seq_len] = aug_img #tmp fix, may become slower
     return img.permute(0,2,1).detach().view(max_seq_len,channel) #back to (len,channel)
 
@@ -1119,11 +1119,13 @@ def normal_slc(slc_):
     slc_ /= slc_.max(1, keepdim=True)[0]
     slc_ = slc_.view(b, w)
     return slc_
-#12leads: (1,2,3,aVL,aVR,aVF),v1~v6 leads warp: assert limbs leads correlation
+#12leads: (I,II,III,aVL,aVR,aVF,V1–V6),v1~v6 leads warp: assert limbs leads correlation
+#origin lead may not have this correlation
 class Leads_Warpper(object): #need test
-    def __init__(self, augment):
+    def __init__(self, augment,pre_correct=False):
         self.augment = augment
         self.__name__ = augment.__name__ #set name as origin augment name
+        self.pre_correct = pre_correct
     def __call__(self,X, magnitude,random_state=None,sfreq=100,seq_len=None,preprocessor=None, *args, **kwargs):
         #batch_size, n_channels, seq_len = X.shape
         x_shape = X.shape
@@ -1134,6 +1136,12 @@ class Leads_Warpper(object): #need test
             X_ori = torch.from_numpy(X_ori).float()
         else:
             X_ori = X
+        #pre correct, 1,2 as main
+        if self.pre_correct:
+            X_ori[:,2,:] = X_ori[:,1,:] - X_ori[:,0,:] #l3= l2 - l1
+            X_ori[:,3,:] = (X_ori[:,0,:] - X_ori[:,2,:])/2 #aVL=(l1-l3)/2
+            X_ori[:,4,:] = -(X_ori[:,0,:] + X_ori[:,1,:])/2 #-aVR=(l1+l2)/2
+            X_ori[:,5,:] = (X_ori[:,1,:] + X_ori[:,2,:])/2 #aVF=(l2+l3)/2
         #augment
         X_aug = self.augment(X_ori, magnitude,random_state=random_state,sfreq=sfreq,seq_len=seq_len)
         print(X_aug.mean(2))
@@ -2059,11 +2067,11 @@ if __name__ == '__main__':
     'wisdm' : 10,
     'chapman' : 10,
     }
-    folds = [i for i in range(10)]
+    folds = [i for i in range(1,11)]
     fold_9_list = [folds[:8],[folds[8]],[folds[9]]]
     print(fold_9_list)
     #dataset = PTBXL(dataset_path='../CWDA_research/CWDA/datasets/Datasets/ptbxl-dataset',mode=fold_9_list,labelgroup='all',multilabel=False)
-    dataset = PTBXL(dataset_path='../Dataset/ptbxl-dataset',mode='test',labelgroup='all',multilabel=False)
+    dataset = PTBXL(dataset_path='../Dataset/ptbxl-dataset',mode=fold_9_list[0],labelgroup='all',multilabel=False)
     print(dataset[0])
     print(dataset[0][0].shape)
     sample = dataset[0]
@@ -2075,10 +2083,7 @@ if __name__ == '__main__':
     label = sample[2]
     print(t.shape)
     print(x.shape)
-    test_ops = [
-    'identity',
-    'add_gaussian_noise'
-    ]
+    test_ops = TS_OPS_NAMES
     '''rng = check_random_state(None)
     rd_start = rng.uniform(0, 2*np.pi, size=(1, 1))
     rd_hz = 1
@@ -2089,7 +2094,7 @@ if __name__ == '__main__':
     sin_wave = 2 * np.sin(factor)
     plot_line(t,sin_wave)'''
     #
-    plot_line(t,x[:,:3],title='identity')
+    plot_line(t,x,title='identity')
     for name in test_ops:
         for m in [0.5]:
             x_tensor = torch.from_numpy(x).float().clone()
@@ -2097,7 +2102,7 @@ if __name__ == '__main__':
             x_aug = trans_aug(x_tensor).numpy()
             print(x_aug.mean(0))
             print(x_aug.shape)
-            plot_line(t,x_aug[:,:3],f'{name}_m:{m}')
+            plot_line(t,x_aug,f'{name}_m:{m}')
     #beat aug
     '''plot_line(t,x,title='identity')
     for each_mode in ['b','p','t']:

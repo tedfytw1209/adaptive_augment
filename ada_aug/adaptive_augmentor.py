@@ -299,7 +299,7 @@ class AdaAug_TS(AdaAug):
             self.history.add(k, mean_lambda, mean_p, std_lambda, std_p)
 
     def get_aug_valid_img(self, image, magnitudes,i=None,k=None,ops_name=None, seq_len=None):
-        trans_image = apply_augment(image, ops_name, magnitudes[i][k].detach().cpu().numpy(),seq_len=seq_len,aug_dict=self.aug_dict,**self.transfrom_dic)
+        trans_image = apply_augment(image, ops_name, magnitudes[i][k].detach().cpu().numpy(),seq_len=seq_len,preprocessor=self.preprocessors[0],aug_dict=self.aug_dict,**self.transfrom_dic)
         trans_image = self.after_transforms(trans_image)
         trans_image = stop_gradient(trans_image.cuda(), magnitudes[i][k])
         return trans_image
@@ -368,7 +368,7 @@ class AdaAug_TS(AdaAug):
             idx_list,magnitude_i = idx_matrix,magnitudes
         for idx in idx_list:
             m_pi = perturb_param(magnitude_i[idx], self.delta).detach().cpu().numpy()
-            image = apply_augment(image, self.ops_names[idx], m_pi,seq_len=seq_len,aug_dict=self.aug_dict,**self.transfrom_dic)
+            image = apply_augment(image, self.ops_names[idx], m_pi,seq_len=seq_len,preprocessor=self.preprocessors[0],aug_dict=self.aug_dict,**self.transfrom_dic)
         return self.after_transforms(image)
     def get_training_aug_images(self, images, magnitudes, weights, seq_len=None,visualize=False):
         # visualization
@@ -615,7 +615,7 @@ class AdaAugkeep_TS(AdaAug):
     def get_aug_valid_img(self, image, magnitudes,keep_thres,i=None,k=None,ops_name=None, seq_len=None):
         #print('mag shape: ',magnitudes.shape)
         #print(f'i: {i}, k: {k}, op name: {ops_name}')
-        trans_image = apply_augment(image, ops_name, magnitudes[i][k].detach().cpu().numpy(),seq_len=seq_len,aug_dict=self.aug_dict,**self.transfrom_dic)
+        trans_image = apply_augment(image, ops_name, magnitudes[i][k].detach().cpu().numpy(),seq_len=seq_len,preprocessor=self.preprocessors[0],aug_dict=self.aug_dict,**self.transfrom_dic)
         trans_image = self.after_transforms(trans_image)
         #trans_image = stop_gradient_keep(trans_image.cuda(), magnitudes[i][k], keep_thres[i]) #add keep thres
         return trans_image
@@ -711,7 +711,7 @@ class AdaAugkeep_TS(AdaAug):
             idx_list,magnitude_i = idx_matrix,magnitudes
         for idx in idx_list:
             m_pi = perturb_param(magnitude_i[idx], self.delta).detach().cpu().numpy()
-            image = apply_augment(image, self.ops_names[idx], m_pi,seq_len=seq_len,aug_dict=self.aug_dict,**self.transfrom_dic)
+            image = apply_augment(image, self.ops_names[idx], m_pi,seq_len=seq_len,preprocessor=self.preprocessors[0],aug_dict=self.aug_dict,**self.transfrom_dic)
         return self.after_transforms(image)
     def get_training_aug_images(self, images, magnitudes, weights, keeplen_ws, keep_thres, seq_len=None,visualize=False):
         # visualization

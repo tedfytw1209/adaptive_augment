@@ -105,7 +105,7 @@ parser.add_argument('--lambda_dist', type=float, default=1.0, help="class distan
 parser.add_argument('--noaug_reg', type=str, default='', help='add regular for noaugment ',
         choices=['cadd','add',''])
 parser.add_argument('--loss_type', type=str, default='minus', help="loss type for difficult policy training",
-        choices=['minus','minusdiff','relative','relativediff','adv','embed'])
+        choices=['minus','minusdiff','relative','relativesample','relativediff','adv','embed'])
 parser.add_argument('--balance_loss', type=str, default='', help="loss type for model and policy training to acheive class balance")
 parser.add_argument('--policy_loss', type=str, default='', help="loss type for simular policy training")
 parser.add_argument('--keep_aug', action='store_true', default=False, help='info keep augment')
@@ -307,7 +307,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         elif args.loss_type=='embed':
             #self.adv_criterion = nn.MSELoss(reduction='mean') #default
             self.adv_criterion = Wasserstein_loss(reduction='mean')
-        elif args.mix_type=='loss':
+        elif args.mix_type=='loss' or 'sample' in args.loss_type:
             if not multilabel:
                 self.adv_criterion = nn.CrossEntropyLoss(reduction='none')
             else:
@@ -537,7 +537,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             class_weights = make_class_weights_maxrel(train_labels,n_class,search_labels)
             class_weights = torch.from_numpy(class_weights).float()
             out_criterion = make_loss(multilabel=multilabel,weight=class_weights).cuda()
-        elif mix_type=='loss':
+        elif mix_type=='loss' or 'sample' in loss_type: #loss mix or sample-wise relative
             if not multilabel:
                 out_criterion = nn.CrossEntropyLoss(reduction='none').cuda()
             else:

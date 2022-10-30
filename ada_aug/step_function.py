@@ -344,7 +344,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     elif loss_type=='minusdiff':
         diff_loss_func = minus_loss
         diff_update_w = False
-    elif loss_type=='relative':
+    elif loss_type=='relative' or loss_type=='relativesample':
         diff_loss_func = relative_loss
         sim_loss_func = rel_loss
     elif loss_type=='relativediff':
@@ -488,6 +488,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                     aug_diff_loss += aug_loss.detach().item()
                     ori_diff_loss += ori_loss.detach().item()
                     loss_prepolicy = diff_loss_func(ori_loss=ori_loss,aug_loss=aug_loss,lambda_aug=lambda_aug)
+                    print(loss_prepolicy.shape,loss_prepolicy) #!tmp
                     if reweight: #reweight part, a,b = ?
                         p_orig = origin_logits.softmax(dim=1)[torch.arange(batch_size), target_trsearch].detach()
                         p_aug = aug_logits.softmax(dim=1)[torch.arange(batch_size), target_trsearch].clone().detach()
@@ -497,9 +498,9 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                             w_aug /= (w_aug.mean().detach() + 1e-6)
                         else:
                             w_aug = 1
-                        loss_policy = (w_aug * loss_prepolicy).mean()
+                        loss_policy = (w_aug * loss_prepolicy).mean() #mean to assert
                     else:
-                        loss_policy = loss_prepolicy.mean()
+                        loss_policy = loss_prepolicy.mean() #mean to assert
                     #!!!10/13 bug fix!!! ,tmp*4 for same plr
                     loss_policy = loss_policy * 4 / search_round
                     loss_policy.backward()
@@ -538,7 +539,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 loss, logits_search = mix_func(gf_model,mixed_features,aug_weights,sim_criterion,target_search,multilabel)
                 origin_logits = sim_model(input_search, seq_len)
                 ori_loss = cuc_loss(origin_logits,target_search,sim_criterion,multilabel)
-                ori_loss = ori_loss.mean() #!to assert loss mean reduce
+                #ori_loss = ori_loss.mean() #!to assert loss mean reduce
                 #output pred
                 soft_out = softmax_m(logits_search).detach().cpu() #(bs,n_class)
                 for i,t in enumerate(target_search.data.view(-1)):
@@ -548,6 +549,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 aug_search_loss += loss.detach().item()
                 ori_search_loss += ori_loss.detach().item()
                 loss = sim_loss_func(ori_loss,loss)
+                print(loss_prepolicy.shape,loss_prepolicy) #!tmp
                 if sim_reweight: #reweight part, a,b = ?
                     p_orig = origin_logits.softmax(dim=1)[torch.arange(search_bs), target_search].detach()
                     p_aug = logits_search.softmax(dim=1)[torch.arange(search_bs), target_search].clone().detach()

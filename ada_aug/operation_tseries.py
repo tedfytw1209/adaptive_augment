@@ -1134,8 +1134,9 @@ def leads_group_select(slc_ch_each,n_keep_lead,lead_quant,default_leads):
         lead_sorted, lead_idx = torch.sort(slc_ch_each[6:],descending=True) #high to low v1~v6
         lead_idx = lead_idx + 6
         lead_select = lead_idx[:n_keep_lead]
-    print('leads_group_select leads slc: ',slc_ch_each) #!tmp
-    print(f'n_leads: {n_keep_lead}, lead select: {lead_select}') #!tmp
+    lead_select = torch.sort(lead_select)[0]
+    #print('leads_group_select leads slc: ',slc_ch_each) #!tmp
+    #print(f'n_leads: {n_keep_lead}, lead select: {lead_select}') #!tmp
     return lead_select
 #topk select, multinomial select
 def leads_topk_select(slc_ch_each,n_keep_lead,lead_quant,default_leads):
@@ -1144,6 +1145,7 @@ def leads_topk_select(slc_ch_each,n_keep_lead,lead_quant,default_leads):
     else:
         lead_sorted, lead_idx = torch.topk(slc_ch_each,n_keep_lead,sorted=False)
         lead_select = lead_idx
+    lead_select = torch.sort(lead_select)[0]
     print('leads_topk_select leads slc: ',slc_ch_each) #!tmp
     print(f'n_leads: {n_keep_lead}, lead select: {lead_select}') #!tmp
     return lead_select
@@ -1153,6 +1155,7 @@ def leads_multinomial_select(slc_ch_each,n_keep_lead,lead_quant,default_leads):
     else:
         lead_sorted, lead_idx = torch.sort(torch.multinomial(slc_ch_each,n_keep_lead))[0]
         lead_select = lead_sorted
+    lead_select = torch.sort(lead_select)[0]
     print('leads_multinomial_select leads slc: ',slc_ch_each) #!tmp
     print(f'n_leads: {n_keep_lead}, lead select: {lead_select}') #!tmp
     return lead_select
@@ -1164,8 +1167,8 @@ def leads_threshold_select(slc_ch_each,n_keep_lead,lead_quant,default_leads):
         lead_select = torch.sort(lead_possible[torch.multinomial(lead_potential,n_keep_lead)])[0]
     else:
         lead_select = default_leads
-    print('leads_threshold_select leads slc: ',slc_ch_each) #!tmp
-    print(f'n_leads: {n_keep_lead}, lead select: {lead_select}') #!tmp
+    #print('leads_threshold_select leads slc: ',slc_ch_each) #!tmp
+    #print(f'n_leads: {n_keep_lead}, lead select: {lead_select}') #!tmp
     return lead_select
 
 class KeepAugment(object): #need fix
@@ -1241,6 +1244,7 @@ class KeepAugment(object): #need fix
         elif keep_back=='rpeak': #no need for our transform set
             print('Using rpeak correction')
             self.rpeak_correct = True
+        print('Keep back method', self.keep_dict)
         self.keep_back = keep_back
         self.keep_prob = keep_prob
         #'torch.nn.functional.avg_pool1d' use this for segment
@@ -1393,8 +1397,9 @@ class KeepAugment(object): #need fix
             else:
                 t_s = augment(t_s,i=i,seq_len=each_seq_len,**kwargs) #some other augment if needed
             #fix keep prob
-            idx = kwargs['idx_matrix'][i,0] #ops used !!!tmp only use first ops
+            idx = int(kwargs['idx_matrix'][i,0].detach().cpu()) #ops used !!!tmp only use first ops
             use_keep = self.keep_dict.get(idx,True)
+            #print('ops idx',idx,use_keep)
             #keep prob
             if apply_keep[i] < self.keep_prob and use_keep: #maybe not fast
                 for reg_i in range(len(inforegion_list)):
@@ -1491,7 +1496,7 @@ class KeepAugment(object): #need fix
                     t_s_tmp = augment(t_s_tmp,i=i,k=k,ops_name=ops_name,seq_len=each_seq_len,**kwargs) #some other augment if needed
                     #print('Size compare: ',t_s[x1: x2, :].shape,info_region.shape)
                 #fix keep prob
-                idx = k #ops used !!!tmp only use first ops
+                idx = int(k) #ops used !!!tmp only use first ops
                 use_keep = self.keep_dict.get(idx,True)
                 if use_keep:
                     for reg_i in range(len(inforegion_list)):
@@ -1523,7 +1528,7 @@ class KeepAugment(object): #need fix
         score, _ = torch.max(preds, 1) #predict class
         score.mean().backward() #among batch mean
         slc_, _ = torch.max(torch.abs(x.grad), dim=2) #max of channel
-        slc_ch, _ = torch.mean(torch.abs(x.grad), dim=1) #mean of len, 10/29
+        slc_ch = torch.mean(torch.abs(x.grad), dim=1) #mean of len, 10/29
         slc_ = normal_slc(slc_)
         slc_ch = normal_slc(slc_ch)
         if hasattr(model, 'lstm'):

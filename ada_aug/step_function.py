@@ -489,7 +489,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                     aug_diff_loss += aug_loss.detach().mean().item()
                     ori_diff_loss += ori_loss.detach().mean().item()
                     loss_prepolicy = diff_loss_func(ori_loss=ori_loss,aug_loss=aug_loss,lambda_aug=lambda_aug)
-                    print(loss_prepolicy.shape,loss_prepolicy) #!tmp
+                    #print(loss_prepolicy.shape,loss_prepolicy) #!tmp
                     if reweight: #reweight part, a,b = ?
                         p_orig = origin_logits.softmax(dim=1)[torch.arange(batch_size), target_trsearch].detach()
                         p_aug = aug_logits.softmax(dim=1)[torch.arange(batch_size), target_trsearch].clone().detach()

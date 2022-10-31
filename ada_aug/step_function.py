@@ -485,8 +485,8 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                     mixed_features, aug_weights = adaaug(input_trsearch, seq_len, mode='explore',mix_feature=diff_mix_feature,y=policy_y,update_w=diff_update_w)
                     aug_loss, aug_logits = mix_func(gf_model,mixed_features,aug_weights,adv_criterion,target_trsearch,multilabel)
                     ori_loss = cuc_loss(origin_logits,target_trsearch,adv_criterion,multilabel).mean().detach() #!to assert loss mean reduce
-                    aug_diff_loss += aug_loss.detach().item()
-                    ori_diff_loss += ori_loss.detach().item()
+                    aug_diff_loss += aug_loss.detach().mean().item()
+                    ori_diff_loss += ori_loss.detach().mean().item()
                     loss_prepolicy = diff_loss_func(ori_loss=ori_loss,aug_loss=aug_loss,lambda_aug=lambda_aug)
                     print(loss_prepolicy.shape,loss_prepolicy) #!tmp
                     if reweight: #reweight part, a,b = ?
@@ -527,7 +527,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 if lambda_noaug>0: #need test
                     #noaug_loss = lambda_noaug * (1.0 - train_perfrom) * noaug_criterion(aug_weight,noaug_target) #10/26 change
                     noaug_loss = lambda_noaug * noaug_criterion(aug_weight,noaug_target)
-                    noaug_reg_sum += noaug_loss.detach().item()
+                    noaug_reg_sum += noaug_loss.detach().mean().item()
                 else:
                     noaug_loss = 0
                 #tea
@@ -546,10 +546,10 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                     sea_output_matrix[t.long()] += soft_out[i]
 
                 #similar reweight?
-                aug_search_loss += loss.detach().item()
-                ori_search_loss += ori_loss.detach().item()
+                aug_search_loss += loss.detach().mean().item()
+                ori_search_loss += ori_loss.detach().mean().item()
                 loss = sim_loss_func(ori_loss,loss)
-                print(loss_prepolicy.shape,loss_prepolicy) #!tmp
+                print(loss.shape,loss) #!tmp
                 if sim_reweight: #reweight part, a,b = ?
                     p_orig = origin_logits.softmax(dim=1)[torch.arange(search_bs), target_search].detach()
                     p_aug = logits_search.softmax(dim=1)[torch.arange(search_bs), target_search].clone().detach()

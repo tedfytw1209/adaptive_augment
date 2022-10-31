@@ -1144,7 +1144,6 @@ class Leads_Warpper(object): #need test
             X_ori[:,5,:] = (X_ori[:,1,:] + X_ori[:,2,:])/2 #aVF=(l2+l3)/2
         #augment
         X_aug = self.augment(X_ori, magnitude,random_state=random_state,sfreq=sfreq,seq_len=seq_len)
-        print(X_aug.mean(2))
         #limbs leads assert, 1,2 as main
         X_aug[:,2,:] = X_aug[:,1,:] - X_aug[:,0,:] #l3= l2 - l1
         X_aug[:,3,:] = (X_aug[:,0,:] - X_aug[:,2,:])/2 #aVL=(l1-l3)/2
@@ -1154,7 +1153,7 @@ class Leads_Warpper(object): #need test
         if preprocessor!=None:
             X_aug = X_aug.cpu().numpy()
             X_new = preprocessor.transform(X_aug.flatten()[:,np.newaxis]).reshape(x_shape)
-            X_aug = torch.from_numpy(X_aug).float()
+            X_new = torch.from_numpy(X_new).float()
         else:
             X_new = X_aug
         return X_new

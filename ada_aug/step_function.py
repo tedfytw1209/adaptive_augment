@@ -550,7 +550,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 aug_search_loss += loss.detach().mean().item()
                 ori_search_loss += ori_loss.detach().mean().item()
                 loss = sim_loss_func(ori_loss,loss)
-                print(loss.shape,loss) #!tmp
+                #print(loss.shape,loss) #!tmp
                 if sim_reweight: #reweight part, a,b = ?
                     p_orig = origin_logits.softmax(dim=1)[torch.arange(search_bs), target_search].detach()
                     p_aug = logits_search.softmax(dim=1)[torch.arange(search_bs), target_search].clone().detach()

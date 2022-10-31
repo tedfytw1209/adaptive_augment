@@ -475,8 +475,11 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         else:
             gf_path = 'gf_weights.pt'
             h_path = 'h_weights.pt'
-        utils.save_model(self.best_gf, os.path.join(self.base_path,self.config['save'],gf_path))
-        utils.save_model(self.best_h, os.path.join(self.base_path,self.config['save'],h_path))
+        if 'debug' not in self.config['save']:
+            utils.save_model(self.best_gf, os.path.join(self.base_path,self.config['save'],gf_path))
+            utils.save_model(self.best_h, os.path.join(self.base_path,self.config['save'],h_path))
+        else:
+            print('Debuging: not save at', self.config['save'])
         
         step_dic.update(test_dic)
         step_dic.update(train_dic)

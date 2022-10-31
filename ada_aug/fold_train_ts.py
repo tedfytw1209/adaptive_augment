@@ -391,8 +391,11 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             self.result_table_dic.update(test_table)
 
         #utils.save_model(self.best_task, os.path.join(self.base_path,self.config['save'],f'fold{self.test_fold_idx}', 'h_weights.pt'))
-        utils.save_ckpt(self.best_task, self.optimizer, self.scheduler, Curr_epoch,
-            os.path.join(self.base_path,self.config['save'],f'fold{self.test_fold_idx}', 'weights.pt'))
+        if 'debug' not in self.config['save']:
+            utils.save_ckpt(self.best_task, self.optimizer, self.scheduler, Curr_epoch,
+                os.path.join(self.base_path,self.config['save'],f'fold{self.test_fold_idx}', 'weights.pt'))
+        else:
+            print('Debuging: not save at', self.config['save'])
         step_dic.update(test_dic)
         step_dic.update(train_dic)
         step_dic.update(valid_dic)

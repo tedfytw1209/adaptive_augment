@@ -226,7 +226,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         #  restore setting
         if args.restore:
             trained_epoch = utils.restore_ckpt(self.task_model, self.optimizer, self.scheduler,
-                os.path.join(self.base_path,args.restore_path,f'fold{test_fold_idx}', 'weights.pt'), location=0) + 1
+                os.path.join(self.config['BASE_PATH'],args.restore_path,f'fold{test_fold_idx}', 'weights.pt'), location=0) + 1
             print(f'From epoch {trained_epoch}, Resume')
         else:
             trained_epoch = 0
@@ -371,7 +371,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         #test
         test_acc, test_obj, test_acc5, _,test_dic, test_table  = infer(self.test_queue, self.task_model, self.criterion, multilabel=self.multilabel,
                 n_class=self.n_class,mode='test',map_select=self.mapselect)
-        #val select
+        #val select 10/31 debug
         if args.valselect and valid_acc>self.best_val_acc:
             self.best_val_acc = valid_acc
             self.result_valid_dic = {f'result_{k}': valid_dic[k] for k in valid_dic.keys()}
@@ -382,6 +382,11 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             self.result_table_dic.update(valid_table)
             self.result_table_dic.update(test_table)
             self.best_task = self.task_model
+            if 'debug' not in self.config['save']:
+                utils.save_ckpt(self.best_task, self.optimizer, self.scheduler, Curr_epoch,
+                    os.path.join(self.base_path,self.config['save'],f'fold{self.test_fold_idx}', 'weights.pt'))
+            else:
+                print('Debuging: not save at', self.config['save'])
         elif not args.valselect:
             self.best_task = self.task_model
             self.result_valid_dic = {f'result_{k}': valid_dic[k] for k in valid_dic.keys()}
@@ -389,35 +394,35 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             self.result_table_dic.update(train_table)
             self.result_table_dic.update(valid_table)
             self.result_table_dic.update(test_table)
-
-        #utils.save_model(self.best_task, os.path.join(self.base_path,self.config['save'],f'fold{self.test_fold_idx}', 'h_weights.pt'))
-        if 'debug' not in self.config['save']:
-            utils.save_ckpt(self.best_task, self.optimizer, self.scheduler, Curr_epoch,
-                os.path.join(self.base_path,self.config['save'],f'fold{self.test_fold_idx}', 'weights.pt'))
-        else:
-            print('Debuging: not save at', self.config['save'])
+            if 'debug' not in self.config['save']:
+                utils.save_ckpt(self.best_task, self.optimizer, self.scheduler, Curr_epoch,
+                    os.path.join(self.base_path,self.config['save'],f'fold{self.test_fold_idx}', 'weights.pt'))
+            else:
+                print('Debuging: not save at', self.config['save'])
         step_dic.update(test_dic)
         step_dic.update(train_dic)
         step_dic.update(valid_dic)
         wandb.log(step_dic)
         #if last epoch
-        if Curr_epoch==self.config['epochs']-1:
+        if Curr_epoch==self.config['epochs']-1 or Curr_epoch==self.config['epochs']:
             step_dic.update(self.result_valid_dic)
             step_dic.update(self.result_test_dic)
             #save&log
             wandb.log(step_dic)
             if args.output_visual:
-                wandb.log(plot_conf_wandb(self.result_table_dic['train_confusion'],title='train_confusion'))
-                wandb.log(plot_conf_wandb(self.result_table_dic['valid_confusion'],title='valid_confusion'))
-                wandb.log(plot_conf_wandb(self.result_table_dic['test_confusion'],title='test_confusion'))
+                tables_dic = {}
+                tables_dic['train_confusion']=plot_conf_wandb(self.result_table_dic['train_confusion'],title='train_confusion')
+                tables_dic['valid_confusion']=plot_conf_wandb(self.result_table_dic['valid_confusion'],title='valid_confusion')
+                tables_dic['test_confusion']=plot_conf_wandb(self.result_table_dic['test_confusion'],title='test_confusion')
                 #! maybe will bug
-                wandb.log(plot_conf_wandb(self.result_table_dic['train_output'],title='train_output'))
-                wandb.log(plot_conf_wandb(self.result_table_dic['valid_output'],title='valid_output'))
-                wandb.log(plot_conf_wandb(self.result_table_dic['test_output'],title='test_output'))
-            self.adaaug.save_history(self.class2label)
-            figure = self.adaaug.plot_history()
+                tables_dic['train_output']=plot_conf_wandb(self.result_table_dic['train_output'],title='train_output')
+                tables_dic['valid_output']=plot_conf_wandb(self.result_table_dic['valid_output'],title='valid_output')
+                tables_dic['test_output']=plot_conf_wandb(self.result_table_dic['test_output'],title='test_output')
+                wandb.log(tables_dic)
+            if Curr_epoch==self.config['epochs']-1:
+                self.adaaug.save_history(self.class2label)
+                figure = self.adaaug.plot_history()
             wandb.finish()
-
         call_back_dic = {'train_acc': train_acc, 'valid_acc': valid_acc, 'test_acc': test_acc}
         return call_back_dic
 

@@ -43,7 +43,10 @@ def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_
             else:
                 policy_y = target.cuda().float()
         aug_images = adaaug(input, seq_len, mode='exploit',y=policy_y,policy_apply=policy_apply)
-        model.train()
+        if training:
+            model.train()
+        else:
+            model.eval()
         optimizer.zero_grad()
         logits = model(aug_images, seq_len)
         if multilabel:
@@ -78,13 +81,12 @@ def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_
             w_aug = torch.sqrt(t_aug * torch.clamp(t_aug - p_aug, min=0)) + 1 #a=0.5,b=0.5 ???
             w_aug /= (w_aug.mean().detach() + 1e-9)
             aug_loss = (w_aug * aug_loss).mean()
-
         loss = ori_loss + aug_loss
-        loss.backward()
-        nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
         if training:
+            loss.backward()
+            nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
             optimizer.step()
-        scheduler.step()
+            scheduler.step()
         torch.cuda.empty_cache()
         n = input.size(0)
         objs.update(loss.detach().item(), n)
@@ -184,7 +186,6 @@ def infer(valid_queue, model, criterion, multilabel=False, n_class=10,mode='test
         for input,seq_len, target in valid_queue:
             input = input.float().cuda()
             target = target.cuda(non_blocking=True)
-
             logits = model(input,seq_len)
             if multilabel:
                 loss = criterion(logits, target.float())

@@ -449,7 +449,14 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         #test
         test_acc, test_obj, test_dic, test_table  = search_infer(self.test_queue, self.gf_model, self.criterion, 
             multilabel=self.multilabel,n_class=self.n_class,mode='test',map_select=self.mapselect)
-        #val select
+        #fold idx
+        if self.test_fold_idx>=0:
+            gf_path = os.path.join(f'fold{self.test_fold_idx}', 'gf_weights.pt')
+            h_path = os.path.join(f'fold{self.test_fold_idx}', 'h_weights.pt')
+        else:
+            gf_path = 'gf_weights.pt'
+            h_path = 'h_weights.pt'
+        #val select 10/31 debug
         if args.valselect and valid_acc>self.best_val_acc:
             self.best_val_acc = valid_acc
             self.result_valid_dic = {f'result_{k}': valid_dic[k] for k in valid_dic.keys()}
@@ -461,6 +468,11 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             self.result_table_dic.update(test_table)
             self.best_gf = self.gf_model
             self.best_h = self.h_model
+            if 'debug' not in self.config['save']:
+                utils.save_model(self.best_gf, os.path.join(self.base_path,self.config['save'],gf_path))
+                utils.save_model(self.best_h, os.path.join(self.base_path,self.config['save'],h_path))
+            else:
+                print('Debuging: not save at', self.config['save'])
         elif not args.valselect:
             self.best_gf = self.gf_model
             self.best_h = self.h_model
@@ -469,14 +481,11 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             self.result_table_dic.update(table_dic)
             self.result_table_dic.update(valid_table)
             self.result_table_dic.update(test_table)
-        if self.test_fold_idx>=0:
-            gf_path = os.path.join(f'fold{self.test_fold_idx}', 'gf_weights.pt')
-            h_path = os.path.join(f'fold{self.test_fold_idx}', 'h_weights.pt')
-        else:
-            gf_path = 'gf_weights.pt'
-            h_path = 'h_weights.pt'
-        utils.save_model(self.best_gf, os.path.join(self.base_path,self.config['save'],gf_path))
-        utils.save_model(self.best_h, os.path.join(self.base_path,self.config['save'],h_path))
+            if 'debug' not in self.config['save']:
+                utils.save_model(self.best_gf, os.path.join(self.base_path,self.config['save'],gf_path))
+                utils.save_model(self.best_h, os.path.join(self.base_path,self.config['save'],h_path))
+            else:
+                print('Debuging: not save at', self.config['save'])
         
         step_dic.update(test_dic)
         step_dic.update(train_dic)

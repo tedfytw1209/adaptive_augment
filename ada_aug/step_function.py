@@ -320,7 +320,7 @@ def loss_mix(gf_model,mixed_features,aug_weights,adv_criterion,target_trsearch,m
 def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, adaaug, criterion, gf_optimizer,scheduler,
             grad_clip, h_optimizer, epoch, search_freq,search_round=1,search_repeat=1, multilabel=False,n_class=10,
             difficult_aug=False,same_train=False,reweight=True,sim_reweight=False,mix_type='embed', warmup_epoch = 0
-            ,lambda_sim = 1.0,lambda_aug = 1.0,loss_type='minus',lambda_noaug = 0,train_perfrom = 0.0,
+            ,lambda_sim = 1.0,lambda_aug = 1.0,loss_type='minus',lambda_noaug = 0,train_perfrom = 0.0,noaug_reg='',
             class_adaptive=False,adv_criterion=None,sim_criterion=None,extra_criterions=[],teacher_model=None,map_select=False,
             visualize=False):
     objs = utils.AvgrageMeter()
@@ -529,6 +529,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                     #noaug_loss = lambda_noaug * (1.0 - train_perfrom) * noaug_criterion(aug_weight,noaug_target) #10/26 change
                     noaug_loss = lambda_noaug * noaug_criterion(aug_weight,noaug_target)
                     noaug_reg_sum += noaug_loss.detach().mean().item()
+                    
                 else:
                     noaug_loss = 0
                 #tea

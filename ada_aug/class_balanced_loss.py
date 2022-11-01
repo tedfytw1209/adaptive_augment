@@ -320,12 +320,26 @@ class ClassDistLoss(torch.nn.Module):
             self.classpair_dist.append(line)
         self.classpair_dist = np.array(self.classpair_dist)
         return self.classpair_dist
-    
-    def update_weight(self,): #for loss weight, ignore itself
-        pass
+    #for loss weight
+    def update_weight(self,class_output_mat):
+        '''
+        Add noaug regular weight for:
+        (1) low perfromance (self output) (2) easy be predict
+        '''
+        self.classweight_dist = []
+        n_class = class_output_mat.shape[0]
+        for c in range(n_class):
+            c_output = class_output_mat[c,c] #0~1
+            c_been_output = (class_output_mat[:,c].sum() - c_output) #0~1
+            c_noaug_weight = (1.0-c_output) + c_been_output
+            self.classweight_dist.append(c_noaug_weight)
+            print(f'Class similar/noaug weight: c perfrom: {1.0-c_output}, c been output: {c_been_output}, total: {c_noaug_weight}')
+        self.classweight_dist = np.array(self.classweight_dist)
+        return self.classweight_dist
     def update_classpair(self,class_output_mat):
         n_class = class_output_mat.shape[0]
         self.update_distance(class_output_mat)
+        self.update_weight(class_output_mat)
         self.class_output_mat = class_output_mat
         print(self.class_output_mat)
         #min distance

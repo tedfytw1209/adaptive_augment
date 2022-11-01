@@ -103,7 +103,7 @@ parser.add_argument('--feature_mask', type=str, default='', help='add regular fo
 parser.add_argument('--class_dist', type=str, default='', help='class distance loss')
 parser.add_argument('--lambda_dist', type=float, default=1.0, help="class distance weight")
 parser.add_argument('--noaug_reg', type=str, default='', help='add regular for noaugment ',
-        choices=['cadd','add',''])
+        choices=['cadd','add','creg','wreg','cwreg','pwreg','cpwreg',''])
 parser.add_argument('--loss_type', type=str, default='minus', help="loss type for difficult policy training",
         choices=['minus','minusdiff','relative','relativesample','relativediff','adv','embed'])
 parser.add_argument('--balance_loss', type=str, default='', help="loss type for model and policy training to acheive class balance")
@@ -195,12 +195,14 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         multilabel = args.multilabel
         diff_augment = args.diff_aug
         diff_reweight = not args.not_reweight
-        self.class_noaug, self.noaug_add = False, False
+        self.class_noaug, self.noaug_add, self.use_class_w = False, False, False
         if args.noaug_reg=='cadd':
             self.class_noaug = True
             self.noaug_add = True
         elif args.noaug_reg=='add':
             self.noaug_add = True
+        elif args.noaug_reg=='creg':
+            self.use_class_w = True
         test_fold_idx = self.config['kfold']
         train_val_test_folds = []
         if test_fold_idx>=0 and test_fold_idx<=9:
@@ -421,7 +423,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         lr = self.scheduler.get_last_lr()[0]
         step_dic={'epoch':self._iteration}
         diff_dic = {'difficult_aug':self.diff_augment,'same_train':args.same_train,'reweight':self.diff_reweight,'lambda_aug':args.lambda_aug,
-                'lambda_sim':args.lambda_sim,'class_adaptive':args.class_adapt,'lambda_noaug':args.lambda_noaug,'train_perfrom':self.pre_train_acc,
+                'lambda_sim':args.lambda_sim,'class_adaptive':args.class_adapt,'lambda_noaug':args.lambda_noaug,'train_perfrom':self.pre_train_acc,'noaug_reg':args.noaugreg,
                 'loss_type':args.loss_type, 'adv_criterion': self.adv_criterion, 'teacher_model':self.ema_model, 'sim_criterion':self.sim_criterion,
                 'extra_criterions':self.extra_losses,'sim_reweight':args.sim_rew,'warmup_epoch': args.pwarmup,'mix_type':args.mix_type,'visualize':args.visualize}
         

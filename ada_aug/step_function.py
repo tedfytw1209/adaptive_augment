@@ -22,7 +22,7 @@ from gradient_match import hyper_step
 
 def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_clip, adaaug, multilabel=False,n_class=10,
         difficult_aug=False,reweight=True,lambda_aug = 1.0,class_adaptive=False,map_select=False,visualize=False,training=True,
-        teach_rew=None,policy_apply=True):
+        teach_rew=None,policy_apply=True,noaug_reg=''):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
     top5 = utils.AvgrageMeter()

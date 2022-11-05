@@ -117,6 +117,7 @@ parser.add_argument('--keep_bound', type=float, default=0.0, help="info keep bou
 parser.add_argument('--teach_rew', action='store_true', default=False, help='teach reweight')
 parser.add_argument('--visualize', action='store_true', default=False, help='visualize')
 parser.add_argument('--output_visual', action='store_true', default=False, help='visualize output and confusion matrix')
+parser.add_argument('--output_pred', action='store_true', default=False, help='output predict result and ture target')
 
 args = parser.parse_args()
 debug = True if args.save == "debug" else False
@@ -407,6 +408,12 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         if Curr_epoch==self.config['epochs']-1 or Curr_epoch==self.config['epochs']:
             step_dic.update(self.result_valid_dic)
             step_dic.update(self.result_test_dic)
+            #output pred
+            if args.output_pred:
+                step_dic['valid_target'] = self.result_table_dic['valid_target']
+                step_dic['valid_predict'] = self.result_table_dic['valid_predict']
+                step_dic['test_target'] = self.result_table_dic['test_target']
+                step_dic['test_predict'] = self.result_table_dic['test_predict']
             #save&log
             wandb.log(step_dic)
             if args.output_visual:

@@ -227,6 +227,8 @@ def infer(valid_queue, model, criterion, multilabel=False, n_class=10,mode='test
     else:
         targets_np = torch.cat(targets).numpy()
         preds_np = torch.cat(preds).numpy()
+        table_dic[f'{mode}_target'] = targets_np
+        table_dic[f'{mode}_predict'] = preds_np
         perfrom_cw = utils.AUROC_cw(targets_np,preds_np)
         perfrom_cw2 = utils.mAP_cw(targets_np,preds_np)
         perfrom = perfrom_cw.mean()

@@ -129,6 +129,14 @@ def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_
                 policy_y = target_search.cuda().float()
         adaaug.visualize_result(input_search, seq_len,policy_y,target_search)
         exit()
+    #table dic
+    table_dic = {}
+    table_dic['train_output'] = (tr_output_matrix / torch.clamp(tr_output_matrix.sum(dim=1,keepdim=True),min=1e-9))
+    table_dic['train_confusion'] = confusion_matrix
+    targets_np = torch.cat(targets).numpy()
+    preds_np = torch.cat(preds).numpy()
+    table_dic['train_target'] = targets_np
+    table_dic['train_predict'] = preds_np
     #class-wise & Total
     if not multilabel:
         cw_acc = 100 * confusion_matrix.diag()/(confusion_matrix.sum(1)+1e-9)
@@ -140,8 +148,6 @@ def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_
         ptype = 'acc'
         logging.info(f'Epoch train: loss={objs.avg} top1acc={top1.avg} top5acc={top5.avg}')
     else:
-        targets_np = torch.cat(targets).numpy()
-        preds_np = torch.cat(preds).numpy()
         perfrom_cw = utils.AUROC_cw(targets_np,preds_np)
         perfrom_cw2 = utils.mAP_cw(targets_np,preds_np)
         perfrom = perfrom_cw.mean()
@@ -151,10 +157,6 @@ def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_
         logging.info('Epoch train: loss=%e macroAP=%f', objs.avg, perfrom2)
         logging.info('class-wise AUROC: ' + '['+', '.join(['%.1f'%e for e in perfrom_cw2])+']')
         ptype = 'auroc'
-    #table dic
-    table_dic = {}
-    table_dic['train_output'] = (tr_output_matrix / torch.clamp(tr_output_matrix.sum(dim=1,keepdim=True),min=1e-9))
-    table_dic['train_confusion'] = confusion_matrix
     #wandb dic
     out_dic = {}
     out_dic[f'train_loss'] = objs.avg
@@ -215,6 +217,10 @@ def infer(valid_queue, model, criterion, multilabel=False, n_class=10,mode='test
     table_dic[f'{mode}_output'] = (output_matrix / torch.clamp(output_matrix.sum(dim=1,keepdim=True),min=1e-9))
     table_dic[f'{mode}_confusion'] = confusion_matrix
     #class-wise
+    targets_np = torch.cat(targets).numpy()
+    preds_np = torch.cat(preds).numpy()
+    table_dic[f'{mode}_target'] = targets_np
+    table_dic[f'{mode}_predict'] = preds_np
     if not multilabel:
         cw_acc = 100 * confusion_matrix.diag()/(confusion_matrix.sum(1)+1e-9)
         logging.info('class-wise Acc: ' + str(cw_acc))
@@ -225,10 +231,6 @@ def infer(valid_queue, model, criterion, multilabel=False, n_class=10,mode='test
         perfrom2 = top5.avg
         ptype = 'acc'
     else:
-        targets_np = torch.cat(targets).numpy()
-        preds_np = torch.cat(preds).numpy()
-        table_dic[f'{mode}_target'] = targets_np
-        table_dic[f'{mode}_predict'] = preds_np
         perfrom_cw = utils.AUROC_cw(targets_np,preds_np)
         perfrom_cw2 = utils.mAP_cw(targets_np,preds_np)
         perfrom = perfrom_cw.mean()

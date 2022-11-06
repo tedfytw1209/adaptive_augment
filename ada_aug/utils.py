@@ -122,6 +122,16 @@ def save_ckpt(model, optimizer, scheduler, epoch, model_path):
                 'optimizer': optimizer.state_dict(), 
                 'scheduler': scheduler.state_dict()}, model_path)
 
+def save_pred(target, pred, model_path):
+    col_names = ['target','predict']
+    if len(target.shape)>1 and target.shape[1]>1: #multilabel
+        col_names = ['target_'+str(i) for i in range(target.shape[1])] + ['predict_'+str(i) for i in range(target.shape[1])]
+    else:
+        target = target.reshape((-1,1))
+        pred = pred.reshape((-1,1))
+    out_np = np.concatenate((target,pred),axis=1)
+    out_data = pd.DataFrame(out_np,columns=col_names)
+    out_data.to_csv(model_path)
 
 def restore_ckpt(model, optimizer, scheduler, model_path, location):
     state = torch.load(model_path, map_location=f'cuda:{location}')

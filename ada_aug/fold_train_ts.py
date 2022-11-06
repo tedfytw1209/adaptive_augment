@@ -410,10 +410,10 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             step_dic.update(self.result_test_dic)
             #output pred
             if args.output_pred:
-                step_dic['valid_target'] = self.result_table_dic['valid_target']
-                step_dic['valid_predict'] = self.result_table_dic['valid_predict']
-                step_dic['test_target'] = self.result_table_dic['test_target']
-                step_dic['test_predict'] = self.result_table_dic['test_predict']
+                utils.save_pred(self.result_table_dic['valid_target'],self.result_table_dic['valid_predict'],
+                        os.path.join(self.base_path,self.config['save'],f'fold{self.test_fold_idx}', 'valid_prediction.csv'))
+                utils.save_pred(self.result_table_dic['test_target'],self.result_table_dic['test_predict'],
+                        os.path.join(self.base_path,self.config['save'],f'fold{self.test_fold_idx}', 'test_prediction.csv'))
             #save&log
             wandb.log(step_dic)
             if args.output_visual:

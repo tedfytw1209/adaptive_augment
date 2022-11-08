@@ -1459,6 +1459,7 @@ class KeepAugment(object): #need fix
         out = torch.stack(aug_t_s_list, dim=0)
         info_region_record = torch.from_numpy(info_region_record).long()
         return out, info_region_record
+
     def Augment_search(self, t_series, model=None,selective='paste', apply_func=None,ops_names=None, seq_len=None,mask_idx=None, **kwargs):
         b,w,c = t_series.shape
         augment, selective = self.get_augment(apply_func,selective)
@@ -1553,6 +1554,7 @@ class KeepAugment(object): #need fix
             for param in model.parameters():
                 param.requires_grad = True
         return torch.stack(aug_t_s_list, dim=0) #(b*ops,seq,ch)
+
     def get_importance(self, model, x, **_kwargs):
         for param in model.parameters():
             param.requires_grad = False
@@ -1757,6 +1759,7 @@ class AdaKeepAugment(KeepAugment): #
                 seg_window = windowed_slc_each[win_start:win_end]
                 quant_score = torch.quantile(seg_window,info_aug)
                 bound_score = torch.quantile(seg_window,info_bound)
+                #all possible window
                 select_windows = (compare_func(seg_window,quant_score) & bound_func(seg_window,bound_score)).nonzero(as_tuple=True)[0].detach().cpu().numpy()
                 if len(select_windows)==0:
                     print('origin window: ', seg_window)
@@ -1765,8 +1768,8 @@ class AdaKeepAugment(KeepAugment): #
                     print('quant_score: ',quant_score)
                     print('bound_score: ',bound_score)
                     print('max windows: ',torch.max(seg_window))
-                select_p = np.random.choice(select_windows) + win_start #window start for adjust
-                x = select_p + info_len // 2 #back to seg
+                select_p = np.random.choice(select_windows) #window start for adjust
+                x = select_p + info_len // 2  + win_start #back to center points
                 x1 = np.clip(x - info_len // 2, 0, w)
                 x2 = np.clip(x + info_len // 2, 0, w)
                 region_list.append([x1,x2])
@@ -1792,7 +1795,7 @@ class AdaKeepAugment(KeepAugment): #
             else:
                 t_s = augment(t_s,i=i,seq_len=each_seq_len,**kwargs) #some other augment if needed
             #fix keep prob
-            idx = kwargs['idx_matrix'][i,0] #ops used !!!tmp only use first ops
+            idx = int(kwargs['idx_matrix'][i,0].detach().cpu()) #ops used !!!tmp only use first ops
             use_keep = self.keep_dict.get(idx,True)
             #paste back
             if use_keep and adapt_keep:
@@ -1897,8 +1900,8 @@ class AdaKeepAugment(KeepAugment): #
                             print('quant_score: ',quant_score)
                             print('bound_score: ',bound_score)
                             print('max windows: ',torch.max(seg_window))
-                        select_p = np.random.choice(select_windows) + win_start #window start for adjust
-                        x = select_p + info_len // 2 #back to seg
+                        select_p = np.random.choice(select_windows)#window start for adjust
+                        x = select_p + info_len // 2 + win_start #back to seg
                         x1 = np.clip(x - info_len // 2, 0, w)
                         x2 = np.clip(x + info_len // 2, 0, w)
                         region_list.append([x1,x2])
@@ -2008,8 +2011,8 @@ class AdaKeepAugment(KeepAugment): #
                             print('quant_score: ',quant_score)
                             print('bound_score: ',bound_score)
                             print('max windows: ',torch.max(seg_window))
-                        select_p = np.random.choice(select_windows) + win_start #window start for adjust
-                        x = select_p + info_len // 2 #back to seg
+                        select_p = np.random.choice(select_windows) #window start for adjust
+                        x = select_p + info_len // 2 + win_start #back to seg
                         x1 = np.clip(x - info_len // 2, 0, w)
                         x2 = np.clip(x + info_len // 2, 0, w)
                         region_list.append([x1,x2])

@@ -565,8 +565,7 @@ class AdaAugkeep_TS(AdaAug):
         self.noaug_add = noaug_add
         self.alpha = 0.5
         self.noaug_max = 0.5
-        self.noaug_tensor = torch.zeros((1,self.n_ops)).float()
-        self.noaug_tensor[0:0] = self.noaug_max #noaug
+        self.noaug_tensor = self.noaug_max * F.one_hot(torch.tensor([0]), num_classes=self.n_ops).float()
         self.sub_mix = sub_mix
         self.search_temp = search_temp
         self.preprocessors=preprocessors
@@ -598,7 +597,11 @@ class AdaAugkeep_TS(AdaAug):
         else: #fix thres break gradient
             keep_thres = torch.full(keep_thres.shape,self.keepaug_config['thres'],device=keep_thres.device)
         if self.noaug_add: #add noaug reweights
-            weights = self.alpha * weights + (1-self.alpha) * self.noaug_tensor
+            if self.class_adaptive: #alpha: (1,n_class), y: (batch_szie,n_class)=>(batch_size,1) one hotted
+                batch_alpha = torch.sum(self.alpha * y,dim=-1,keepdim=True) / torch.sum(y,dim=-1,keepdim=True)
+            else:
+                batch_alpha = self.alpha.view(-1)
+            weights = batch_alpha * weights + (1.0-batch_alpha) * (self.noaug_tensor.cuda() + weights/2)
         return magnitudes, weights, keeplen_ws, keep_thres
 
     def add_history(self, images, seq_len, targets,y=None):
@@ -645,7 +648,7 @@ class AdaAugkeep_TS(AdaAug):
             aug_imgs = self.Search_wrapper(images, model=self.gf_model,apply_func=self.get_aug_valid_img, keep_thres=keep_thres,
                 magnitudes=magnitudes,ops_names=self.ops_names,selective='paste',seq_len=seq_len,mask_idx=mask_idx)
         #(b*lens*ops,seq,ch) or 
-        return aug_imgs
+        return aug_imgs.cuda()
     def explore(self, images, seq_len, mix_feature=True,y=None,update_w=True):
         """Return the mixed latent feature !!!can't use for dynamic len now
         Args:
@@ -656,7 +659,7 @@ class AdaAugkeep_TS(AdaAug):
         magnitudes, weights, keeplen_ws, keep_thres = self.predict_aug_params(images, seq_len,'explore',y=y)
         if not update_w:
             weights = weights.detach()
-        if self.sub_mix<1.0:
+        if self.sub_mix<1.0: #!!in reality this did not finish
             ops_mask, ops_mask_idx = make_subset(self.n_ops,self.sub_mix) #(n_ops)
             n_ops_sub = len(ops_mask_idx)
             weights_subset = torch.masked_select(weights,ops_mask.view(1,self.n_ops).bool().cuda()).reshape(-1,n_ops_sub) #(bs,n_ops_sub)
@@ -689,7 +692,9 @@ class AdaAugkeep_TS(AdaAug):
             else:
                 return ba_features, [out_w]
         else:
-            ba_features = a_features.reshape(len(images), n_ops_sub, self.adapt_len, -1).permute(0,2,1,3) # batch, n_ops,keep_lens, n_hidden
+            # batch, n_ops,keep_lens, n_hidden ###11/08 bugfix=> first len then n_ops
+            ### ba_features = a_features.reshape(len(images), n_ops_sub, self.adapt_len, -1).permute(0,2,1,3)
+            ba_features = a_features.reshape(len(images), self.adapt_len, n_ops_sub, -1)
             #print
             if mix_feature:
                 mixed_features = [w.matmul(feat) for w, feat in zip(weights_subset, ba_features)] #[(keep_lens, n_hidden)]

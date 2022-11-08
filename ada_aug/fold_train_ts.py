@@ -228,6 +228,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         if args.restore:
             trained_epoch = utils.restore_ckpt(self.task_model, self.optimizer, self.scheduler,
                 os.path.join(self.config['BASE_PATH'],args.restore_path,f'fold{test_fold_idx}', 'weights.pt'), location=0) + 1
+            trained_epoch = args.epochs #tmp fix!!!
             print(f'From epoch {trained_epoch}, Resume')
         else:
             trained_epoch = 0

@@ -384,7 +384,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             self.result_table_dic.update(valid_table)
             self.result_table_dic.update(test_table)
             self.best_task = self.task_model
-            if 'debug' not in self.config['save']:
+            if 'debug' not in self.config['save'] and not args.restore:
                 utils.save_ckpt(self.best_task, self.optimizer, self.scheduler, Curr_epoch,
                     os.path.join(self.base_path,self.config['save'],f'fold{self.test_fold_idx}', 'weights.pt'))
             else:
@@ -396,7 +396,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             self.result_table_dic.update(train_table)
             self.result_table_dic.update(valid_table)
             self.result_table_dic.update(test_table)
-            if 'debug' not in self.config['save']:
+            if 'debug' not in self.config['save'] and not args.restore:
                 utils.save_ckpt(self.best_task, self.optimizer, self.scheduler, Curr_epoch,
                     os.path.join(self.base_path,self.config['save'],f'fold{self.test_fold_idx}', 'weights.pt'))
             else:

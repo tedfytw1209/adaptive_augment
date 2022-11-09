@@ -28,6 +28,27 @@ class SelectDropout(nn.Module):
 
         return X
 
+class AlphaAdd(nn.Module):
+    def __init__(self, fea_len: int = 128, label_len: int = 32):
+        super(AlphaAdd, self).__init__()
+        assert fea_len==label_len
+        self.fea_len = fea_len
+        self.label_len = label_len
+
+    def forward(self, X):
+        bs, n_hidden = X.shape
+        if self.training:
+            alpha = torch.rand(bs,1)
+            '''binomial = torch.distributions.binomial.Binomial(probs=1-self.p)
+            return X * binomial.sample(X.size()) * (1.0/(1-self.p))'''
+            print(alpha) #!tmp
+            #out = X * self.masks[select].to(X.device) * self.ratios[select].to(X.device) # (bs,in_dim) * (bs,in_dim) * (bs,1)
+            fea_x, label_x = torch.split(X, self.fea_len, dim=1)
+            out = fea_x * alpha + label_x * (1.0-alpha) #embedding mix
+            return out
+
+        return X
+
 class Projection(nn.Module):
     def __init__(self, in_features, n_layers, n_hidden=128):
         super(Projection, self).__init__()
@@ -89,6 +110,8 @@ class Projection_TSeries(nn.Module):
                 layers += [nn.Dropout(p=0.5)]
             elif feature_mask=='select':
                 layers += [SelectDropout(p=0.5,fea_len=n_hidden,label_len=n_label)] #custom dropout
+            elif feature_mask=='average':
+                layers += [AlphaAdd(fea_len=n_hidden,label_len=n_label)]
             for _ in range(self.n_layers-1):
                 layers.append(nn.Linear(n_hidden + n_label, n_hidden))
                 layers.append(nn.ReLU())

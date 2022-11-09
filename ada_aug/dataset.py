@@ -399,16 +399,24 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
     counts_array = np.asarray((unique, counts)).T
     print(counts_array)
     #make search validation set by StratifiedShuffleSplit
+    too_minor_class = unique[counts < 2] #11/09 change for minor class
     total = len(search_trainset)
-    rd_idxs = [i for i in range(total)]
+    rd_idxs,too_minor_sample = [],[]
+    for i in range(total):
+        if search_trainset.label[i] in too_minor_class:
+            too_minor_sample.append(i)
+        else:
+            rd_idxs.append(i)
+    #rd_idxs = [i for i in range(total)]
     if search_size > 0:
-        if not multilabel and counts.min()>=2: #multilabel can't, label<2 can't
+        if not multilabel: #multilabel can't, label<2 can't
             sss = StratifiedShuffleSplit(n_splits=5, test_size=search_size, random_state=0)
             sss = sss.split(list(rd_idxs), search_trainset.label)
         else:
             sss = ShuffleSplit(n_splits=5, test_size=search_size, random_state=0)
             sss = sss.split(list(rd_idxs))
         tot_train_idx, search_idx = next(sss)
+        tot_train_idx += too_minor_sample #add back minor sample, 11/09
         print(f'Train len: {len(tot_train_idx)},Search len: {len(search_idx)}')
         search_labels = np.array([search_trainset.label[idx] for idx in search_idx])
         search_dataset = Subset(search_trainset,search_idx)
@@ -452,11 +460,11 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
     if bal_trsampler=='weight':
         tr_weights = make_weights_for_balanced_classes(train_data.dataset.label,nclasses=num_class,alpha=sampler_alpha)
         train_sampler = torch.utils.data.sampler.WeightedRandomSampler(tr_weights, len(tr_weights))
-        print('train sampler: ',train_sampler) #!
+        print('train sampler with weight: ',tr_weights) #!
     elif bal_trsampler=='wmaxrel': #bal_ssampler=='wmaxrel':
         tr_weights = make_weights_for_balanced_classes_maxrel(train_data.dataset.label,nclasses=num_class,alpha=sampler_alpha)
         train_sampler = torch.utils.data.sampler.WeightedRandomSampler(tr_weights, len(tr_weights))
-        print('train sampler: ',train_sampler) #!
+        print('train sampler with weight',tr_weights) #!
     
     if train_sampler is None:
         trainloader = torch.utils.data.DataLoader(
@@ -470,7 +478,7 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
             pin_memory=True, num_workers=num_workers)
 
     validloader = torch.utils.data.DataLoader(
-        valid_data, batch_size=batch,
+        valid_data, batch_size=batch,shuffle=False,
         sampler=valid_sampler, drop_last=False,
         pin_memory=True, num_workers=num_workers)
 
@@ -506,7 +514,7 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
         tr_searchloader = None
 
     testloader = torch.utils.data.DataLoader(
-        test_data, batch_size=batch,
+        test_data, batch_size=batch,shuffle=False,
         sampler=test_sampler, drop_last=False,
         pin_memory=True, num_workers=num_workers)
 

@@ -78,7 +78,7 @@ def mAP_cw(targs, preds):
 
 def make_weights_for_balanced_classes(labels, nclasses,alpha=1.0):                        
     #np ways
-    count = np.array([np.count_nonzero(labels == i) for i in range(nclasses)]) + 1 #smooth
+    count = np.array([np.count_nonzero(labels == i) for i in range(nclasses)]) #11/9 del smooth
     weight_per_class = [0.] * nclasses                                      
     N = float(np.sum(count))
     for i in range(nclasses):
@@ -98,7 +98,7 @@ def make_weights_for_balanced_classes(labels, nclasses,alpha=1.0):
 
 def make_weights_for_balanced_classes_maxrel(labels, nclasses,alpha=1.0):                        
     #np ways
-    count = np.array([np.count_nonzero(labels == i) for i in range(nclasses)]) + 1 #smooth
+    count = np.array([np.count_nonzero(labels == i) for i in range(nclasses)]) #11/9 del smooth
     weight_per_class = [0.] * nclasses                                      
     N = np.max(count)
     for i in range(nclasses):

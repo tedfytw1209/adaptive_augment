@@ -99,7 +99,7 @@ parser.add_argument('--lambda_noaug', type=float, default=0, help="no augment re
 parser.add_argument('--class_adapt', action='store_true', default=False, help='class adaptive')
 parser.add_argument('--class_embed', action='store_true', default=False, help='class embed') #tmp use
 parser.add_argument('--feature_mask', type=str, default='', help='add regular for noaugment ',
-        choices=['dropout','select',''])
+        choices=['dropout','select','average',''])
 parser.add_argument('--class_dist', type=str, default='', help='class distance loss')
 parser.add_argument('--lambda_dist', type=float, default=1.0, help="class distance weight")
 parser.add_argument('--noaug_reg', type=str, default='', help='add regular for noaugment ',
@@ -265,7 +265,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             elif args.adapt_target=='way':
                 proj_add = 4 + 1
             elif args.adapt_target=='keep':
-                proj_add = 4 + 1
+                proj_add = 2 + 1
         self.h_model = Projection_TSeries(in_features=h_input,label_num=label_num,label_embed=label_embed,
             n_layers=args.n_proj_layer, n_hidden=args.n_proj_hidden, augselect=args.augselect, proj_addition=proj_add,
             feature_mask=args.feature_mask).cuda()
@@ -310,7 +310,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         elif args.loss_type=='embed':
             #self.adv_criterion = nn.MSELoss(reduction='mean') #default
             self.adv_criterion = Wasserstein_loss(reduction='mean')
-        elif args.mix_type=='loss' or 'sample' in args.loss_type:
+        elif args.mix_type=='loss' or 'sample' in args.loss_type: #for sample-wise loss
             if not multilabel:
                 self.adv_criterion = nn.CrossEntropyLoss(reduction='none')
             else:
@@ -331,7 +331,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         ind_mix,sub_mix = False,False
         if 'ind' in args.mix_method:
             ind_mix = True
-            self.search_repeat = 2
+            self.search_repeat = 2 #same batch for two aspect
         else:
             self.search_repeat = 1
         #need double search round
@@ -629,7 +629,6 @@ def main():
         num_samples=1, #grid search no need
     )
     
-    wandb.finish()
     
 
 

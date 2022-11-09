@@ -367,6 +367,10 @@ class AdaAug_TS(AdaAug):
         a_imgs = self.get_aug_valid_imgs(images, magnitudes,seq_len=seq_len, mask_idx=ops_mask_idx)
         #a_imgs = self.Augment_wrapper(images, model=self.gf_model,apply_func=self.get_aug_valid_imgs,magnitudes=magnitudes,selective='paste')
         #a_features = self.gf_model.extract_features(a_imgs, a_seq_len)
+        self.gf_model.eval() #11/09 add
+        if hasattr(self.gf_model, 'lstm'):
+            self.gf_model.lstm.train() #!!!maybe for bn is better
+        self.h_model.train()
         a_features = self.gf_model.extract_features(a_imgs)
         ba_features = a_features.reshape(len(images), n_ops_sub, -1) # batch, n_ops(sub), n_hidden
         if mix_feature: #weights with select
@@ -428,6 +432,8 @@ class AdaAug_TS(AdaAug):
             self.print_imgs(imgs=images,title='id')
             self.print_imgs(imgs=aug_imgs,title='aug')
             exit()
+        self.gf_model.eval() #11/09 add
+        self.h_model.eval()
         return aug_imgs
 
     def visualize_result(self, images, seq_len,policy_y=None,y=None):
@@ -674,6 +680,10 @@ class AdaAugkeep_TS(AdaAug):
         a_imgs = self.get_aug_valid_imgs(images, magnitudes,weights, keeplen_ws, keep_thres,seq_len=seq_len,mask_idx=ops_mask_idx) #(b*lens*ops,seq,ch)
         a_features = self.gf_model.extract_features(a_imgs) #(b*keep_len*n_ops, n_hidden)
         stage_name = self.Augment_wrapper.all_stages[self.Augment_wrapper.stage] #
+        self.gf_model.eval() #11/09 add
+        if hasattr(self.gf_model, 'lstm'):
+            self.gf_model.lstm.train() #!!!maybe for bn is better
+        self.h_model.train()
         if self.ind_mix:
             print('Stage: ',stage_name)
             if stage_name=='trans':
@@ -757,6 +767,8 @@ class AdaAugkeep_TS(AdaAug):
             self.print_imgs(imgs=images,title='id')
             self.print_imgs(imgs=aug_imgs,title='aug')
             exit()
+        self.gf_model.eval() #11/09 add
+        self.h_model.eval()
         return aug_imgs
     def visualize_result(self, images, seq_len,policy_y=None,y=None):
         if self.resize and 'lstm' not in self.config['gf_model_name']:

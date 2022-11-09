@@ -1560,7 +1560,7 @@ class KeepAugment(object): #need fix
                 aug_t_s_list.append(t_s_tmp)
         #back
         if self.mode=='auto':
-            model.train()
+            model.eval() #11/09for eval gf_model when search
             for param in model.parameters():
                 param.requires_grad = True
         return torch.stack(aug_t_s_list, dim=0) #(b*ops,seq,ch)
@@ -1952,7 +1952,7 @@ class AdaKeepAugment(KeepAugment): #
                     aug_t_s_list.append(t_s_tmp)
         #back
         if self.mode=='auto':
-            model.train()
+            model.eval() #11/09for eval gf_model when search
             for param in model.parameters():
                 param.requires_grad = True
         return torch.stack(aug_t_s_list, dim=0) #(b*lens*ops,seq,ch)
@@ -2067,7 +2067,7 @@ class AdaKeepAugment(KeepAugment): #
                     aug_t_s_list.append(t_s_tmp)
         #back
         if self.mode=='auto':
-            model.train()
+            model.eval() #11/09for eval gf_model when search
             for param in model.parameters():
                 param.requires_grad = True
         out_ts = torch.stack(aug_t_s_list, dim=0)

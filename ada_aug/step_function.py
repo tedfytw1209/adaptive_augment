@@ -468,6 +468,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
         if epoch>= warmup_epoch and step % search_freq == search_freq-1: #warmup
             policy_apply = True #start learning policy
             #difficult, train input, target
+            gf_model.eval() #11/9 add
             gf_optimizer.zero_grad()
             h_optimizer.zero_grad()
             input_search_list,seq_len_list,target_search_list,policy_y_list = [],[],[],[]

@@ -1383,10 +1383,12 @@ class KeepAugment(object): #need fix
             #print(f'keep len={info_len}, keeplead={n_keep_lead}')
         else:
             info_len = int(self.length/seg_number)
-        windowed_slc = torch.nn.functional.avg_pool1d(slc_.view(b,1,w),kernel_size=info_len, stride=1, padding=0).view(b,-1)
+        #11/09 add, better on edge case
+        windowed_slc = torch.nn.functional.avg_pool1d(slc_.view(b,1,w),kernel_size=info_len, 
+            stride=1, padding=info_len//2,count_include_pad=False).view(1,-1)[:,:w]
         windowed_w = windowed_slc.shape[1]
         windowed_len = int(windowed_w / seg_number)
-        #quant_scores = torch.quantile(windowed_slc,info_aug,dim=1) #quant for each batch
+        #11/09 for quant with different lens not consider!!!
         seg_accum, windowed_accum = self.get_seg(seg_number,seg_len,w,windowed_w,windowed_len)
         #print(slc_)
         t_series_ = t_series_.detach().cpu()
@@ -1415,6 +1417,9 @@ class KeepAugment(object): #need fix
                 if self.grid_region:
                     start, end = seg_accum[seg_idx], seg_accum[seg_idx+1]
                     win_start, win_end = windowed_accum[seg_idx], windowed_accum[seg_idx+1]
+                else: #11/09 for quant with different lens with some bug when segment !!!
+                    end = min(each_seq_len,end)
+                    win_end = min(each_seq_len,win_end)
                 quant_score = torch.quantile(windowed_slc_each[win_start:win_end],info_aug)
                 bound_score = torch.quantile(windowed_slc_each[win_start:win_end],info_bound)
                 while(True):
@@ -1476,7 +1481,9 @@ class KeepAugment(object): #need fix
             print(f'keep len={self.length}, keeplead={n_keep_lead}')
         else:
             info_len = int(self.length/seg_number)
-        windowed_slc = torch.nn.functional.avg_pool1d(slc_.view(b,1,w),kernel_size=info_len, stride=1, padding=0).view(b,-1)
+        #11/09 add, better on edge case
+        windowed_slc = torch.nn.functional.avg_pool1d(slc_.view(b,1,w),kernel_size=info_len, 
+            stride=1, padding=info_len//2,count_include_pad=False).view(1,-1)[:,:w]
         windowed_w = windowed_slc.shape[1]
         windowed_len = int(windowed_w / seg_number)
         #quant_scores = torch.quantile(windowed_slc,info_aug,dim=1) #quant for each batch
@@ -1515,6 +1522,9 @@ class KeepAugment(object): #need fix
                     if self.grid_region:
                         start, end = seg_accum[seg_idx], seg_accum[seg_idx+1]
                         win_start, win_end = windowed_accum[seg_idx], windowed_accum[seg_idx+1]
+                    else: #11/09 for quant with different lens with some bug when segment !!!
+                        end = min(each_seq_len,end)
+                        win_end = min(each_seq_len,win_end)
                     quant_score = torch.quantile(windowed_slc_each[win_start: win_end],info_aug)
                     bound_score = torch.quantile(windowed_slc_each[win_start:win_end],info_bound)
                     while(True):
@@ -1739,7 +1749,10 @@ class AdaKeepAugment(KeepAugment): #
                 raise 
             info_aug, compare_func, info_bound, bound_func = self.get_selective(selective,thres=keep_thres[i],use_reverse=use_reverse)
             info_len = int(total_len/seg_number)
-            windowed_slc = torch.nn.functional.avg_pool1d(slc.view(1,1,w),kernel_size=info_len, stride=1, padding=0).view(1,-1)
+            #windowed_slc = torch.nn.functional.avg_pool1d(slc.view(1,1,w),kernel_size=info_len, stride=1, padding=0).view(1,-1)
+            #11/09 add, better on edge case
+            windowed_slc = torch.nn.functional.avg_pool1d(slc.view(1,1,w),kernel_size=info_len, 
+                stride=1, padding=info_len//2,count_include_pad=False).view(1,-1)[:,:w]
             windowed_w = windowed_slc.shape[1]
             windowed_len = int(windowed_w / seg_number)
             seg_len = int(w / seg_number)
@@ -1756,6 +1769,8 @@ class AdaKeepAugment(KeepAugment): #
                 if self.grid_region:
                     #start, end = seg_accum[seg_idx], seg_accum[seg_idx+1] #calculate all window no need this
                     win_start, win_end = windowed_accum[seg_idx], windowed_accum[seg_idx+1]
+                else: #11/09 for quant with different lens with some bug when segment !!!
+                    win_end = min(each_seq_len,win_end)
                 seg_window = windowed_slc_each[win_start:win_end]
                 quant_score = torch.quantile(seg_window,info_aug)
                 bound_score = torch.quantile(seg_window,info_bound)
@@ -1769,7 +1784,7 @@ class AdaKeepAugment(KeepAugment): #
                     print('bound_score: ',bound_score)
                     print('max windows: ',torch.max(seg_window))
                 select_p = np.random.choice(select_windows) #window start for adjust
-                x = select_p + info_len // 2  + win_start #back to center points
+                x = select_p + win_start #back to center points
                 x1 = np.clip(x - info_len // 2, 0, w)
                 x2 = np.clip(x + info_len // 2, 0, w)
                 region_list.append([x1,x2])
@@ -1870,7 +1885,10 @@ class AdaKeepAugment(KeepAugment): #
                 info_aug, compare_func, info_bound, bound_func = self.get_selective(selective,thres=keep_thres[i],use_reverse=use_reverse)
                 #select a segment number
                 info_len = int(each_len/seg_number)
-                windowed_slc = torch.nn.functional.avg_pool1d(slc.view(1,1,w),kernel_size=info_len, stride=1, padding=0).view(1,-1)
+                #windowed_slc = torch.nn.functional.avg_pool1d(slc.view(1,1,w),kernel_size=info_len, stride=1, padding=0).view(1,-1)
+                #11/09 add, better on edge case
+                windowed_slc = torch.nn.functional.avg_pool1d(slc.view(1,1,w),kernel_size=info_len, 
+                    stride=1, padding=info_len//2,count_include_pad=False).view(1,-1)[:,:w]
                 windowed_w = windowed_slc.shape[1]
                 windowed_len = int(windowed_w / seg_number)
                 seg_len = int(w / seg_number)
@@ -1889,6 +1907,8 @@ class AdaKeepAugment(KeepAugment): #
                         if self.grid_region:
                             start, end = seg_accum[seg_idx], seg_accum[seg_idx+1]
                             win_start, win_end = windowed_accum[seg_idx], windowed_accum[seg_idx+1]
+                        else: #11/09 for quant with different lens with some bug when segment !!!
+                            win_end = min(each_seq_len,win_end)
                         seg_window = windowed_slc_each[win_start:win_end]
                         quant_score = torch.quantile(seg_window,info_aug)
                         bound_score = torch.quantile(seg_window,info_bound)
@@ -1901,7 +1921,7 @@ class AdaKeepAugment(KeepAugment): #
                             print('bound_score: ',bound_score)
                             print('max windows: ',torch.max(seg_window))
                         select_p = np.random.choice(select_windows)#window start for adjust
-                        x = select_p + info_len // 2 + win_start #back to seg
+                        x = select_p + win_start #back to seg
                         x1 = np.clip(x - info_len // 2, 0, w)
                         x2 = np.clip(x + info_len // 2, 0, w)
                         region_list.append([x1,x2])
@@ -1977,7 +1997,10 @@ class AdaKeepAugment(KeepAugment): #
                 info_aug, compare_func, info_bound, bound_func = self.get_selective(selective,thres=keep_thres[i],use_reverse=use_reverse)
                 #select a segment number
                 info_len = int(each_len/seg_number)
-                windowed_slc = torch.nn.functional.avg_pool1d(slc.view(1,1,w),kernel_size=info_len, stride=1, padding=0).view(1,-1)
+                #windowed_slc = torch.nn.functional.avg_pool1d(slc.view(1,1,w),kernel_size=info_len, stride=1, padding=0).view(1,-1)
+                #11/09 add, better on edge case
+                windowed_slc = torch.nn.functional.avg_pool1d(slc.view(1,1,w),kernel_size=info_len, 
+                    stride=1, padding=info_len//2,count_include_pad=False).view(1,-1)[:,:w]
                 windowed_w = windowed_slc.shape[1]
                 windowed_len = int(windowed_w / seg_number)
                 seg_len = int(w / seg_number)
@@ -2000,6 +2023,8 @@ class AdaKeepAugment(KeepAugment): #
                         if self.grid_region:
                             start, end = seg_accum[seg_idx], seg_accum[seg_idx+1]
                             win_start, win_end = windowed_accum[seg_idx], windowed_accum[seg_idx+1]
+                        else: #11/09 for quant with different lens with some bug when segment !!!
+                            win_end = min(each_seq_len,win_end)
                         seg_window = windowed_slc_each[win_start:win_end]
                         quant_score = torch.quantile(seg_window,info_aug)
                         bound_score = torch.quantile(seg_window,info_bound)
@@ -2012,7 +2037,7 @@ class AdaKeepAugment(KeepAugment): #
                             print('bound_score: ',bound_score)
                             print('max windows: ',torch.max(seg_window))
                         select_p = np.random.choice(select_windows) #window start for adjust
-                        x = select_p + info_len // 2 + win_start #back to seg
+                        x = select_p + win_start #back to seg
                         x1 = np.clip(x - info_len // 2, 0, w)
                         x2 = np.clip(x + info_len // 2, 0, w)
                         region_list.append([x1,x2])

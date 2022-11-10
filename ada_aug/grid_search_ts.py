@@ -62,7 +62,7 @@ parser.add_argument('--multilabel', action='store_true', default=False, help='us
 parser.add_argument('--train_portion', type=float, default=1, help='portion of training data')
 parser.add_argument('--default_split', action='store_true', help='use dataset deault split')
 parser.add_argument('--kfold', type=int, default=-1, help='use kfold cross validation')
-parser.add_argument('--proj_learning_rate', nargs='+', type=float, default=[1e-4,1e-2], help='learning rate for h')
+parser.add_argument('--proj_learning_rate', type=float, default=1e-2, help='learning rate for h')
 parser.add_argument('--proj_weight_decay', type=float, default=1e-3, help='weight decay for h]')
 parser.add_argument('--cutout', action='store_true', default=False, help='use cutout')
 parser.add_argument('--cutout_length', type=int, default=16, help='cutout length')
@@ -72,30 +72,66 @@ parser.add_argument('--model_name', type=str, default='wresnet40_2', help="mode 
 parser.add_argument('--num_workers', type=int, default=0, help="num_workers")
 parser.add_argument('--k_ops', type=int, default=1, help="number of augmentation applied during training")
 parser.add_argument('--temperature', type=float, default=1.0, help="temperature")
-parser.add_argument('--search_freq', type=float, nargs='+', default=1, help='exploration frequency')
-parser.add_argument('--search_round', type=int, nargs='+', default=1, help='exploration frequency') #search_round
+parser.add_argument('--sear_temp', type=float, default=1.0, help="temperature for search")
+parser.add_argument('--search_freq', type=float, default=1, help='exploration frequency')
+parser.add_argument('--search_round', type=int, default=1, help='exploration frequency') #search_round
 parser.add_argument('--n_proj_layer', type=int, default=0, help="number of hidden layer in augmentation policy projection")
+parser.add_argument('--n_proj_hidden', type=int, default=128, help="number of hidden units in augmentation policy projection layers")
+parser.add_argument('--mapselect', action='store_true', default=False, help='use map select for multilabel')
 parser.add_argument('--valselect', action='store_true', default=False, help='use valid select')
 parser.add_argument('--augselect', type=str, default='', help="augmentation selection")
+parser.add_argument('--policy_optim', type=str, default='adam', help="policy optim")
+parser.add_argument('--alpha', type=float, default=1.0, help="alpha adpat")
+parser.add_argument('--train_sampler', type=str, default='', help='for train sampler',
+        choices=['weight','wmaxrel',''])
+parser.add_argument('--search_sampler', type=str, default='', help='for search sampler',
+        choices=['weight','wmaxrel',''])
 parser.add_argument('--diff_aug', action='store_true', default=False, help='use valid select')
 parser.add_argument('--same_train', action='store_true', default=False, help='use valid select')
-parser.add_argument('--not_mix', action='store_true', default=False, help='use valid select')
-parser.add_argument('--not_reweight', action='store_true', default=False, help='use valid select')
-parser.add_argument('--lambda_aug', type=float, nargs='+', default=[0.1, 1.0], help="augment sample weight")
-parser.add_argument('--lambda_sim', type=float, nargs='+', default=[0.1, 1.0], help="augment sample weight (simular)")
+parser.add_argument('--mix_type', type=str, default='embed', help='add regular for noaugment ',
+        choices=['embed','loss'])
+parser.add_argument('--not_reweight', action='store_true', default=False, help='use diff reweight')
+parser.add_argument('--sim_rew', action='store_true', default=False, help='use sim reweight')
+parser.add_argument('--pwarmup', type=int, default=0, help="warmup epoch for policy")
+parser.add_argument('--lambda_aug', type=float, default=1.0, help="augment sample weight (difficult)")
+parser.add_argument('--lambda_sim', type=float, default=1.0, help="augment sample weight (simular)")
+parser.add_argument('--lambda_noaug', type=float, default=0, help="no augment regular weight")
 parser.add_argument('--class_adapt', action='store_true', default=False, help='class adaptive')
 parser.add_argument('--class_embed', action='store_true', default=False, help='class embed') #tmp use
-parser.add_argument('--loss_type', type=str, default='minus', help="loss type for difficult policy training", choices=['minus','relative','adv'])
+parser.add_argument('--feature_mask', type=str, default='', help='add regular for noaugment ',
+        choices=['dropout','select','average','classonly',''])
+parser.add_argument('--class_dist', type=str, default='', help='class distance loss')
+parser.add_argument('--lambda_dist', type=float, default=1.0, help="class distance weight")
+parser.add_argument('--noaug_reg', type=str, default='', help='add regular for noaugment ',
+        choices=['cadd','add','creg','wreg','cwreg','pwreg','cpwreg',''])
+parser.add_argument('--loss_type', type=str, default='minus', help="loss type for difficult policy training",
+        choices=['minus','minusdiff','relative','relativesample','relativediff','adv','embed'])
+parser.add_argument('--balance_loss', type=str, default='', help="loss type for model and policy training to acheive class balance")
 parser.add_argument('--policy_loss', type=str, default='', help="loss type for simular policy training")
 parser.add_argument('--keep_aug', action='store_true', default=False, help='info keep augment')
-parser.add_argument('--keep_mode', type=str, default='auto', help='info keep mode',choices=['auto','b','p','t'])
+parser.add_argument('--keep_prob', type=float, default=1, help='info keep probabilty')
+parser.add_argument('--keep_mode', type=str, default='auto', help='info keep mode',choices=['auto','adapt','b','p','t','rand'])
+parser.add_argument('--aug_target', type=str, default='', help='info keep adapt target',choices=['kops',''])
+parser.add_argument('--adapt_target', type=str, default='len', help='info keep adapt target / keep auto cut/paste or len/ch keep',
+        choices=['fea','len','seg','way','keep','ch','cut','paste','recut','repaste'])
+parser.add_argument('--keep_back', type=str, default='', help='info keep how to paste back',
+        choices=['fix','rpeak',''])
+parser.add_argument('--mix_method', type=str, default='', help='who search mix params',
+        choices=['ind','sub','indsub',''])
 parser.add_argument('--keep_seg', type=int, nargs='+', default=[1], help='info keep segment mode')
+parser.add_argument('--keep_lead', type=int, nargs='+', default=[12], help='leads (channel) keep, 12 means all lead keep')
+parser.add_argument('--lead_sel', type=str, default='thres', help='leads select ways',
+        choices=['max','prob','thres','group'])
 parser.add_argument('--keep_grid', action='store_true', default=False, help='info keep augment grid')
 parser.add_argument('--keep_thres', type=float, default=0.6, help="keep augment weight (lower protect more)")
-parser.add_argument('--keep_len', type=int, default=100, help="info keep seq len")
+parser.add_argument('--thres_adapt', action='store_false', default=True, help="keep augment thres adapt")
+parser.add_argument('--keep_len', type=int, nargs='+', default=[100], help="info keep seq len")
+parser.add_argument('--keep_bound', type=float, default=0.0, help="info keep bound %")
 parser.add_argument('--teach_aug', action='store_true', default=False, help='teacher augment')
 parser.add_argument('--ema_rate', type=float, default=0.999, help="teacher ema rate")
 parser.add_argument('--visualize', action='store_true', default=False, help='visualize')
+parser.add_argument('--output_visual', action='store_true', default=False, help='visualize output and confusion matrix')
+parser.add_argument('--output_pred', action='store_true', default=False, help='output predict result and ture target')
 
 args = parser.parse_args()
 debug = True if args.save == "debug" else False
@@ -104,11 +140,30 @@ if args.k_ops>0:
 else:
     Aug_type = 'NOAUG'
 
-description='grid'
+if args.diff_aug:
+    description = 'diff2'
+    description += args.loss_type
+else:
+    description = ''
+if args.class_adapt:
+    description += f'cada{args.policy_loss}'
+else:
+    description += ''
+description += args.noaug_reg
+if args.diff_aug and not args.not_reweight:
+    description+='rew'
 if args.keep_aug:
-    description+=f'keep{args.keep_mode}'
+    keep_seg_str = ''.join([str(i) for i in args.keep_seg])
+    keep_ch_str = ''.join([str(i) for i in args.keep_lead])
+    if keep_ch_str=='12':
+        keep_ch_str=''
+    else:
+        keep_ch_str='ch'+keep_ch_str
+    description+=f'keep{args.keep_mode}{keep_seg_str}{keep_ch_str}'
+if args.teach_aug:
+    description+=f'teach{args.ema_rate}'
 now_str = time.strftime("%Y%m%d-%H%M%S")
-args.save = '{}-{}-{}{}'.format(now_str, args.save,Aug_type,description)
+args.save = '{}-{}-{}{}'.format(now_str, args.save,Aug_type,description+args.augselect+args.balance_loss)
 if debug:
     args.save = os.path.join('debug', args.save)
 else:
@@ -344,7 +399,7 @@ def main():
     #logging.info('gpu device = %d' % args.gpu)
     logging.info("args = %s", args)
     #wandb
-    experiment_name = f'{Aug_type}{description}_search{args.augselect}_vselect_{args.dataset}{args.labelgroup}_{args.model_name}_e{args.epochs}_lr{args.learning_rate}'
+    experiment_name = f'{Aug_type}{description}_gridsearch{args.augselect}_{args.dataset}{args.labelgroup}_{args.model_name}_{args.balance_loss}'
     '''run_log = wandb.init(config=args, 
                   project='AdaAug',
                   group=experiment_name,
@@ -360,19 +415,16 @@ def main():
         hparams['kfold'] = tune.grid_search([i for i in range(args.kfold)])
     else:
         hparams['kfold'] = args.kfold #for some fold
-    #for grid search
+    #for grid search params 
     print(hparams)
     hparams['search_freq'] = hparams['search_freq'][0] #tune.grid_search(hparams['search_freq'])
     hparams['search_round'] = hparams['search_round'][0] #tune.grid_search(hparams['search_round'])
-    hparams['proj_learning_rate'] = tune.qloguniform(hparams['proj_learning_rate'][0],hparams['proj_learning_rate'][1],hparams['proj_learning_rate'][0]/2,2)
+    #hparams['proj_learning_rate'] = tune.qloguniform(hparams['proj_learning_rate'][0],hparams['proj_learning_rate'][1],hparams['proj_learning_rate'][0]/2,2)
     hparams['lambda_aug'] = tune.quniform(hparams['lambda_aug'][0],hparams['lambda_aug'][1],0.01)
     hparams['lambda_sim'] = tune.quniform(hparams['lambda_sim'][0],hparams['lambda_sim'][1],0.01)
     hparams['keep_thres'] = hparams['keep_thres'] #tune.grid_search(hparams['keep_thres'])
     hparams['keep_len'] = hparams['keep_len'] #tune.grid_search(hparams['keep_len'])
-    #if args.not_reweight:
-    #    hparams['not_reweight'] = tune.grid_search([True,False])
-    #if args.class_adapt:
-    #    hparams['class_adapt'] = tune.grid_search([True,False])
+    print(hparams)
     #wandb
     wandb_config = {
         #'config':FLAGS, 

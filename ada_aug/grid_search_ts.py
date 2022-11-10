@@ -16,15 +16,17 @@ import torch.nn as nn
 import torch.utils
 import torch.optim as optim
 
-from adaptive_augmentor import AdaAug_TS
+from adaptive_augmentor import AdaAug_TS,AdaAugkeep_TS
 from networks import get_model_tseries
 from networks.projection import Projection_TSeries
 from config import get_search_divider
-from dataset import get_ts_dataloaders, get_num_class, get_label_name, get_dataset_dimension,get_num_channel
+from dataset import get_ts_dataloaders, get_num_class, get_label_name, get_dataset_dimension,get_num_channel,Freq_dict,TimeS_dict
 from operation_tseries import TS_OPS_NAMES,ECG_OPS_NAMES,TS_ADD_NAMES,MAG_TEST_NAMES,NOMAG_TEST_NAMES
 from step_function import train,infer,search_train,search_infer
-from non_saturating_loss import NonSaturatingLoss
-from class_balanced_loss import ClassBalLoss,ClassDiffLoss
+from non_saturating_loss import NonSaturatingLoss,Wasserstein_loss
+from class_balanced_loss import ClassBalLoss,ClassDiffLoss,ClassDistLoss,make_class_balance_count,make_class_weights,make_loss,make_class_weights_maxrel \
+    ,make_class_weights_samples
+from utils import plot_conf_wandb
 from ray.tune.search.bayesopt import BayesOptSearch
 import wandb
 
@@ -180,21 +182,31 @@ logging.getLogger().addHandler(fh)
 API_KEY = 'cb4c412d9f47cd551e38050ced659b0c58926986'
 
 #ray model
+#ray model
 class RayModel(WandbTrainableMixin, tune.Trainable):
     def setup(self, *_args): #use new setup replace _setup
         #self.trainer = TSeriesModelTrainer(self.config)
         os.environ['WANDB_START_METHOD'] = 'thread'
-        args = argparse.Namespace(**self.config)
+        args = self.config['args']
         utils.reproducibility(args.seed) #for reproduce
         #  dataset settings for search
-        n_channel = get_num_channel(self.config['dataset'])
-        n_class = get_num_class(self.config['dataset'],self.config['labelgroup'])
-        sdiv = get_search_divider(self.config['model_name'])
-        class2label = get_label_name(self.config['dataset'], self.config['dataroot'])
-        multilabel = self.config['multilabel']
-        diff_augment = self.config['diff_aug']
-        diff_mix = not self.config['not_mix']
-        diff_reweight = not self.config['not_reweight']
+        n_channel = get_num_channel(args.dataset)
+        n_class = get_num_class(args.dataset,args.labelgroup)
+        sdiv = get_search_divider(args.model_name)
+        class2label = get_label_name(args.dataset, args.dataroot,args.labelgroup)
+        self.sfreq = Freq_dict[args.dataset]
+        self.time_s = TimeS_dict[args.dataset]
+        multilabel = args.multilabel
+        diff_augment = args.diff_aug
+        diff_reweight = not args.not_reweight
+        self.class_noaug, self.noaug_add, self.use_class_w = False, False, False
+        if args.noaug_reg=='cadd':
+            self.class_noaug = True
+            self.noaug_add = True
+        elif args.noaug_reg=='add':
+            self.noaug_add = True
+        elif args.noaug_reg=='creg':
+            self.use_class_w = True
         test_fold_idx = self.config['kfold']
         train_val_test_folds = []
         if test_fold_idx>=0 and test_fold_idx<=9:
@@ -208,20 +220,21 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 else:
                     train_val_test_folds[0].append(curr_fold)
             print('Train/Valid/Test fold split ',train_val_test_folds)
-        elif self.config['default_split']:
+        elif args.default_split:
             print('Default Train 1~8 /Valid 9/Test 10 fold split')
         else:
             print('Warning: Random splitting train/test')
-        self.train_queue, self.valid_queue, self.search_queue, self.test_queue, self.tr_search_queue = get_ts_dataloaders(
-            self.config['dataset'], self.config['batch_size'], self.config['num_workers'],
-            self.config['dataroot'], self.config['cutout'], self.config['cutout_length'],
-            split=self.config['train_portion'], split_idx=0, target_lb=-1,
-            search=True, search_divider=sdiv,search_size=self.config['search_size'],
-            test_size=self.config['test_size'],multilabel=self.config['multilabel'],default_split=self.config['default_split'],
-            fold_assign=train_val_test_folds,labelgroup=self.config['labelgroup'])
+        self.train_queue, self.valid_queue, self.search_queue, self.test_queue, self.tr_search_queue, preprocessors = get_ts_dataloaders(
+            args.dataset, args.batch_size, args.num_workers,
+            args.dataroot, args.cutout, args.cutout_length,
+            split=args.train_portion, split_idx=0, target_lb=-1,
+            search=True, search_divider=sdiv,search_size=args.search_size,
+            test_size=args.test_size,multilabel=args.multilabel,default_split=args.default_split,
+            fold_assign=train_val_test_folds,labelgroup=args.labelgroup,bal_ssampler=args.search_sampler,bal_trsampler=args.train_sampler,
+            sampler_alpha=args.alpha)
         #  model settings
-        self.gf_model = get_model_tseries(model_name=self.config['model_name'], num_class=n_class,n_channel=n_channel,
-            use_cuda=True, data_parallel=False,dataset=self.config['dataset'])
+        self.gf_model = get_model_tseries(model_name=args.model_name, num_class=n_class,n_channel=n_channel,
+            use_cuda=True, data_parallel=False,dataset=args.dataset)
         #EMA if needed
         self.ema_model = None
         if args.teach_aug:
@@ -232,72 +245,156 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             for ema_p in self.ema_model.parameters():
                 ema_p.requires_grad_(False)
             self.ema_model.train()
+        #h model
         h_input = self.gf_model.fc.in_features
         label_num, label_embed = 0,0
-        if self.config['class_adapt'] and self.config['class_embed']:
+        if args.class_adapt and args.class_embed:
             label_num = n_class
             label_embed = 32 #tmp use
             h_input = h_input + label_embed
-        elif self.config['class_adapt']:
+        elif args.class_adapt:
             h_input =h_input + n_class
-        
+        #keep aug, need improve!!
+        proj_add = 0
+        if args.keep_mode=='adapt':
+            if args.adapt_target=='len':
+                proj_add = len(args.keep_len) + 1
+            elif args.adapt_target=='fea':
+                proj_add = len(args.keep_len) + 1
+            elif args.adapt_target=='seg':
+                proj_add = len(args.keep_seg) + 1
+            elif args.adapt_target=='ch':
+                proj_add = len(args.keep_lead) + 1
+            elif args.adapt_target=='way':
+                proj_add = 4 + 1
+            elif args.adapt_target=='keep':
+                proj_add = 2 + 1
         self.h_model = Projection_TSeries(in_features=h_input,label_num=label_num,label_embed=label_embed,
-            n_layers=self.config['n_proj_layer'], n_hidden=128, augselect=self.config['augselect']).cuda()
+            n_layers=args.n_proj_layer, n_hidden=args.n_proj_hidden, augselect=args.augselect, proj_addition=proj_add,
+            feature_mask=args.feature_mask).cuda()
         #  training settings
-        self.gf_optimizer = torch.optim.AdamW(self.gf_model.parameters(), lr=self.config['learning_rate'], weight_decay=self.config['weight_decay']) #follow ptbxl batchmark!!!
-        self.scheduler = torch.optim.lr_scheduler.OneCycleLR(self.gf_optimizer, max_lr=self.config['learning_rate'], 
-            epochs = self.config['epochs'], steps_per_epoch = len(self.train_queue)) #follow ptbxl batchmark!!!
-        self.h_optimizer = torch.optim.Adam(
-            self.h_model.parameters(),
-            lr=self.config['proj_learning_rate'],
-            betas=(0.9, 0.999),
-            weight_decay=self.config['proj_weight_decay'])
-        
-        if not multilabel:
-            self.criterion = nn.CrossEntropyLoss()
+        self.gf_optimizer = torch.optim.AdamW(self.gf_model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
+        self.scheduler = torch.optim.lr_scheduler.OneCycleLR(self.gf_optimizer, max_lr=args.learning_rate, 
+            epochs = args.epochs, steps_per_epoch = len(self.train_queue)) #follow ptbxl batchmark
+        if args.policy_optim=='adam': #can try weight decay=0 case
+            self.h_optimizer = torch.optim.Adam(
+                self.h_model.parameters(),
+                lr=args.proj_learning_rate,
+                betas=(0.9, 0.999),
+                weight_decay=args.proj_weight_decay)
+        elif args.policy_optim=='sgdm': #SGD momentum as CADDA
+            self.h_optimizer = torch.optim.SGD(
+                self.h_model.parameters(),
+                lr=args.proj_learning_rate,
+                momentum=0.9,
+                weight_decay=args.proj_weight_decay)
+        elif args.policy_optim=='sgd': #SGD
+            self.h_optimizer = torch.optim.SGD(
+                self.h_model.parameters(),
+                lr=args.proj_learning_rate,
+                weight_decay=args.proj_weight_decay)
+        elif args.policy_optim=='rmsprop': #RMSprop
+            self.h_optimizer = torch.optim.RMSprop(
+                self.h_model.parameters(),
+                lr=args.proj_learning_rate,
+                weight_decay=args.proj_weight_decay)
         else:
-            self.criterion = nn.BCEWithLogitsLoss(reduction='mean')
+            print(f'{args.policy_optim} Unknown optimizer')
+            raise
+        train_labels = self.train_queue.dataset.dataset.label
+        search_labels = self.search_queue.dataset.dataset.label
+        default_criterion = make_loss(multilabel=multilabel)
+        self.criterion = self.choose_criterion(train_labels,search_labels,multilabel,n_class,
+            loss_type=args.balance_loss,default=default_criterion)
         self.criterion = self.criterion.cuda()
         self.adv_criterion = None
         if args.loss_type=='adv':
             self.adv_criterion = NonSaturatingLoss(epsilon=0.1).cuda()
-        self.sim_criterion = None
-        if args.policy_loss=='classbal':
-            search_labels = self.search_queue.dataset.dataset.label
+        elif args.loss_type=='embed':
+            #self.adv_criterion = nn.MSELoss(reduction='mean') #default
+            self.adv_criterion = Wasserstein_loss(reduction='mean')
+        elif args.mix_type=='loss' or 'sample' in args.loss_type: #for sample-wise loss
             if not multilabel:
-                search_labels_count = [np.count_nonzero(search_labels == i) for i in range(n_class)] #formulticlass
+                self.adv_criterion = nn.CrossEntropyLoss(reduction='none')
             else:
-                search_labels_count = np.sum(search_labels,axis=0)
-            sim_type = 'softmax'
-            if multilabel:
-                sim_type = 'focal'
-            self.sim_criterion = ClassBalLoss(search_labels_count,len(search_labels_count),loss_type=sim_type).cuda()
-        elif args.policy_loss=='classdiff':
-            self.class_difficulty = np.ones(n_class)
-            self.sim_criterion = ClassDiffLoss(class_difficulty=self.class_difficulty).cuda() #default now
+                self.adv_criterion = nn.BCEWithLogitsLoss(reduction='none')
+        
+        self.sim_criterion = None
+        #bug!: can not with loss_mix
+        self.sim_criterion = self.choose_criterion(train_labels,search_labels,multilabel,n_class,
+            loss_type=args.policy_loss,mix_type=args.mix_type)
+        self.extra_losses = []
+        #class distance
+        self.class_criterion = None
+        if args.class_dist:
+            self.class_criterion = ClassDistLoss(distance_func=args.class_dist,loss_choose=args.class_dist,lamda=args.lambda_dist)
+            self.extra_losses.append(self.class_criterion)
 
         #  AdaAug settings for search
+        ind_mix,sub_mix = False,False
+        if 'ind' in args.mix_method:
+            ind_mix = True
+            self.search_repeat = 2 #same batch for two aspect
+        else:
+            self.search_repeat = 1
+        #need double search round
+        if 'sub' in args.mix_method:
+            sub_mix = 0.5 #!!!tmp dedault for subset mix
+            #self.search_mult = 2
+        else:
+            #self.search_mult = 1
+            sub_mix = 1
+
         after_transforms = self.train_queue.dataset.after_transforms
         adaaug_config = {'sampling': 'prob',
                     'k_ops': self.config['k_ops'], #as paper
                     'delta': 0.0, 
-                    'temp': 1.0, 
-                    'search_d': get_dataset_dimension(self.config['dataset']),
-                    'target_d': get_dataset_dimension(self.config['dataset']),
-                    'gf_model_name': self.config['model_name']}
-        keepaug_config = {'keep_aug':args.keep_aug,'mode':args.keep_mode,'thres':args.keep_thres,'length':args.keep_len,
-            'grid_region':args.keep_grid, 'possible_segment': args.keep_seg}
-        self.adaaug = AdaAug_TS(after_transforms=after_transforms,
-            n_class=n_class,
-            gf_model=self.gf_model,
-            h_model=self.h_model,
-            save_dir=os.path.join(self.config['BASE_PATH'],self.config['save'],f'fold{test_fold_idx}'),
-            visualize=args.visualize,
-            config=adaaug_config,
-            keepaug_config=keepaug_config,
-            multilabel=multilabel,
-            augselect=self.config['augselect'],
-            class_adaptive=self.config['class_adapt'])
+                    'temp': args.temperature, 
+                    'search_d': get_dataset_dimension(args.dataset),
+                    'target_d': get_dataset_dimension(args.dataset),
+                    'gf_model_name': args.model_name,
+                    'aug_target': args.aug_target}
+        keepaug_config = {'keep_aug':args.keep_aug,'mode':args.keep_mode,'thres':args.keep_thres,'length':args.keep_len,'thres_adapt':args.thres_adapt,
+            'grid_region':args.keep_grid, 'possible_segment': args.keep_seg, 'info_upper': args.keep_bound, 'sfreq':self.sfreq, 'adapt_target':args.adapt_target,
+            'keep_leads':args.keep_lead,'keep_prob':args.keep_prob,'keep_back':args.keep_back,'lead_sel':args.lead_sel}
+        trans_config = {'sfreq':self.sfreq}
+        if args.keep_mode=='adapt':
+            keepaug_config['mode'] = 'auto'
+            self.adaaug = AdaAugkeep_TS(after_transforms=after_transforms,
+                n_class=n_class,
+                gf_model=self.gf_model,
+                h_model=self.h_model,
+                save_dir=os.path.join(self.config['BASE_PATH'],self.config['save'],f'fold{test_fold_idx}'),
+                #visualize=args.visualize,
+                config=adaaug_config,
+                keepaug_config=keepaug_config,
+                multilabel=multilabel,
+                augselect=args.augselect,
+                class_adaptive=self.class_noaug,
+                ind_mix=ind_mix,
+                search_temp=args.sear_temp,
+                sub_mix=sub_mix,
+                noaug_add=self.noaug_add,
+                transfrom_dic=trans_config,
+                preprocessors=preprocessors)
+        else:
+            keepaug_config['length'] = keepaug_config['length'][0]
+            self.adaaug = AdaAug_TS(after_transforms=after_transforms,
+                n_class=n_class,
+                gf_model=self.gf_model,
+                h_model=self.h_model,
+                save_dir=os.path.join(self.config['BASE_PATH'],self.config['save'],f'fold{test_fold_idx}'),
+                #visualize=args.visualize,
+                config=adaaug_config,
+                keepaug_config=keepaug_config,
+                multilabel=multilabel,
+                augselect=args.augselect,
+                class_adaptive=self.class_noaug,
+                search_temp=args.sear_temp,
+                sub_mix=sub_mix,
+                noaug_add=self.noaug_add,
+                transfrom_dic=trans_config,
+                preprocessors=preprocessors)
         #to self
         self.n_channel = n_channel
         self.n_class = n_class
@@ -311,55 +408,90 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         self.best_val_acc = -1
         self.best_gf,self.best_h = None,None
         self.base_path = self.config['BASE_PATH']
+        self.mapselect = self.config['mapselect']
+        self.pre_train_acc = 0.0
+        self.result_table_dic = {}
+        self.class_dist = None
     def step(self):#use step replace _train
         if self._iteration==0:
             wandb.config.update(self.config)
         if self.multilabel:
-            ptype = 'auroc'
+            if self.mapselect:
+                ptype = 'map'
+            else:
+                ptype = 'auroc'
         else:
             ptype = 'acc'
         print(f'Starting Ray ID {self.trial_id} Iteration: {self._iteration}')
-        args = argparse.Namespace(**self.config)
+        args = self.config['args']
         lr = self.scheduler.get_last_lr()[0]
         step_dic={'epoch':self._iteration}
         diff_dic = {'difficult_aug':self.diff_augment,'same_train':args.same_train,'reweight':self.diff_reweight,'lambda_aug':args.lambda_aug,
-                'lambda_sim':args.lambda_sim,'class_adaptive':args.class_adapt,
-                'loss_type':args.loss_type, 'adv_criterion': self.adv_criterion, 'teacher_model':self.ema_model, 'sim_criterion':self.sim_criterion}
+                'lambda_sim':args.lambda_sim,'class_adaptive':args.class_adapt,'lambda_noaug':args.lambda_noaug,'train_perfrom':self.pre_train_acc,
+                'loss_type':args.loss_type, 'adv_criterion': self.adv_criterion, 'teacher_model':self.ema_model, 'sim_criterion':self.sim_criterion,
+                'extra_criterions':self.extra_losses,'sim_reweight':args.sim_rew,'warmup_epoch': args.pwarmup,'mix_type':args.mix_type,'visualize':args.visualize}
+        
         # searching
-        train_acc, train_obj, train_dic = search_train(args,self.train_queue, self.search_queue, self.tr_search_queue, self.gf_model, self.adaaug,
-            self.criterion, self.gf_optimizer,self.scheduler, self.config['grad_clip'], self.h_optimizer, self._iteration, self.config['search_freq'], 
-            search_round=self.config['search_round'],multilabel=self.multilabel,n_class=self.n_class, **diff_dic)
-
+        train_acc, train_obj, train_dic, table_dic = search_train(args,self.train_queue, self.search_queue, self.tr_search_queue, self.gf_model, self.adaaug,
+            self.criterion, self.gf_optimizer,self.scheduler, args.grad_clip, self.h_optimizer, self._iteration, args.search_freq, 
+            search_round=args.search_round,search_repeat=self.search_repeat,multilabel=self.multilabel,n_class=self.n_class,map_select=self.mapselect, **diff_dic)
+        if self.noaug_add:
+            class_acc = train_acc / 100.0
+            if self.class_noaug:
+                class_acc = [train_dic[f'train_{ptype}_c{i}'] / 100.0 for i in range(self.n_class)]
+            self.adaaug.update_alpha(class_acc)
+        self.pre_train_acc = train_acc / 100.0
         # validation
-        valid_acc, valid_obj,valid_dic = search_infer(self.valid_queue, self.gf_model, self.criterion, multilabel=self.multilabel,n_class=self.n_class,mode='valid')
+        valid_acc, valid_obj,valid_dic,valid_table = search_infer(self.valid_queue, self.gf_model, self.criterion, 
+            multilabel=self.multilabel,n_class=self.n_class,mode='valid',map_select=self.mapselect)
+        #update runtime weights
         if args.policy_loss=='classdiff':
             class_acc = [valid_dic[f'valid_{ptype}_c{i}'] / 100.0 for i in range(self.n_class)]
             print(class_acc)
             self.class_difficulty = 1 - np.array(class_acc)
             self.sim_criterion.update_weight(self.class_difficulty)
-        #scheduler.step()
+        if args.class_dist:
+            self.class_criterion.update_classpair(table_dic['search_output'])
         #test
-        test_acc, test_obj, test_dic  = search_infer(self.test_queue, self.gf_model, self.criterion, multilabel=self.multilabel,n_class=self.n_class,mode='test')
-        #val select
-        if self.config['valselect'] and valid_acc>self.best_val_acc:
-            self.best_val_acc = valid_acc
-            self.result_valid_dic = {f'result_{k}': valid_dic[k] for k in valid_dic.keys()}
-            self.result_test_dic = {f'result_{k}': test_dic[k] for k in test_dic.keys()}
-            valid_dic[f'best_valid_{ptype}_avg'] = valid_acc
-            test_dic[f'best_test_{ptype}_avg'] = test_acc
-            self.best_gf = self.gf_model
-            self.best_h = self.h_model
-        elif not self.config['valselect']:
-            self.best_gf = self.gf_model
-            self.best_h = self.h_model
+        test_acc, test_obj, test_dic, test_table  = search_infer(self.test_queue, self.gf_model, self.criterion, 
+            multilabel=self.multilabel,n_class=self.n_class,mode='test',map_select=self.mapselect)
+        #fold idx
         if self.test_fold_idx>=0:
             gf_path = os.path.join(f'fold{self.test_fold_idx}', 'gf_weights.pt')
             h_path = os.path.join(f'fold{self.test_fold_idx}', 'h_weights.pt')
         else:
             gf_path = 'gf_weights.pt'
             h_path = 'h_weights.pt'
-        #utils.save_model(self.best_gf, os.path.join(self.base_path,self.config['save'],gf_path))
-        #utils.save_model(self.best_h, os.path.join(self.base_path,self.config['save'],h_path))
+        #val select 10/31 debug
+        if args.valselect and valid_acc>self.best_val_acc:
+            self.best_val_acc = valid_acc
+            self.result_valid_dic = {f'result_{k}': valid_dic[k] for k in valid_dic.keys()}
+            self.result_test_dic = {f'result_{k}': test_dic[k] for k in test_dic.keys()}
+            valid_dic[f'best_valid_{ptype}_avg'] = valid_acc
+            test_dic[f'best_test_{ptype}_avg'] = test_acc
+            self.result_table_dic.update(table_dic)
+            self.result_table_dic.update(valid_table)
+            self.result_table_dic.update(test_table)
+            self.best_gf = self.gf_model
+            self.best_h = self.h_model
+            if 'debug' not in self.config['save']:
+                utils.save_model(self.best_gf, os.path.join(self.base_path,self.config['save'],gf_path))
+                utils.save_model(self.best_h, os.path.join(self.base_path,self.config['save'],h_path))
+            else:
+                print('Debuging: not save at', self.config['save'])
+        elif not args.valselect:
+            self.best_gf = self.gf_model
+            self.best_h = self.h_model
+            self.result_valid_dic = {f'result_{k}': valid_dic[k] for k in valid_dic.keys()}
+            self.result_test_dic = {f'result_{k}': test_dic[k] for k in test_dic.keys()}
+            self.result_table_dic.update(table_dic)
+            self.result_table_dic.update(valid_table)
+            self.result_table_dic.update(test_table)
+            if 'debug' not in self.config['save']:
+                utils.save_model(self.best_gf, os.path.join(self.base_path,self.config['save'],gf_path))
+                utils.save_model(self.best_h, os.path.join(self.base_path,self.config['save'],h_path))
+            else:
+                print('Debuging: not save at', self.config['save'])
         
         step_dic.update(test_dic)
         step_dic.update(train_dic)
@@ -369,11 +501,30 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         if self._iteration==self.config['epochs']-1:
             step_dic.update(self.result_valid_dic)
             step_dic.update(self.result_test_dic)
+            #output pred
+            if args.output_pred:
+                step_dic['valid_target'] = self.result_table_dic['valid_target']
+                step_dic['valid_predict'] = self.result_table_dic['valid_predict']
+                step_dic['test_target'] = self.result_table_dic['test_target']
+                step_dic['test_predict'] = self.result_table_dic['test_predict']
             #save&log
-            #self.adaaug.save_history(self.class2label)
-            #figure = self.adaaug.plot_history()
             wandb.log(step_dic)
-        call_back_dic = {'train_acc': train_acc, 'valid_acc': valid_acc, 'test_acc': test_acc, 'valid_loss': valid_dic['valid_loss']}
+            if args.output_visual:
+                tables_dic = {}
+                tables_dic['train_confusion'] = plot_conf_wandb(self.result_table_dic['train_confusion'],title='train_confusion')
+                tables_dic['valid_confusion'] = plot_conf_wandb(self.result_table_dic['valid_confusion'],title='valid_confusion')
+                tables_dic['test_confusion'] = plot_conf_wandb(self.result_table_dic['test_confusion'],title='test_confusion')
+                #! maybe will bug
+                tables_dic['train_output'] = plot_conf_wandb(self.result_table_dic['train_output'],title='train_output')
+                tables_dic['search_output'] = plot_conf_wandb(self.result_table_dic['search_output'],title='search_output')
+                tables_dic['valid_output'] = plot_conf_wandb(self.result_table_dic['valid_output'],title='valid_output')
+                tables_dic['test_output'] = plot_conf_wandb(self.result_table_dic['test_output'],title='test_output')
+                wandb.log(tables_dic)
+            self.adaaug.save_history(self.class2label)
+            figure = self.adaaug.plot_history()
+            wandb.finish()
+            
+        call_back_dic = {'train_acc': train_acc, 'valid_acc': valid_acc, 'test_acc': test_acc}
         return call_back_dic
 
     def _save(self, checkpoint_dir):
@@ -389,6 +540,32 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
     def reset_config(self, new_config):
         self.config = new_config
         return True
+    
+    def choose_criterion(self,train_labels,search_labels,multilabel,n_class,loss_type='',mix_type='',default=None):
+        if loss_type=='classbal': 
+            out_criterion = make_class_balance_count(train_labels,search_labels,multilabel,n_class)
+        elif loss_type=='classdiff':
+            self.class_difficulty = np.ones(n_class)
+            gamma = None
+            if multilabel:
+                gamma = 2.0
+            out_criterion = ClassDiffLoss(class_difficulty=self.class_difficulty,focal_gamma=gamma).cuda() #default now
+        elif loss_type=='classweight':
+            class_weights = make_class_weights(train_labels,n_class,search_labels)
+            class_weights = torch.from_numpy(class_weights).float()
+            out_criterion = make_loss(multilabel=multilabel,weight=class_weights).cuda()
+        elif loss_type=='classwmaxrel':
+            class_weights = make_class_weights_maxrel(train_labels,n_class,search_labels)
+            class_weights = torch.from_numpy(class_weights).float()
+            out_criterion = make_loss(multilabel=multilabel,weight=class_weights).cuda()
+        elif mix_type=='loss' or 'sample' in loss_type: #loss mix or sample-wise relative
+            if not multilabel:
+                out_criterion = nn.CrossEntropyLoss(reduction='none').cuda()
+            else:
+                out_criterion = nn.BCEWithLogitsLoss(reduction='none').cuda()
+        else:
+            out_criterion = default
+        return out_criterion
 
 def main():
     if not torch.cuda.is_available():
@@ -415,15 +592,18 @@ def main():
         hparams['kfold'] = tune.grid_search([i for i in range(args.kfold)])
     else:
         hparams['kfold'] = args.kfold #for some fold
-    #for grid search params 
+    #for grid search params ###important###
     print(hparams)
-    hparams['search_freq'] = hparams['search_freq'][0] #tune.grid_search(hparams['search_freq'])
-    hparams['search_round'] = hparams['search_round'][0] #tune.grid_search(hparams['search_round'])
+    hparams['search_freq'] = tune.grid_search([5,10]) #tune.grid_search(hparams['search_freq'])
+    hparams['search_round'] = tune.grid_search([4,8,16]) #tune.grid_search(hparams['search_round'])
     #hparams['proj_learning_rate'] = tune.qloguniform(hparams['proj_learning_rate'][0],hparams['proj_learning_rate'][1],hparams['proj_learning_rate'][0]/2,2)
-    hparams['lambda_aug'] = tune.quniform(hparams['lambda_aug'][0],hparams['lambda_aug'][1],0.01)
-    hparams['lambda_sim'] = tune.quniform(hparams['lambda_sim'][0],hparams['lambda_sim'][1],0.01)
-    hparams['keep_thres'] = hparams['keep_thres'] #tune.grid_search(hparams['keep_thres'])
-    hparams['keep_len'] = hparams['keep_len'] #tune.grid_search(hparams['keep_len'])
+    #hparams['lambda_aug'] = tune.quniform(hparams['lambda_aug'][0],hparams['lambda_aug'][1],0.01)
+    #hparams['lambda_sim'] = tune.quniform(hparams['lambda_sim'][0],hparams['lambda_sim'][1],0.01)
+    #hparams['keep_thres'] = hparams['keep_thres'] #tune.grid_search(hparams['keep_thres'])
+    #hparams['keep_len'] = hparams['keep_len'] #tune.grid_search(hparams['keep_len'])
+    hparams['sear_temp'] = tune.grid_search([1,3]) #tune.grid_search(hparams['search_round'])
+    hparams['temperature'] = tune.grid_search([1,3,4])
+    hparams['diff_aug'] = tune.grid_search([True,False]) 
     print(hparams)
     #wandb
     wandb_config = {
@@ -434,7 +614,8 @@ def main():
         'dir':'./',
         'job_type':"DataAugment",
         'reinit':False,
-        'api_key':API_KEY
+        'api_key':API_KEY,
+        'settings':wandb.Settings(start_method='thread')
     }
     hparams["log_config"]= False
     hparams['wandb'] = wandb_config
@@ -446,24 +627,24 @@ def main():
     print(f'Run {args.kfold} folds experiment')
     #tune_scheduler = ASHAScheduler(metric="valid_acc", mode="max",max_t=hparams['num_epochs'],grace_period=10,
     #    reduction_factor=3,brackets=1)1
-    bayesopt = BayesOptSearch(metric="valid_loss", mode="min",random_state=args.seed,patience=12,random_search_steps=24)
+    #bayesopt = BayesOptSearch(metric="valid_loss", mode="min",random_state=args.seed,patience=12,random_search_steps=24)
     tune_scheduler = None
     analysis = tune.run(
         RayModel,
         name=hparams['ray_name'],
         scheduler=tune_scheduler,
         #reuse_actors=True,
-        search_alg = bayesopt,
+        #search_alg = bayesopt,
         verbose=True,
-        #metric="valid_acc",
-        #mode='max',
-        #checkpoint_score_attr="valid_acc",
+        metric="valid_acc",
+        mode='max',
+        checkpoint_score_attr="valid_acc",
         #checkpoint_freq=FLAGS.checkpoint_freq,
         resources_per_trial={"gpu": args.gpu, "cpu": args.cpu},
         stop={"training_iteration": hparams['epochs']},
         config=hparams,
         local_dir=args.ray_dir,
-        num_samples=120,
+        num_samples=1, #grid search no need
     )
     
     wandb.finish()

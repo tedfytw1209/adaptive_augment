@@ -534,7 +534,6 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                     #noaug_loss = lambda_noaug * (1.0 - train_perfrom) * noaug_criterion(aug_weight,noaug_target) #10/26 change
                     noaug_loss = lambda_noaug * noaug_criterion(aug_weight,noaug_target)
                     noaug_reg_sum += noaug_loss.detach().mean().item()
-                    
                 else:
                     noaug_loss = 0
                 #tea

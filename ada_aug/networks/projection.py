@@ -122,6 +122,8 @@ class Projection_TSeries(nn.Module):
                 layers += [nn.Dropout(p=0.5)]
             elif feature_mask=='select':
                 layers += [SelectDropout(p=0.5,fea_len=in_features-label_embed,label_len=n_label)]
+            elif feature_mask == 'classonly':
+                in_features = label_embed
             layers += [nn.Linear(in_features, proj_out)]
         self.projection = nn.Sequential(*layers)
 
@@ -130,6 +132,9 @@ class Projection_TSeries(nn.Module):
             x = self.feature_embed(x)
         if not self.class_adapt:
             agg_x = x
+        elif self.feature_mask=='classonly':
+            y_tmp = self.label_embed(y)
+            agg_x = y_tmp
         elif self.label_embed!=None:
             y_tmp = self.label_embed(y)
             agg_x = torch.cat([x,y_tmp], dim=1) #feature dim

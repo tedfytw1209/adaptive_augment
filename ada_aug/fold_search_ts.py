@@ -99,7 +99,7 @@ parser.add_argument('--lambda_noaug', type=float, default=0, help="no augment re
 parser.add_argument('--class_adapt', action='store_true', default=False, help='class adaptive')
 parser.add_argument('--class_embed', action='store_true', default=False, help='class embed') #tmp use
 parser.add_argument('--feature_mask', type=str, default='', help='add regular for noaugment ',
-        choices=['dropout','select','average',''])
+        choices=['dropout','select','average','classonly',''])
 parser.add_argument('--class_dist', type=str, default='', help='class distance loss')
 parser.add_argument('--lambda_dist', type=float, default=1.0, help="class distance weight")
 parser.add_argument('--noaug_reg', type=str, default='', help='add regular for noaugment ',

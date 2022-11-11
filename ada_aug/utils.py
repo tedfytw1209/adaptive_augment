@@ -134,7 +134,8 @@ def save_pred(target, pred, model_path):
     out_data.to_csv(model_path)
 
 def restore_ckpt(model, optimizer, scheduler, model_path, location):
-    state = torch.load(model_path, map_location=f'cuda:{location}')
+    #state = torch.load(model_path, map_location=f'cuda:{location}')
+    state = torch.load(model_path)
     model.load_state_dict(state['model'], strict=True)
     optimizer.load_state_dict(state['optimizer'])
     scheduler.load_state_dict(state['scheduler'])

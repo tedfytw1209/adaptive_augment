@@ -166,7 +166,7 @@ API_KEY = 'cb4c412d9f47cd551e38050ced659b0c58926986'
 class RayModel(WandbTrainableMixin, tune.Trainable):
     def setup(self, *_args): #use new setup replace _setup
         #self.trainer = TSeriesModelTrainer(self.config)
-        os.environ['WANDB_START_METHOD'] = 'thread'
+        #os.environ['WANDB_START_METHOD'] = 'thread' #tmp disable
         args = self.config['args']
         #random seed setting
         utils.reproducibility(args.seed)

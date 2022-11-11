@@ -32,6 +32,13 @@ def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_
     preds = []
     targets = []
     total = 0
+    if training:
+        for parameter in model.parameters():
+            parameter.requires_grad = True
+    else:
+        for parameter in model.parameters():
+            parameter.requires_grad = False
+    #start training
     for step, (input, seq_len, target) in enumerate(train_queue):
         input = input.float().cuda()
         target = target.cuda(non_blocking=True)
@@ -114,8 +121,8 @@ def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_
                 tr_output_matrix[t.long(),:] += soft_out[i]
         else:
             predicted = torch.sigmoid(logits.data)
-        preds.append(predicted.cpu().detach())
-        targets.append(target.cpu().detach())
+        preds.append(predicted.detach().cpu())
+        targets.append(target.detach().cpu())
     #visualize
     if visualize:
         input_search, seq_len, target_search = next(iter(train_queue))

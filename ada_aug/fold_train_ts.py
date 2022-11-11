@@ -51,7 +51,7 @@ parser.add_argument('--ray_dir', type=str, default=RAY_DIR,  help='Ray directory
 parser.add_argument('--ray_name', type=str, default='ray_experiment')
 parser.add_argument('--cpu', type=float, default=4, help='Allocated by Ray')
 parser.add_argument('--gpu', type=float, default=0.12, help='Allocated by Ray')
-###
+### dataset & params
 parser.add_argument('--epochs', type=int, default=20, help='number of training epochs')
 parser.add_argument('--model_path', type=str, default='saved_models', help='path to save the model')
 parser.add_argument('--save', type=str, default='EXP', help='experiment name')
@@ -61,6 +61,7 @@ parser.add_argument('--multilabel', action='store_true', default=False, help='us
 parser.add_argument('--train_portion', type=float, default=1, help='portion of training data')
 parser.add_argument('--default_split', action='store_true', help='use dataset deault split')
 parser.add_argument('--kfold', type=int, default=0, help='use kfold cross validation')
+#policy
 parser.add_argument('--proj_learning_rate', type=float, default=1e-2, help='learning rate for h')
 parser.add_argument('--proj_weight_decay', type=float, default=1e-3, help='weight decay for h]')
 parser.add_argument('--cutout', action='store_true', default=False, help='use cutout')
@@ -78,8 +79,10 @@ parser.add_argument('--delta', type=float, default=0.3, help="degree of perturba
 parser.add_argument('--temperature', type=float, default=1.0, help="temperature")
 parser.add_argument('--n_proj_layer', type=int, default=0, help="number of additional hidden layer in augmentation policy projection")
 parser.add_argument('--n_proj_hidden', type=int, default=128, help="number of hidden units in augmentation policy projection layers")
+#restore
 parser.add_argument('--restore_path', type=str, default='./', help='restore model path')
 parser.add_argument('--restore', action='store_true', default=False, help='restore model default False')
+#select&search
 parser.add_argument('--mapselect', action='store_true', default=False, help='use map select for multilabel')
 parser.add_argument('--valselect', action='store_true', default=False, help='use valid select')
 parser.add_argument('--notwarmup', action='store_true', default=False, help='use valid select')
@@ -88,16 +91,19 @@ parser.add_argument('--augselect', type=str, default='', help="augmentation sele
 parser.add_argument('--alpha', type=float, default=1.0, help="alpha adpat")
 parser.add_argument('--train_sampler', type=str, default='', help='for train sampler',
         choices=['weight','wmaxrel',''])
+#diff
 parser.add_argument('--diff_aug', action='store_true', default=False, help='use valid select')
 parser.add_argument('--not_reweight', action='store_true', default=False, help='use valid select')
 parser.add_argument('--lambda_aug', type=float, default=1.0, help="augment sample weight")
+#class adapt
 parser.add_argument('--class_adapt', action='store_true', default=False, help='class adaptive')
 parser.add_argument('--class_embed', action='store_true', default=False, help='class embed') #tmp use
 parser.add_argument('--feature_mask', type=str, default='', help='add regular for noaugment ',
-        choices=['dropout','select','classonly',''])
+        choices=['dropout','select','average','classonly',''])
 parser.add_argument('--noaug_reg', type=str, default='', help='add regular for noaugment ',
         choices=['cadd','add',''])
 parser.add_argument('--balance_loss', type=str, default='', help="loss type for model and policy training to acheive class balance")
+#info keep
 parser.add_argument('--keep_aug', action='store_true', default=False, help='info keep augment')
 parser.add_argument('--keep_mode', type=str, default='auto', help='info keep mode',choices=['auto','adapt','b','p','t','rand'])
 parser.add_argument('--keep_prob', type=float, default=1, help='info keep probabilty')
@@ -115,6 +121,7 @@ parser.add_argument('--thres_adapt', action='store_false', default=True, help="k
 parser.add_argument('--keep_len', type=int, nargs='+', default=[100], help="info keep seq len")
 parser.add_argument('--keep_bound', type=float, default=0.0, help="info keep bound %")
 parser.add_argument('--teach_rew', action='store_true', default=False, help='teach reweight')
+#visulaize&output
 parser.add_argument('--visualize', action='store_true', default=False, help='visualize')
 parser.add_argument('--output_visual', action='store_true', default=False, help='visualize output and confusion matrix')
 parser.add_argument('--output_pred', action='store_true', default=False, help='output predict result and ture target')

@@ -52,7 +52,7 @@ parser.add_argument('--ray_dir', type=str, default=RAY_DIR,  help='Ray directory
 parser.add_argument('--ray_name', type=str, default='ray_experiment')
 parser.add_argument('--cpu', type=float, default=4, help='Allocated by Ray')
 parser.add_argument('--gpu', type=float, default=0.12, help='Allocated by Ray')
-###
+### dataset & params
 parser.add_argument('--epochs', type=int, default=20, help='number of training epochs')
 parser.add_argument('--model_path', type=str, default='saved_models', help='path to save the model')
 parser.add_argument('--save', type=str, default='EXP', help='experiment name')
@@ -62,6 +62,7 @@ parser.add_argument('--multilabel', action='store_true', default=False, help='us
 parser.add_argument('--train_portion', type=float, default=1, help='portion of training data')
 parser.add_argument('--default_split', action='store_true', help='use dataset deault split')
 parser.add_argument('--kfold', type=int, default=-1, help='use kfold cross validation')
+# policy
 parser.add_argument('--proj_learning_rate', type=float, default=1e-2, help='learning rate for h')
 parser.add_argument('--proj_weight_decay', type=float, default=1e-3, help='weight decay for h]')
 parser.add_argument('--cutout', action='store_true', default=False, help='use cutout')
@@ -77,6 +78,8 @@ parser.add_argument('--search_freq', type=float, default=1, help='exploration fr
 parser.add_argument('--search_round', type=int, default=1, help='exploration frequency') #search_round
 parser.add_argument('--n_proj_layer', type=int, default=0, help="number of hidden layer in augmentation policy projection")
 parser.add_argument('--n_proj_hidden', type=int, default=128, help="number of hidden units in augmentation policy projection layers")
+# select & search
+parser.add_argument('--valid_search', action='store_true', default=False, help='using valid set as search')
 parser.add_argument('--mapselect', action='store_true', default=False, help='use map select for multilabel')
 parser.add_argument('--valselect', action='store_true', default=False, help='use valid select')
 parser.add_argument('--augselect', type=str, default='', help="augmentation selection")
@@ -86,6 +89,7 @@ parser.add_argument('--train_sampler', type=str, default='', help='for train sam
         choices=['weight','wmaxrel',''])
 parser.add_argument('--search_sampler', type=str, default='', help='for search sampler',
         choices=['weight','wmaxrel',''])
+# diff loss mix
 parser.add_argument('--diff_aug', action='store_true', default=False, help='use valid select')
 parser.add_argument('--same_train', action='store_true', default=False, help='use valid select')
 parser.add_argument('--mix_type', type=str, default='embed', help='add regular for noaugment ',
@@ -96,6 +100,7 @@ parser.add_argument('--pwarmup', type=int, default=0, help="warmup epoch for pol
 parser.add_argument('--lambda_aug', type=float, default=1.0, help="augment sample weight (difficult)")
 parser.add_argument('--lambda_sim', type=float, default=1.0, help="augment sample weight (simular)")
 parser.add_argument('--lambda_noaug', type=float, default=0, help="no augment regular weight")
+# class adapt & loss
 parser.add_argument('--class_adapt', action='store_true', default=False, help='class adaptive')
 parser.add_argument('--class_embed', action='store_true', default=False, help='class embed') #tmp use
 parser.add_argument('--feature_mask', type=str, default='', help='add regular for noaugment ',
@@ -108,6 +113,7 @@ parser.add_argument('--loss_type', type=str, default='minus', help="loss type fo
         choices=['minus','minusdiff','relative','relativesample','relativediff','adv','embed'])
 parser.add_argument('--balance_loss', type=str, default='', help="loss type for model and policy training to acheive class balance")
 parser.add_argument('--policy_loss', type=str, default='', help="loss type for simular policy training")
+# info keep
 parser.add_argument('--keep_aug', action='store_true', default=False, help='info keep augment')
 parser.add_argument('--keep_prob', type=float, default=1, help='info keep probabilty')
 parser.add_argument('--keep_mode', type=str, default='auto', help='info keep mode',choices=['auto','adapt','b','p','t','rand'])
@@ -129,6 +135,7 @@ parser.add_argument('--keep_len', type=int, nargs='+', default=[100], help="info
 parser.add_argument('--keep_bound', type=float, default=0.0, help="info keep bound %")
 parser.add_argument('--teach_aug', action='store_true', default=False, help='teacher augment')
 parser.add_argument('--ema_rate', type=float, default=0.999, help="teacher ema rate")
+#visulaize
 parser.add_argument('--visualize', action='store_true', default=False, help='visualize')
 parser.add_argument('--output_visual', action='store_true', default=False, help='visualize output and confusion matrix')
 parser.add_argument('--output_pred', action='store_true', default=False, help='output predict result and ture target')
@@ -226,7 +233,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             args.dataroot, args.cutout, args.cutout_length,
             split=args.train_portion, split_idx=0, target_lb=-1,
             search=True, search_divider=sdiv,search_size=args.search_size,
-            test_size=args.test_size,multilabel=args.multilabel,default_split=args.default_split,
+            test_size=args.test_size,multilabel=args.multilabel,default_split=args.default_split,valid_search=args.valid_search,
             fold_assign=train_val_test_folds,labelgroup=args.labelgroup,bal_ssampler=args.search_sampler,bal_trsampler=args.train_sampler,
             sampler_alpha=args.alpha)
         #  model settings

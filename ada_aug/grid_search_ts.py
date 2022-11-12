@@ -79,6 +79,7 @@ parser.add_argument('--search_freq', type=float, default=1, help='exploration fr
 parser.add_argument('--search_round', type=int, default=1, help='exploration frequency') #search_round
 parser.add_argument('--n_proj_layer', type=int, default=0, help="number of hidden layer in augmentation policy projection")
 parser.add_argument('--n_proj_hidden', type=int, default=128, help="number of hidden units in augmentation policy projection layers")
+parser.add_argument('--valid_search', action='store_true', default=False, help='using valid set as search')
 parser.add_argument('--mapselect', action='store_true', default=False, help='use map select for multilabel')
 parser.add_argument('--valselect', action='store_true', default=False, help='use valid select')
 parser.add_argument('--augselect', type=str, default='', help="augmentation selection")
@@ -229,7 +230,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             args.dataroot, args.cutout, args.cutout_length,
             split=args.train_portion, split_idx=0, target_lb=-1,
             search=True, search_divider=sdiv,search_size=args.search_size,
-            test_size=args.test_size,multilabel=args.multilabel,default_split=args.default_split,
+            test_size=args.test_size,multilabel=args.multilabel,default_split=args.default_split,valid_search=args.valid_search,
             fold_assign=train_val_test_folds,labelgroup=args.labelgroup,bal_ssampler=args.search_sampler,bal_trsampler=args.train_sampler,
             sampler_alpha=args.alpha)
         #  model settings
@@ -594,16 +595,17 @@ def main():
         hparams['kfold'] = args.kfold #for some fold
     #for grid search params ###important###
     print(hparams)
-    hparams['search_freq'] = tune.grid_search([5,10]) #tune.grid_search(hparams['search_freq'])
+    #hparams['search_freq'] = tune.grid_search([5,10]) #tune.grid_search(hparams['search_freq'])
     hparams['search_round'] = tune.grid_search([4,8,16]) #tune.grid_search(hparams['search_round'])
     hparams['proj_learning_rate'] = tune.grid_search([0.0001,0.00003])
     #hparams['lambda_aug'] = tune.quniform(hparams['lambda_aug'][0],hparams['lambda_aug'][1],0.01)
     #hparams['lambda_sim'] = tune.quniform(hparams['lambda_sim'][0],hparams['lambda_sim'][1],0.01)
     #hparams['keep_thres'] = hparams['keep_thres'] #tune.grid_search(hparams['keep_thres'])
-    #hparams['keep_len'] = hparams['keep_len'] #tune.grid_search(hparams['keep_len'])
-    hparams['sear_temp'] = tune.grid_search([1,3]) #tune.grid_search(hparams['search_round'])
-    hparams['temperature'] = tune.grid_search([1,3])
-    hparams['diff_aug'] = tune.grid_search([True,False]) 
+    hparams['keep_len'] = tune.grid_search([50,100,200,400,600]) #tune.grid_search(hparams['keep_len'])
+    hparams['loss_type'] = tune.grid_search(['minus','minusdiff','relative','relativesample','relativediff'])
+    #hparams['sear_temp'] = tune.grid_search([1,3]) #tune.grid_search(hparams['search_round'])
+    #hparams['temperature'] = tune.grid_search([1,3])
+    #hparams['diff_aug'] = tune.grid_search([True,False])
     print(hparams)
     #wandb
     wandb_config = {

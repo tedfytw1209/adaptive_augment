@@ -307,7 +307,7 @@ def get_dataloaders(dataset, batch, num_workers, dataroot, cutout,
 def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
                     cutout_length, split=0.5, split_idx=0, target_lb=-1,
                     search=True, search_divider=1, search_size=0, test_size=0.2, multilabel=False,
-                    default_split=False,fold_assign=[], labelgroup='',
+                    default_split=False,fold_assign=[], labelgroup='',valid_search=False,
                     bal_ssampler='',bal_trsampler='',sampler_alpha=1.0):
     '''
     If search is True, dataloader will give batches of image without after_transforms,
@@ -427,7 +427,11 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
     else:
         search_dataset = None
         total_trainset = search_trainset
-            
+    #valid as search
+    if valid_search:
+        print('Using valid set as search')
+        search_dataset = validset
+        print(f'Train len: {len(total_trainset)},Search len: {len(validset)}')
     #make train/valid split
     train_sampler = None
     if split < 1.0 and validset==None:

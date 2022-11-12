@@ -186,7 +186,7 @@ API_KEY = 'cb4c412d9f47cd551e38050ced659b0c58926986'
 class RayModel(WandbTrainableMixin, tune.Trainable):
     def setup(self, *_args): #use new setup replace _setup
         #self.trainer = TSeriesModelTrainer(self.config)
-        os.environ['WANDB_START_METHOD'] = 'thread'
+        #os.environ['WANDB_START_METHOD'] = 'thread'
         args = self.config['args']
         utils.reproducibility(args.seed) #for reproduce
         #  dataset settings for search
@@ -615,7 +615,7 @@ def main():
         'job_type':"DataAugment",
         'reinit':False,
         'api_key':API_KEY,
-        'settings':wandb.Settings(start_method='thread')
+        #'settings':wandb.Settings(start_method='thread')
     }
     hparams["log_config"]= False
     hparams['wandb'] = wandb_config

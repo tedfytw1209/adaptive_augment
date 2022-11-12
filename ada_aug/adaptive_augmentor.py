@@ -358,10 +358,12 @@ class AdaAug_TS(AdaAug):
             ops_mask, ops_mask_idx = make_subset(self.n_ops,self.sub_mix) #(n_ops)
             n_ops_sub = len(ops_mask_idx)
             weights_subset = torch.masked_select(weights,ops_mask.view(1,self.n_ops).bool().cuda()).reshape(-1,n_ops_sub) #(bs,n_ops_sub)
+            mag_subset = torch.masked_select(magnitudes,ops_mask.view(1,self.n_ops).bool().cuda()).reshape(-1,n_ops_sub)
             #reweight to sum=1
             weights_subset = weights_subset / torch.sum(weights_subset.detach(),dim=1,keepdim=True)
         else:
             weights_subset = weights
+            mag_subset = magnitudes
             n_ops_sub = self.n_ops
             ops_mask_idx = None
         a_imgs = self.get_aug_valid_imgs(images, magnitudes,seq_len=seq_len, mask_idx=ops_mask_idx)
@@ -376,9 +378,9 @@ class AdaAug_TS(AdaAug):
         if mix_feature: #weights with select
             mixed_features = [w.matmul(feat) for w, feat in zip(weights_subset, ba_features)]
             mixed_features = torch.stack(mixed_features, dim=0)
-            return mixed_features, [weights_subset]
+            return mixed_features, [weights_subset, mag_subset]
         else:
-            return ba_features, [weights_subset]
+            return ba_features, [weights_subset, mag_subset]
     def get_training_aug_image(self, image, magnitudes, idx_matrix,i=None, seq_len=None):
         if i!=None:
             idx_list = idx_matrix[i]
@@ -671,10 +673,12 @@ class AdaAugkeep_TS(AdaAug):
             ops_mask, ops_mask_idx = make_subset(self.n_ops,self.sub_mix) #(n_ops)
             n_ops_sub = len(ops_mask_idx)
             weights_subset = torch.masked_select(weights,ops_mask.view(1,self.n_ops).bool().cuda()).reshape(-1,n_ops_sub) #(bs,n_ops_sub)
+            mag_subset = torch.masked_select(magnitudes,ops_mask.view(1,self.n_ops).bool().cuda()).reshape(-1,n_ops_sub)
             #reweight to sum=1
             weights_subset = weights_subset / torch.sum(weights_subset.detach(),dim=1,keepdim=True)
         else:
             weights_subset = weights
+            mag_subset = magnitudes
             n_ops_sub = self.n_ops
             ops_mask_idx = None
         a_imgs = self.get_aug_valid_imgs(images, magnitudes,weights, keeplen_ws, keep_thres,seq_len=seq_len,mask_idx=ops_mask_idx) #(b*lens*ops,seq,ch)
@@ -700,9 +704,9 @@ class AdaAugkeep_TS(AdaAug):
             if mix_feature:
                 mixed_features = [w.matmul(feat) for w, feat in zip(out_w, ba_features)]
                 mixed_features = torch.stack(mixed_features, dim=0)
-                return mixed_features, [out_w]
+                return mixed_features, [out_w, mag_subset]
             else:
-                return ba_features, [out_w]
+                return ba_features, [out_w, mag_subset]
         else:
             # batch, n_ops,keep_lens, n_hidden ###11/08 bugfix=> first len then n_ops
             ### ba_features = a_features.reshape(len(images), n_ops_sub, self.adapt_len, -1).permute(0,2,1,3)
@@ -712,9 +716,9 @@ class AdaAugkeep_TS(AdaAug):
                 mixed_features = [w.matmul(feat) for w, feat in zip(weights_subset, ba_features)] #[(keep_lens, n_hidden)]
                 mixed_features = [len_w.matmul(feat) for len_w,feat in zip(keeplen_ws,mixed_features)] #[(n_hidden)]
                 mixed_features = torch.stack(mixed_features, dim=0)
-                return mixed_features , [weights_subset, keeplen_ws]
+                return mixed_features , [weights_subset, mag_subset, keeplen_ws]
             else:
-                return ba_features, [weights_subset, keeplen_ws]
+                return ba_features, [weights_subset, mag_subset, keeplen_ws]
     def select_params(self,weights,keeplen_ws):
         if self.sampling == 'prob':
             idx_matrix = torch.multinomial(weights, self.k_ops)

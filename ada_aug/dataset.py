@@ -402,21 +402,26 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
     too_minor_class = unique[counts < 2] #11/09 change for minor class
     total = len(search_trainset)
     rd_idxs,too_minor_sample = [],[]
+    label_for_split = []
     for i in range(total):
         if search_trainset.label[i] in too_minor_class:
             too_minor_sample.append(i)
         else:
             rd_idxs.append(i)
+            label_for_split.append(search_trainset.label[i])
     #rd_idxs = [i for i in range(total)]
     if search_size > 0:
         if not multilabel: #multilabel can't, label<2 can't
             sss = StratifiedShuffleSplit(n_splits=5, test_size=search_size, random_state=0)
-            sss = sss.split(list(rd_idxs), search_trainset.label)
+            sss = sss.split(list(rd_idxs), label_for_split)
         else:
             sss = ShuffleSplit(n_splits=5, test_size=search_size, random_state=0)
             sss = sss.split(list(rd_idxs))
         tot_train_idx, search_idx = next(sss)
-        tot_train_idx += too_minor_sample #add back minor sample, 11/09
+        too_minor_sample = np.array(too_minor_sample).astype(int)
+        tot_train_idx = np.concatenate((tot_train_idx,too_minor_sample)).astype(int) #add back minor sample, 11/09
+        print(tot_train_idx)
+        print(search_idx)
         print(f'Train len: {len(tot_train_idx)},Search len: {len(search_idx)}')
         search_labels = np.array([search_trainset.label[idx] for idx in search_idx])
         search_dataset = Subset(search_trainset,search_idx)

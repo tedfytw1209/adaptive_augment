@@ -292,7 +292,7 @@ def confidence_loss(logits,targets,target_pair,class_output):
     return loss
 
 class ClassDistLoss(torch.nn.Module):
-    def __init__(self, distance_func='conf',loss_choose='conf',init_k=3,lamda=1.0):
+    def __init__(self, distance_func='conf',loss_choose='conf',init_k=3,lamda=1.0,num_classes=10,use_loss=True):
         super().__init__()
         self.distance_func = distance_func
         self.loss_choose = loss_choose
@@ -303,6 +303,9 @@ class ClassDistLoss(torch.nn.Module):
         self.fill_value = 1e6
         self.updated = False
         self.lamda = lamda
+        self.num_classes = num_classes
+        self.use_loss = use_loss
+        #distance / weight init
 
     def update_distance(self,class_output_mat): #(n_class,n_class)
         self.classpair_dist = []
@@ -326,15 +329,15 @@ class ClassDistLoss(torch.nn.Module):
         Add noaug regular weight for:
         (1) low perfromance (self output) (2) easy be predict
         '''
-        self.classweight_dist = []
+        classweight_dist = []
         n_class = class_output_mat.shape[0]
         for c in range(n_class):
             c_output = class_output_mat[c,c] #0~1
             c_been_output = (class_output_mat[:,c].sum() - c_output) #0~1
             c_noaug_weight = (1.0-c_output) + c_been_output
-            self.classweight_dist.append(c_noaug_weight)
+            classweight_dist.append(c_noaug_weight)
             print(f'Class similar/noaug weight: c perfrom: {1.0-c_output}, c been output: {c_been_output}, total: {c_noaug_weight}')
-        self.classweight_dist = np.array(self.classweight_dist)
+        self.classweight_dist = np.array(classweight_dist)
         return self.classweight_dist
     def update_classpair(self,class_output_mat):
         n_class = class_output_mat.shape[0]
@@ -352,7 +355,7 @@ class ClassDistLoss(torch.nn.Module):
         self.updated = True
         
     def forward(self, logits, targets):
-        if not self.updated:
+        if not self.updated or not self.use_loss:
             return 0
         if self.distance_func=='wass':
             loss_func = wass_loss

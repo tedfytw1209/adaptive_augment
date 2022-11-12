@@ -328,12 +328,16 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         self.sim_criterion = self.choose_criterion(train_labels,search_labels,multilabel,n_class,
             loss_type=args.policy_loss,mix_type=args.mix_type)
         self.extra_losses = []
-        #class distance
+        #class distance or use as noaug regular class weight
         self.class_criterion = None
         if args.class_dist:
-            self.class_criterion = ClassDistLoss(distance_func=args.class_dist,loss_choose=args.class_dist,lamda=args.lambda_dist)
+            self.class_criterion = ClassDistLoss(distance_func=args.class_dist,loss_choose=args.class_dist,lamda=args.lambda_dist,
+                num_classes=n_class)
             self.extra_losses.append(self.class_criterion)
-
+        elif 'c' in args.noaug_reg:
+            self.class_criterion = ClassDistLoss(distance_func=args.class_dist,loss_choose=args.class_dist,lamda=args.lambda_dist,
+            num_classes=n_class,use_loss=False)
+            self.extra_losses.append(self.class_criterion)
         #  AdaAug settings for search
         ind_mix,sub_mix = False,False
         if 'ind' in args.mix_method:

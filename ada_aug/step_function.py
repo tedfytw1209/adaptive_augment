@@ -301,7 +301,7 @@ def loss_mix(gf_model,mixed_features,aug_weights,adv_criterion,target_trsearch,m
     target_trsearch = torch.unsqueeze(target_trsearch,dim=1) #(bs,1) !!!tmp not for multilabel
     if len(aug_weights)==2: #(batch, n_ops,keep_lens, n_hidden)
         batch, n_ops,keep_lens, n_hidden = mixed_features.shape
-        weights, keeplen_ws = aug_weights[0], aug_weights[1]
+        weights, keeplen_ws = aug_weights[0], aug_weights[2]
         target_trsearch = target_trsearch.expand(-1,n_ops*keep_lens).reshape(batch*n_ops*keep_lens)
         mixed_features = mixed_features.reshape(batch*n_ops*keep_lens,n_hidden)
         aug_logits = gf_model.classify(mixed_features)
@@ -348,7 +348,24 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
         adv_criterion = criterion
     if sim_criterion==None:
         sim_criterion = criterion
-    noaug_criterion = nn.CrossEntropyLoss().cuda()
+    #noaug criterion selection
+    use_noaug_reg = False
+    noaug_criterion = nn.CrossEntropyLoss(reduction='none').cuda()
+    noaug_criterion_w = nn.BCELoss(reduction='none').cuda()
+    noaug_lossw = torch.tensor(1)
+    noaug_target = ''
+    if noaug_reg in ['creg','cwreg','cpwreg']:
+        use_noaug_reg = True
+        noaug_lossw = extra_criterions[0].classweight_dist
+    elif noaug_reg:
+        use_noaug_reg = True
+    if noaug_target=='creg':
+        noaug_target = 'p'
+    elif noaug_target=='cwreg':
+        noaug_target = 'w'
+    elif noaug_target=='cpwreg':
+        noaug_target = 'pw'
+    #diff loss criterion
     diff_update_w = True
     sim_loss_func = ab_loss
     if loss_type=='minus':
@@ -536,10 +553,16 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 mixed_features, aug_weights = adaaug(input_search, seq_len, mode='explore',mix_feature=mix_feature,y=policy_y)
                 #weight regular to NOAUG
                 aug_weight = aug_weights[0] # (bs, n_ops), 0 is NOAUG
-                noaug_target = torch.zeros(target_search.shape).cuda().long()
-                if lambda_noaug>0: #need test
+                aug_magnitude = aug_weights[1]
+                noaug_mag_target = torch.zeros(target_search.shape).cuda().long()
+                noaug_w_target = nn.functional.one_hot(torch.zeros(target_search.shape[0]), num_classes=n_class).cuda().long()
+                print(noaug_mag_target)
+                print(noaug_w_target)
+                if use_noaug_reg: #need test
                     #noaug_loss = lambda_noaug * (1.0 - train_perfrom) * noaug_criterion(aug_weight,noaug_target) #10/26 change
-                    noaug_loss = lambda_noaug * noaug_criterion(aug_weight,noaug_target)
+                    noaug_loss = 0
+                    noaug_loss += (lambda_noaug * noaug_lossw *noaug_criterion_w(aug_magnitude,noaug_mag_target)).mean() #mean to assert loss is scalar
+                    noaug_loss += (lambda_noaug * noaug_lossw *noaug_criterion(aug_weight,noaug_w_target)).mean()
                     noaug_reg_sum += noaug_loss.detach().mean().item()
                 else:
                     noaug_loss = 0

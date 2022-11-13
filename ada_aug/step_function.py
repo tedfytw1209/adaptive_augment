@@ -561,8 +561,14 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 if use_noaug_reg: #need test
                     #noaug_loss = lambda_noaug * (1.0 - train_perfrom) * noaug_criterion(aug_weight,noaug_target) #10/26 change
                     noaug_loss = 0
-                    noaug_loss += (lambda_noaug * noaug_lossw *noaug_criterion_w(aug_magnitude,noaug_mag_target)).mean() #mean to assert loss is scalar
-                    noaug_loss += (lambda_noaug * noaug_lossw *noaug_criterion(aug_weight,noaug_w_target)).mean()
+                    if 'w' in noaug_target:
+                        tmp_loss = (lambda_noaug * noaug_lossw *noaug_criterion_w(aug_magnitude,noaug_mag_target)).mean() #mean to assert loss is scalar
+                        noaug_loss += tmp_loss
+                        print('magnitude loss: ',tmp_loss)
+                    if 'p' in noaug_target:
+                        tmp_loss = (lambda_noaug * noaug_lossw *noaug_criterion(aug_weight,noaug_w_target)).mean()
+                        noaug_loss += tmp_loss
+                        print('prob loss: ',tmp_loss)
                     noaug_reg_sum += noaug_loss.detach().mean().item()
                 else:
                     noaug_loss = 0

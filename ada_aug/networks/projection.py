@@ -37,17 +37,20 @@ class AlphaAdd(nn.Module):
 
     def forward(self, X):
         bs, n_hidden = X.shape
+        #print('Agg x shape: ',X.shape)
+        alpha = torch.rand(bs,1).cuda()
+        #print(alpha) #!tmp
         if self.training:
-            alpha = torch.rand(bs,1)
             '''binomial = torch.distributions.binomial.Binomial(probs=1-self.p)
             return X * binomial.sample(X.size()) * (1.0/(1-self.p))'''
-            print(alpha) #!tmp
             #out = X * self.masks[select].to(X.device) * self.ratios[select].to(X.device) # (bs,in_dim) * (bs,in_dim) * (bs,1)
-            fea_x, label_x = torch.split(X, self.fea_len, dim=1)
+            fea_x, label_x = torch.split(X, [self.fea_len, self.label_len], dim=1)
             out = fea_x * alpha + label_x * (1.0-alpha) #embedding mix
             return out
-
-        return X
+        else:
+            fea_x, label_x = torch.split(X, [self.fea_len, self.label_len], dim=1)
+            out = fea_x * alpha + label_x * (1.0-alpha) #embedding mix
+            return out
 
 class Projection(nn.Module):
     def __init__(self, in_features, n_layers, n_hidden=128):
@@ -112,6 +115,7 @@ class Projection_TSeries(nn.Module):
                 layers += [SelectDropout(p=0.5,fea_len=n_hidden,label_len=n_label)] #custom dropout
             elif feature_mask=='average':
                 layers += [AlphaAdd(fea_len=n_hidden,label_len=n_label)]
+                n_label = 0
             for _ in range(self.n_layers-1):
                 layers.append(nn.Linear(n_hidden + n_label, n_hidden))
                 layers.append(nn.ReLU())
@@ -135,9 +139,11 @@ class Projection_TSeries(nn.Module):
         elif self.feature_mask=='classonly':
             y_tmp = self.label_embed(y)
             agg_x = y_tmp
+            #print('class only y: ',agg_x)
         elif self.label_embed!=None:
             y_tmp = self.label_embed(y)
             agg_x = torch.cat([x,y_tmp], dim=1) #feature dim
+            #print(x.shape, y_tmp.shape)
         else:
             agg_x = torch.cat([x,y], dim=1) #feature dim
         if self.input_act:

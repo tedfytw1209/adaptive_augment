@@ -354,16 +354,17 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     noaug_criterion_w = nn.BCELoss(reduction='none').cuda()
     noaug_lossw = torch.tensor(1)
     noaug_target = ''
+    print('Using NOAUG regularation ',noaug_reg)
     if noaug_reg in ['creg','cwreg','cpwreg']:
         use_noaug_reg = True
-        noaug_lossw = extra_criterions[0].classweight_dist
+        noaug_lossw = torch.from_numpy(extra_criterions[0].classweight_dist).cuda()
     elif noaug_reg:
         use_noaug_reg = True
-    if noaug_target=='creg':
+    if noaug_reg=='creg':
         noaug_target = 'p'
-    elif noaug_target=='cwreg':
+    elif noaug_reg=='cwreg':
         noaug_target = 'w'
-    elif noaug_target=='cpwreg':
+    elif noaug_reg=='cpwreg':
         noaug_target = 'pw'
     #diff loss criterion
     diff_update_w = True
@@ -554,21 +555,25 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 #weight regular to NOAUG
                 aug_weight = aug_weights[0] # (bs, n_ops), 0 is NOAUG
                 aug_magnitude = aug_weights[1]
-                noaug_mag_target = torch.zeros(target_search.shape).cuda().long()
-                noaug_w_target = nn.functional.one_hot(torch.zeros(target_search.shape[0]), num_classes=n_class).cuda().long()
-                print(noaug_mag_target)
-                print(noaug_w_target)
+                noaug_mag_target = torch.zeros(aug_magnitude.shape).cuda().float()
+                noaug_w_target = torch.zeros(aug_weight.shape[0]).cuda().long()
+                #print(noaug_mag_target)
+                #print(noaug_w_target)
                 if use_noaug_reg: #need test
                     #noaug_loss = lambda_noaug * (1.0 - train_perfrom) * noaug_criterion(aug_weight,noaug_target) #10/26 change
+                    noaug_samplew = noaug_lossw[target_search.detach()]
+                    #print('noaug sample weight: ',noaug_samplew)
+                    #print(noaug_criterion_w(aug_magnitude,noaug_mag_target).mean(1))
+                    #print(noaug_criterion(aug_weight,noaug_w_target))
                     noaug_loss = 0
                     if 'w' in noaug_target:
-                        tmp_loss = (lambda_noaug * noaug_lossw *noaug_criterion_w(aug_magnitude,noaug_mag_target)).mean() #mean to assert loss is scalar
+                        tmp_loss = (lambda_noaug * noaug_samplew * noaug_criterion_w(aug_magnitude,noaug_mag_target).mean(1)).mean() #mean to assert loss is scalar
                         noaug_loss += tmp_loss
-                        print('magnitude loss: ',tmp_loss)
+                        #print('magnitude loss: ',tmp_loss)
                     if 'p' in noaug_target:
-                        tmp_loss = (lambda_noaug * noaug_lossw *noaug_criterion(aug_weight,noaug_w_target)).mean()
+                        tmp_loss = (lambda_noaug * noaug_samplew *noaug_criterion(aug_weight,noaug_w_target)).mean()
                         noaug_loss += tmp_loss
-                        print('prob loss: ',tmp_loss)
+                        #print('prob loss: ',tmp_loss)
                     noaug_reg_sum += noaug_loss.detach().mean().item()
                 else:
                     noaug_loss = 0

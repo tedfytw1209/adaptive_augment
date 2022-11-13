@@ -306,6 +306,8 @@ class ClassDistLoss(torch.nn.Module):
         self.num_classes = num_classes
         self.use_loss = use_loss
         #distance / weight init
+        self.classpair_dist = np.ones((num_classes,num_classes))
+        self.classweight_dist = np.ones((num_classes))
 
     def update_distance(self,class_output_mat): #(n_class,n_class)
         self.classpair_dist = []

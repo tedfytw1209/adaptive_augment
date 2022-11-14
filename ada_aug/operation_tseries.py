@@ -1385,9 +1385,14 @@ class KeepAugment(object): #need fix
             info_len = int(self.length/seg_number)
         #11/09 add, better on edge case
         windowed_slc = torch.nn.functional.avg_pool1d(slc_.view(b,1,w),kernel_size=info_len, 
-            stride=1, padding=info_len//2,count_include_pad=False).view(1,-1)[:,:w]
+            stride=1, padding=info_len//2,count_include_pad=False).view(b,-1)[:,:w]
         windowed_w = windowed_slc.shape[1]
         windowed_len = int(windowed_w / seg_number)
+        '''print('t_series_ ',t_series_.shape)
+        print('slc_ ',slc_.shape)
+        print('slc_ch ',slc_ch.shape)
+        print('windowed_slc ',windowed_slc.shape)
+        print('seq_len ',seq_len.shape)'''
         #11/09 for quant with different lens not consider!!!
         seg_accum, windowed_accum = self.get_seg(seg_number,seg_len,w,windowed_w,windowed_len)
         #print(slc_)
@@ -1483,7 +1488,7 @@ class KeepAugment(object): #need fix
             info_len = int(self.length/seg_number)
         #11/09 add, better on edge case
         windowed_slc = torch.nn.functional.avg_pool1d(slc_.view(b,1,w),kernel_size=info_len, 
-            stride=1, padding=info_len//2,count_include_pad=False).view(1,-1)[:,:w]
+            stride=1, padding=info_len//2,count_include_pad=False).view(b,-1)[:,:w]
         windowed_w = windowed_slc.shape[1]
         windowed_len = int(windowed_w / seg_number)
         #quant_scores = torch.quantile(windowed_slc,info_aug,dim=1) #quant for each batch

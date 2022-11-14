@@ -299,7 +299,7 @@ def embed_diff(gf_model,mixed_features,aug_weights,adv_criterion,target_trsearch
 def loss_mix(gf_model,mixed_features,aug_weights,adv_criterion,target_trsearch,multilabel):
     # mixed_features=(batch, n_ops,keep_lens, n_hidden) or (batch, keep_lens, n_hidden) or (batch, n_ops, n_hidden)
     target_trsearch = torch.unsqueeze(target_trsearch,dim=1) #(bs,1) !!!tmp not for multilabel
-    if len(aug_weights)==2: #(batch, n_ops,keep_lens, n_hidden)
+    if len(aug_weights[1])==3: #(batch, n_ops,keep_lens, n_hidden)
         batch, n_ops,keep_lens, n_hidden = mixed_features.shape
         weights, keeplen_ws = aug_weights[0], aug_weights[2]
         target_trsearch = target_trsearch.expand(-1,n_ops*keep_lens).reshape(batch*n_ops*keep_lens)
@@ -340,6 +340,10 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     confusion_matrix = torch.zeros(n_class,n_class)
     tr_output_matrix = torch.zeros(n_class,n_class).float()
     sea_output_matrix = torch.zeros(n_class,n_class).float()
+    tr_embed_matrix = torch.zeros(n_class,256).float() #tmp !!!
+    sea_embed_matrix = torch.zeros(n_class,256).float() #tmp !!!
+    tr_embed_count = torch.zeros(n_class,1)
+    sea_embed_count = torch.zeros(n_class,1)
     softmax_m = nn.Softmax(dim=1)
     
     print(loss_type)
@@ -435,7 +439,9 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
         aug_images = aug_images.cuda()
         gf_model.train()
         gf_optimizer.zero_grad()
-        logits = gf_model(aug_images, seq_len)
+        #logits = gf_model(aug_images, seq_len)
+        train_embed = gf_model.extract_features(aug_images, seq_len, pool=True)
+        logits = gf_model.classify(train_embed)
         if multilabel:
             aug_loss = criterion(logits, target.float())
         else:
@@ -483,6 +489,8 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 confusion_matrix[t.long(), p.long()] += 1
             for i,t in enumerate(target.data.view(-1)):
                 tr_output_matrix[t.long(),:] += soft_out[i]
+                tr_embed_matrix[t.long(),:] += train_embed[i] #11/14 add
+                tr_embed_count[t.long(),0] += 1
         else:
             predicted = torch.sigmoid(logits)
         
@@ -597,6 +605,8 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 soft_out = softmax_m(logits_search).detach().cpu() #(bs,n_class)
                 for i,t in enumerate(target_search.data.view(-1)):
                     sea_output_matrix[t.long()] += soft_out[i]
+                    sea_embed_matrix[t.long(),:] += mixed_features[i] #11/14 add
+                    sea_embed_count[t.long(),0] += 1
 
                 #similar reweight?
                 aug_search_loss += loss.detach().mean().item()
@@ -693,6 +703,8 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     #print(sea_output_matrix) #! tmp
     table_dic['search_output'] = (sea_output_matrix / torch.clamp(sea_output_matrix.sum(dim=1,keepdim=True),min=1e-9))
     table_dic['train_output'] = (tr_output_matrix / torch.clamp(tr_output_matrix.sum(dim=1,keepdim=True),min=1e-9))
+    table_dic['train_embed'] = tr_embed_matrix / torch.clamp(tr_embed_count.float(),min=1e-9)
+    table_dic['search_embed'] = sea_embed_matrix / torch.clamp(sea_embed_count.float(),min=1e-9)
     table_dic['train_confusion'] = confusion_matrix
     #print(table_dic['search_output'].sum()) #! tmp
     #print(table_dic['search_output']) #! tmp
@@ -736,6 +748,8 @@ def search_infer(valid_queue, gf_model, criterion, multilabel=False, n_class=10,
     gf_model.eval()
     confusion_matrix = torch.zeros(n_class,n_class)
     output_matrix = torch.zeros(n_class,n_class).float()
+    embed_matrix = torch.zeros(n_class,256).float() #tmp !!!
+    embed_count = torch.zeros(n_class,1)
     softmax_m = nn.Softmax(dim=1)
     preds = []
     targets = []
@@ -744,8 +758,9 @@ def search_infer(valid_queue, gf_model, criterion, multilabel=False, n_class=10,
         for input, seq_len, target in valid_queue:
             input = input.float().cuda()
             target = target.cuda()
-
-            logits = gf_model(input,seq_len)
+            embed = gf_model.extract_features(input, seq_len, pool=True)
+            logits = gf_model.classify(embed)
+            #logits = gf_model(input,seq_len)
             if multilabel:
                 loss = criterion(logits, target.float())
             else:
@@ -763,6 +778,8 @@ def search_infer(valid_queue, gf_model, criterion, multilabel=False, n_class=10,
                     confusion_matrix[t.long(), p.long()] += 1
                 for i,t in enumerate(target.data.view(-1)):
                     output_matrix[t.long(),:] += soft_out[i]
+                    embed_matrix[t.long(),:] += embed[i] #11/14 add
+                    embed_count[t.long(),0] += 1
                 _, predicted = torch.max(logits.data, 1)
                 total += target.size(0)
             else:
@@ -793,6 +810,7 @@ def search_infer(valid_queue, gf_model, criterion, multilabel=False, n_class=10,
     #table dic
     table_dic = {}
     table_dic[f'{mode}_output'] = (output_matrix / torch.clamp(output_matrix.sum(dim=1,keepdim=True),1e-9))
+    table_dic[f'{mode}_embed'] = embed_matrix / torch.clamp(embed_count.float(),min=1e-9)
     table_dic[f'{mode}_confusion'] = confusion_matrix
     #wandb dic
     out_dic = {}

@@ -266,18 +266,25 @@ def confidence(c,class_output):
 def wasserstein_loss(y_true, y_pred): 
     #smaller when two distribution different, minus if need make distribution similar
     return torch.mean(y_true * y_pred)
-def wass_loss(logits,targets,target_pair,class_output):
-    soft_logits = logits.softmax(dim=1)
-    pairs_label = target_pair[targets.detach().cpu()] #(batch, k)
+def wass_loss(logits,targets,target_pair,class_output,sim_target=None,embed=False):
     loss = 0
-    for e_k in range(pairs_label.shape[1]):
-        target_output = class_output[pairs_label[:,e_k].view(-1)].to(soft_logits.device) #(batch, n_class)
-        print(target_output.shape)
-        each_loss = wasserstein_loss(target_output,soft_logits) #smaller more different
+    if torch.is_tensor(sim_target): #only for embed simliar class distance
+        each_loss = wasserstein_loss(sim_target,logits) #smaller more different
         loss += each_loss
+    else:
+        if embed:
+            soft_logits = logits
+        else:
+            soft_logits = logits.softmax(dim=1)
+        pairs_label = target_pair[targets.detach().cpu()] #(batch, k)
+        for e_k in range(pairs_label.shape[1]):
+            target_output = class_output[pairs_label[:,e_k].view(-1)].to(soft_logits.device) #(batch, n_class)
+            print(target_output.shape)
+            each_loss = wasserstein_loss(target_output,soft_logits) #smaller more different
+            loss += each_loss
 
     return loss
-def confidence_loss(logits,targets,target_pair,class_output):
+def confidence_loss(logits,targets,target_pair,class_output,sim_target=None):
     n_class = class_output.shape[0]
     soft_logits = logits.softmax(dim=1) #(batch, n_class)
     pairs_label = target_pair[targets.detach().cpu()].to(soft_logits.device) #(batch, k)
@@ -313,6 +320,7 @@ class ClassDistLoss(torch.nn.Module):
         #distance / weight init
         self.classpair_dist = np.ones((num_classes,num_classes))
         self.classweight_dist = np.ones((num_classes))
+        self.class_embed_mat = None
 
     def update_distance(self,class_output_mat): #(n_class,n_class)
         self.classpair_dist = []
@@ -333,6 +341,10 @@ class ClassDistLoss(torch.nn.Module):
             self.classpair_dist.append(line)
         self.classpair_dist = np.array(self.classpair_dist)
         return self.classpair_dist
+    #update embed
+    def update_embed(self,class_embed_mat):
+        self.class_embed_mat = np.array(class_embed_mat)
+        return self.class_embed_mat
     #for loss weight
     def update_weight(self,class_output_mat):
         '''
@@ -367,9 +379,10 @@ class ClassDistLoss(torch.nn.Module):
         self.class_pairs = torch.from_numpy(class_pairs).long()
         self.updated = True
         
-    def forward(self, logits, targets):
+    def forward(self, logits, targets, sim_targets=None):
         if not self.updated or not self.use_loss:
             return 0
+        #loss type
         if self.loss_choose=='wass':
             loss_func = wass_loss
         elif self.loss_choose=='conf':
@@ -377,7 +390,18 @@ class ClassDistLoss(torch.nn.Module):
         else:
             print('Unknown loss_choose ',self.loss_choose)
             raise
-        classdist_loss = loss_func(logits,targets,self.class_pairs,self.class_output_mat) * self.lamda
+        #output / embedding as matrix
+        if self.distance_target=='output':
+            class_out_mat = self.class_output_mat
+        elif self.distance_target=='embed':
+            class_out_mat = self.class_embed_mat
+        else:
+            print('Unknown distance target choose ',self.loss_choose)
+            raise
+        #calculate
+        classdist_loss = loss_func(logits,targets,self.class_pairs,class_out_mat) * self.lamda
+        if torch.is_tensor(sim_targets):
+            classdist_loss -= loss_func(logits,targets,self.class_pairs,class_out_mat,sim_target=sim_targets) * self.lamda
         return classdist_loss
 
 #train class weight loss

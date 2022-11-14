@@ -713,6 +713,7 @@ class AdaAugkeep_TS(AdaAug):
             ba_features = a_features.reshape(len(images), self.adapt_len, n_ops_sub, -1)
             #print
             if mix_feature:
+                # input 1 dim, other 3 dim
                 mixed_features = [w.matmul(feat) for w, feat in zip(weights_subset, ba_features)] #[(keep_lens, n_hidden)]
                 mixed_features = [len_w.matmul(feat) for len_w,feat in zip(keeplen_ws,mixed_features)] #[(n_hidden)]
                 mixed_features = torch.stack(mixed_features, dim=0)

@@ -565,6 +565,9 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 if use_noaug_reg: #need test
                     #noaug_loss = lambda_noaug * (1.0 - train_perfrom) * noaug_criterion(aug_weight,noaug_target) #10/26 change
                     noaug_samplew = noaug_lossw[target_search.detach()]
+                    #print('class noaug weight: ',noaug_lossw)
+                    #print('target search: ',target_search)
+                    #print('sample wise noaug weight: ',noaug_samplew)
                     #print('noaug sample weight: ',noaug_samplew)
                     #print(noaug_criterion_w(aug_magnitude,noaug_mag_target).mean(1))
                     #print(noaug_criterion(aug_weight,noaug_w_target))

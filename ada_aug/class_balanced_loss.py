@@ -294,7 +294,12 @@ def confidence_loss(logits,targets,target_pair,class_output):
 class ClassDistLoss(torch.nn.Module):
     def __init__(self, distance_func='conf',loss_choose='conf',init_k=3,lamda=1.0,num_classes=10,use_loss=True):
         super().__init__()
-        self.distance_func = distance_func
+        self.distance_target = 'output' #['output','embed']
+        if '_' in distance_func:
+            self.distance_target = distance_func.split('_')[0]
+            self.distance_func = distance_func.split('_')[1]
+        else:
+            self.distance_func = distance_func
         self.loss_choose = loss_choose
         self.class_output_mat = None
         self.classpair_dist = []

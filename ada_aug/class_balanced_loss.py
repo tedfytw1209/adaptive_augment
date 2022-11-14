@@ -318,6 +318,9 @@ class ClassDistLoss(torch.nn.Module):
             cuc_func = wass
         elif self.distance_func=='conf':
             cuc_func = confidence
+        else:
+            print('Unknown distance_func ',self.distance_func)
+            raise
         for c in range(n_class):
             if class_output_mat[c].sum()==0:
                 line = np.full(n_class, self.fill_value)
@@ -338,7 +341,7 @@ class ClassDistLoss(torch.nn.Module):
             c_been_output = (class_output_mat[:,c].sum() - c_output) #0~1
             c_noaug_weight = (1.0-c_output) + c_been_output
             classweight_dist.append(c_noaug_weight)
-            print(f'Class similar/noaug weight: c perfrom: {1.0-c_output}, c been output: {c_been_output}, total: {c_noaug_weight}')
+            print(f'Class {c} similar/noaug weight: c perfrom: {1.0-c_output}, c been output: {c_been_output}, total: {c_noaug_weight}')
         self.classweight_dist = np.array(classweight_dist)
         return self.classweight_dist
     def update_classpair(self,class_output_mat):
@@ -346,7 +349,10 @@ class ClassDistLoss(torch.nn.Module):
         self.update_distance(class_output_mat)
         self.update_weight(class_output_mat)
         self.class_output_mat = class_output_mat
-        print(self.class_output_mat)
+        print('### updating class distance pair ###')
+        #print(self.class_output_mat)
+        #print(self.classpair_dist)
+        print(self.classweight_dist)
         #min distance
         class_pairs = np.zeros((n_class,self.k))
         for c in range(n_class): #tmp use min distance
@@ -359,10 +365,13 @@ class ClassDistLoss(torch.nn.Module):
     def forward(self, logits, targets):
         if not self.updated or not self.use_loss:
             return 0
-        if self.distance_func=='wass':
+        if self.loss_choose=='wass':
             loss_func = wass_loss
-        elif self.distance_func=='conf':
+        elif self.loss_choose=='conf':
             loss_func = confidence_loss
+        else:
+            print('Unknown loss_choose ',self.loss_choose)
+            raise
         classdist_loss = loss_func(logits,targets,self.class_pairs,self.class_output_mat) * self.lamda
         return classdist_loss
 

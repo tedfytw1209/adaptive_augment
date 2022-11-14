@@ -352,14 +352,17 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     use_noaug_reg = False
     noaug_criterion = nn.CrossEntropyLoss(reduction='none').cuda()
     noaug_criterion_w = nn.BCELoss(reduction='none').cuda()
+    #noaug_criterion_w = nn.MSELoss(reduction='none').cuda()
     noaug_lossw = torch.tensor(1)
     noaug_target = ''
     print('Using NOAUG regularation ',noaug_reg)
     if noaug_reg in ['creg','cwreg','cpwreg']:
         use_noaug_reg = True
         noaug_lossw = torch.from_numpy(extra_criterions[0].classweight_dist).cuda()
+        print('NOAUG regularation class weights',noaug_lossw)
     elif noaug_reg:
         use_noaug_reg = True
+    
     if noaug_reg=='creg':
         noaug_target = 'p'
     elif noaug_reg=='cwreg':

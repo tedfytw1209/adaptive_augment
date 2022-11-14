@@ -26,7 +26,7 @@ from non_saturating_loss import NonSaturatingLoss,Wasserstein_loss
 from class_balanced_loss import ClassBalLoss,ClassDiffLoss,ClassDistLoss,make_class_balance_count,make_class_weights,make_loss,make_class_weights_maxrel \
     ,make_class_weights_samples
 import wandb
-from utils import plot_conf_wandb
+from utils import plot_conf_wandb, select_output_source
 
 import ray
 import ray.tune as tune
@@ -100,7 +100,7 @@ parser.add_argument('--pwarmup', type=int, default=0, help="warmup epoch for pol
 parser.add_argument('--lambda_aug', type=float, default=1.0, help="augment sample weight (difficult)")
 parser.add_argument('--lambda_sim', type=float, default=1.0, help="augment sample weight (simular)")
 parser.add_argument('--lambda_noaug', type=float, default=0, help="no augment regular weight")
-# class adapt & loss
+# class adapt
 parser.add_argument('--class_adapt', action='store_true', default=False, help='class adaptive')
 parser.add_argument('--class_embed', action='store_true', default=False, help='class embed') #tmp use
 parser.add_argument('--feature_mask', type=str, default='', help='add regular for noaugment ',
@@ -109,6 +109,9 @@ parser.add_argument('--class_dist', type=str, default='', help='class distance l
 parser.add_argument('--lambda_dist', type=float, default=1.0, help="class distance weight")
 parser.add_argument('--noaug_reg', type=str, default='', help='add regular for noaugment ',
         choices=['cadd','add','creg','wreg','cwreg','pwreg','cpwreg',''])
+parser.add_argument('--output_source', type=str, default='', help='class output source',
+        choices=['train','valid','search','allsearch',''])
+#loss
 parser.add_argument('--loss_type', type=str, default='minus', help="loss type for difficult policy training",
         choices=['minus','minusdiff','relative','relativesample','relativediff','adv','embed'])
 parser.add_argument('--balance_loss', type=str, default='', help="loss type for model and policy training to acheive class balance")
@@ -335,7 +338,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 num_classes=n_class)
             self.extra_losses.append(self.class_criterion)
         elif 'c' in args.noaug_reg:
-            self.class_criterion = ClassDistLoss(distance_func=args.class_dist,loss_choose=args.class_dist,lamda=args.lambda_dist,
+            self.class_criterion = ClassDistLoss(distance_func='conf',loss_choose='conf',lamda=args.lambda_dist,
             num_classes=n_class,use_loss=False)
             self.extra_losses.append(self.class_criterion)
         #  AdaAug settings for search
@@ -453,14 +456,21 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         # validation
         valid_acc, valid_obj,valid_dic,valid_table = search_infer(self.valid_queue, self.gf_model, self.criterion, 
             multilabel=self.multilabel,n_class=self.n_class,mode='valid',map_select=self.mapselect)
+        # search data evaluate if need
+        if args.output_source=='allsearch':
+            search_acc, search_obj,search_dic,search_table = search_infer(self.search_queue, self.gf_model, self.criterion, 
+            multilabel=self.multilabel,n_class=self.n_class,mode='search',map_select=self.mapselect)
+        else:
+            search_table = {}
         #update runtime weights
         if args.policy_loss=='classdiff':
             class_acc = [valid_dic[f'valid_{ptype}_c{i}'] / 100.0 for i in range(self.n_class)]
             print(class_acc)
             self.class_difficulty = 1 - np.array(class_acc)
             self.sim_criterion.update_weight(self.class_difficulty)
-        if args.class_dist:
-            self.class_criterion.update_classpair(table_dic['search_output'])
+        if args.class_dist or 'c' in args.noaug_reg:
+            select_output = select_output_source(args.output_source,table_dic,valid_table,search_table)
+            self.class_criterion.update_classpair(select_output)
         #test
         test_acc, test_obj, test_dic, test_table  = search_infer(self.test_queue, self.gf_model, self.criterion, 
             multilabel=self.multilabel,n_class=self.n_class,mode='test',map_select=self.mapselect)

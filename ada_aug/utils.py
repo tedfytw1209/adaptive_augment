@@ -17,6 +17,20 @@ import wandb
 from sklearn.utils.class_weight import compute_sample_weight
 
 sns.set()
+
+def select_output_source(output_source,train_table,valid_table,search_table):
+    output = None
+    out_key = '%s_output'
+    if output_source=='allsearch':
+        output = search_table['search_output']
+    else:
+        tmp_dic = {}
+        tmp_dic.update(train_table)
+        tmp_dic.update(valid_table)
+        output = tmp_dic[out_key%output_source]
+    
+    return output
+
 def plot_conf_wandb(confusion,title,class_names=None):
     n_classes = confusion.shape[0]
     if class_names==None:

@@ -32,7 +32,7 @@ import ray
 import ray.tune as tune
 from ray.tune.integration.wandb import WandbTrainableMixin
 
-os.environ['WANDB_START_METHOD'] = 'thread'
+#os.environ['WANDB_START_METHOD'] = 'thread'
 RAY_DIR = './ray_results'
 parser = argparse.ArgumentParser("ada_aug")
 parser.add_argument('--base_path', type=str, default='/mnt/data2/teddy/adaptive_augment/', help='base path of code')

@@ -26,7 +26,7 @@ from step_function import train,infer,search_train,search_infer
 from non_saturating_loss import NonSaturatingLoss,Wasserstein_loss
 from class_balanced_loss import ClassBalLoss,ClassDiffLoss,ClassDistLoss,make_class_balance_count,make_class_weights,make_loss,make_class_weights_maxrel \
     ,make_class_weights_samples
-from utils import plot_conf_wandb
+from utils import plot_conf_wandb,select_output_source
 from ray.tune.search.bayesopt import BayesOptSearch
 import wandb
 
@@ -34,7 +34,7 @@ import ray
 import ray.tune as tune
 from ray.tune.integration.wandb import WandbTrainableMixin
 
-os.environ['WANDB_START_METHOD'] = 'thread'
+#os.environ['WANDB_START_METHOD'] = 'thread'
 RAY_DIR = './ray_results'
 parser = argparse.ArgumentParser("ada_aug")
 parser.add_argument('--base_path', type=str, default='/mnt/data2/teddy/adaptive_augment/', help='base path of code')
@@ -54,7 +54,7 @@ parser.add_argument('--ray_dir', type=str, default=RAY_DIR,  help='Ray directory
 parser.add_argument('--ray_name', type=str, default='ray_experiment')
 parser.add_argument('--cpu', type=float, default=4, help='Allocated by Ray')
 parser.add_argument('--gpu', type=float, default=0.12, help='Allocated by Ray')
-###
+### dataset & params
 parser.add_argument('--epochs', type=int, default=20, help='number of training epochs')
 parser.add_argument('--model_path', type=str, default='saved_models', help='path to save the model')
 parser.add_argument('--save', type=str, default='EXP', help='experiment name')
@@ -64,6 +64,7 @@ parser.add_argument('--multilabel', action='store_true', default=False, help='us
 parser.add_argument('--train_portion', type=float, default=1, help='portion of training data')
 parser.add_argument('--default_split', action='store_true', help='use dataset deault split')
 parser.add_argument('--kfold', type=int, default=-1, help='use kfold cross validation')
+# policy
 parser.add_argument('--proj_learning_rate', type=float, default=1e-2, help='learning rate for h')
 parser.add_argument('--proj_weight_decay', type=float, default=1e-3, help='weight decay for h]')
 parser.add_argument('--cutout', action='store_true', default=False, help='use cutout')
@@ -79,6 +80,7 @@ parser.add_argument('--search_freq', type=float, default=1, help='exploration fr
 parser.add_argument('--search_round', type=int, default=1, help='exploration frequency') #search_round
 parser.add_argument('--n_proj_layer', type=int, default=0, help="number of hidden layer in augmentation policy projection")
 parser.add_argument('--n_proj_hidden', type=int, default=128, help="number of hidden units in augmentation policy projection layers")
+# select & search
 parser.add_argument('--valid_search', action='store_true', default=False, help='using valid set as search')
 parser.add_argument('--mapselect', action='store_true', default=False, help='use map select for multilabel')
 parser.add_argument('--valselect', action='store_true', default=False, help='use valid select')
@@ -89,6 +91,7 @@ parser.add_argument('--train_sampler', type=str, default='', help='for train sam
         choices=['weight','wmaxrel',''])
 parser.add_argument('--search_sampler', type=str, default='', help='for search sampler',
         choices=['weight','wmaxrel',''])
+# diff loss mix
 parser.add_argument('--diff_aug', action='store_true', default=False, help='use valid select')
 parser.add_argument('--same_train', action='store_true', default=False, help='use valid select')
 parser.add_argument('--mix_type', type=str, default='embed', help='add regular for noaugment ',
@@ -99,6 +102,7 @@ parser.add_argument('--pwarmup', type=int, default=0, help="warmup epoch for pol
 parser.add_argument('--lambda_aug', type=float, default=1.0, help="augment sample weight (difficult)")
 parser.add_argument('--lambda_sim', type=float, default=1.0, help="augment sample weight (simular)")
 parser.add_argument('--lambda_noaug', type=float, default=0, help="no augment regular weight")
+# class adapt
 parser.add_argument('--class_adapt', action='store_true', default=False, help='class adaptive')
 parser.add_argument('--class_embed', action='store_true', default=False, help='class embed') #tmp use
 parser.add_argument('--feature_mask', type=str, default='', help='add regular for noaugment ',
@@ -107,10 +111,14 @@ parser.add_argument('--class_dist', type=str, default='', help='class distance l
 parser.add_argument('--lambda_dist', type=float, default=1.0, help="class distance weight")
 parser.add_argument('--noaug_reg', type=str, default='', help='add regular for noaugment ',
         choices=['cadd','add','creg','wreg','cwreg','pwreg','cpwreg',''])
+parser.add_argument('--output_source', type=str, default='', help='class output source',
+        choices=['train','valid','search','allsearch',''])
+#loss
 parser.add_argument('--loss_type', type=str, default='minus', help="loss type for difficult policy training",
         choices=['minus','minusdiff','relative','relativesample','relativediff','adv','embed'])
 parser.add_argument('--balance_loss', type=str, default='', help="loss type for model and policy training to acheive class balance")
 parser.add_argument('--policy_loss', type=str, default='', help="loss type for simular policy training")
+# info keep
 parser.add_argument('--keep_aug', action='store_true', default=False, help='info keep augment')
 parser.add_argument('--keep_prob', type=float, default=1, help='info keep probabilty')
 parser.add_argument('--keep_mode', type=str, default='auto', help='info keep mode',choices=['auto','adapt','b','p','t','rand'])
@@ -132,6 +140,7 @@ parser.add_argument('--keep_len', type=int, nargs='+', default=[100], help="info
 parser.add_argument('--keep_bound', type=float, default=0.0, help="info keep bound %")
 parser.add_argument('--teach_aug', action='store_true', default=False, help='teacher augment')
 parser.add_argument('--ema_rate', type=float, default=0.999, help="teacher ema rate")
+#visulaize
 parser.add_argument('--visualize', action='store_true', default=False, help='visualize')
 parser.add_argument('--output_visual', action='store_true', default=False, help='visualize output and confusion matrix')
 parser.add_argument('--output_pred', action='store_true', default=False, help='output predict result and ture target')
@@ -187,7 +196,7 @@ API_KEY = 'cb4c412d9f47cd551e38050ced659b0c58926986'
 class RayModel(WandbTrainableMixin, tune.Trainable):
     def setup(self, *_args): #use new setup replace _setup
         #self.trainer = TSeriesModelTrainer(self.config)
-        #os.environ['WANDB_START_METHOD'] = 'thread'
+        #os.environ['WANDB_START_METHOD'] = 'thread' #tmp disable
         args = self.config['args']
         utils.reproducibility(args.seed) #for reproduce
         #  dataset settings for search
@@ -325,12 +334,16 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         self.sim_criterion = self.choose_criterion(train_labels,search_labels,multilabel,n_class,
             loss_type=args.policy_loss,mix_type=args.mix_type)
         self.extra_losses = []
-        #class distance
+        #class distance or use as noaug regular class weight
         self.class_criterion = None
         if args.class_dist:
-            self.class_criterion = ClassDistLoss(distance_func=args.class_dist,loss_choose=args.class_dist,lamda=args.lambda_dist)
+            self.class_criterion = ClassDistLoss(distance_func=args.class_dist,loss_choose=args.class_dist,lamda=args.lambda_dist,
+                num_classes=n_class)
             self.extra_losses.append(self.class_criterion)
-
+        elif 'c' in args.noaug_reg:
+            self.class_criterion = ClassDistLoss(distance_func='conf',loss_choose='conf',lamda=args.lambda_dist,
+            num_classes=n_class,use_loss=False)
+            self.extra_losses.append(self.class_criterion)
         #  AdaAug settings for search
         ind_mix,sub_mix = False,False
         if 'ind' in args.mix_method:
@@ -430,6 +443,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         diff_dic = {'difficult_aug':self.diff_augment,'same_train':args.same_train,'reweight':self.diff_reweight,'lambda_aug':args.lambda_aug,
                 'lambda_sim':args.lambda_sim,'class_adaptive':args.class_adapt,'lambda_noaug':args.lambda_noaug,'train_perfrom':self.pre_train_acc,
                 'loss_type':args.loss_type, 'adv_criterion': self.adv_criterion, 'teacher_model':self.ema_model, 'sim_criterion':self.sim_criterion,
+                'noaug_reg':args.noaug_reg,
                 'extra_criterions':self.extra_losses,'sim_reweight':args.sim_rew,'warmup_epoch': args.pwarmup,'mix_type':args.mix_type,'visualize':args.visualize}
         
         # searching
@@ -445,14 +459,23 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         # validation
         valid_acc, valid_obj,valid_dic,valid_table = search_infer(self.valid_queue, self.gf_model, self.criterion, 
             multilabel=self.multilabel,n_class=self.n_class,mode='valid',map_select=self.mapselect)
+        # search data evaluate if need
+        if args.output_source=='allsearch':
+            search_acc, search_obj,search_dic,search_table = search_infer(self.search_queue, self.gf_model, self.criterion, 
+            multilabel=self.multilabel,n_class=self.n_class,mode='search',map_select=self.mapselect)
+            print('Evaluate search data:')
+            print(search_dic)
+        else:
+            search_table = {}
         #update runtime weights
         if args.policy_loss=='classdiff':
             class_acc = [valid_dic[f'valid_{ptype}_c{i}'] / 100.0 for i in range(self.n_class)]
             print(class_acc)
             self.class_difficulty = 1 - np.array(class_acc)
             self.sim_criterion.update_weight(self.class_difficulty)
-        if args.class_dist:
-            self.class_criterion.update_classpair(table_dic['search_output'])
+        if args.class_dist or 'c' in args.noaug_reg:
+            select_output = select_output_source(args.output_source,table_dic,valid_table,search_table)
+            self.class_criterion.update_classpair(select_output)
         #test
         test_acc, test_obj, test_dic, test_table  = search_infer(self.test_queue, self.gf_model, self.criterion, 
             multilabel=self.multilabel,n_class=self.n_class,mode='test',map_select=self.mapselect)
@@ -596,16 +619,19 @@ def main():
     #for grid search params ###important###
     print(hparams)
     #hparams['search_freq'] = tune.grid_search([5,10]) #tune.grid_search(hparams['search_freq'])
-    hparams['search_round'] = tune.grid_search([4,8,16]) #tune.grid_search(hparams['search_round'])
-    hparams['proj_learning_rate'] = tune.grid_search([0.0001,0.00003])
+    #hparams['search_round'] = tune.grid_search([4,8,16]) #tune.grid_search(hparams['search_round'])
+    #hparams['proj_learning_rate'] = tune.grid_search([0.0001,0.00003])
     #hparams['lambda_aug'] = tune.quniform(hparams['lambda_aug'][0],hparams['lambda_aug'][1],0.01)
     #hparams['lambda_sim'] = tune.quniform(hparams['lambda_sim'][0],hparams['lambda_sim'][1],0.01)
     #hparams['keep_thres'] = hparams['keep_thres'] #tune.grid_search(hparams['keep_thres'])
-    hparams['keep_len'] = tune.grid_search([50,100,200,400,600]) #tune.grid_search(hparams['keep_len'])
-    hparams['loss_type'] = tune.grid_search(['minus','minusdiff','relative','relativesample','relativediff'])
+    #hparams['keep_len'] = tune.grid_search([50,100,200,400,600]) #tune.grid_search(hparams['keep_len'])
+    #hparams['loss_type'] = tune.grid_search(['minus','minusdiff','relative','relativesample','relativediff'])
     #hparams['sear_temp'] = tune.grid_search([1,3]) #tune.grid_search(hparams['search_round'])
     #hparams['temperature'] = tune.grid_search([1,3])
     #hparams['diff_aug'] = tune.grid_search([True,False])
+    hparams['lambda_dist'] = tune.grid_search([0.05, 0.1, 0.5, 1.0])
+    hparams['noaug_reg'] = tune.grid_search(['creg','cwreg','cpwreg'])
+    hparams['output_source'] = tune.grid_search(['train','search','allsearch'])
     print(hparams)
     #wandb
     wandb_config = {

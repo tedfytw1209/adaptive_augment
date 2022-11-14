@@ -460,6 +460,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         if args.output_source=='allsearch':
             search_acc, search_obj,search_dic,search_table = search_infer(self.search_queue, self.gf_model, self.criterion, 
             multilabel=self.multilabel,n_class=self.n_class,mode='search',map_select=self.mapselect)
+            print('Evaluate search data:')
+            print(search_dic)
         else:
             search_table = {}
         #update runtime weights

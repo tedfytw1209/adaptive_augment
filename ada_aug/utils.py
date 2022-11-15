@@ -31,6 +31,19 @@ def select_output_source(output_source,train_table,valid_table,search_table):
     
     return output
 
+def select_embed_source(output_source,train_table,valid_table,search_table):
+    output = None
+    out_key = '%s_embed'
+    if output_source=='allsearch':
+        output = search_table['search_embed']
+    else:
+        tmp_dic = {}
+        tmp_dic.update(train_table)
+        tmp_dic.update(valid_table)
+        output = tmp_dic[out_key%output_source]
+    
+    return output
+
 def plot_conf_wandb(confusion,title,class_names=None):
     n_classes = confusion.shape[0]
     if class_names==None:

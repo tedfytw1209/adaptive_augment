@@ -598,14 +598,16 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                     sim_model = teacher_model.module
                 #sim mix if need, calculate loss
                 loss, logits_search = mix_func(gf_model,mixed_features,aug_weights,sim_criterion,target_search,multilabel)
-                origin_logits = sim_model(input_search, seq_len)
+                origin_embed = sim_model.extract_features(input_search, seq_len, pool=True)
+                origin_logits = sim_model.classify(origin_embed)
+                #origin_logits = sim_model(input_search, seq_len)
                 ori_loss = cuc_loss(origin_logits,target_search,sim_criterion,multilabel)
                 #ori_loss = ori_loss.mean() #!to assert loss mean reduce
                 #output pred
                 soft_out = softmax_m(logits_search).detach().cpu() #(bs,n_class)
                 for i,t in enumerate(target_search.data.view(-1)):
                     sea_output_matrix[t.long()] += soft_out[i]
-                    sea_embed_matrix[t.long(),:] += mixed_features[i] #11/14 add
+                    sea_embed_matrix[t.long(),:] += origin_embed[i] #!!! 11/14 add, use origin
                     sea_embed_count[t.long(),0] += 1
 
                 #similar reweight?
@@ -627,7 +629,13 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 loss = loss * lambda_sim + noaug_loss
                 #extra losses
                 for e_criterion in extra_criterions:
-                    e_loss = e_criterion(logits_search,target_search)
+                    if e_criterion.loss_target=='output': #for class distance loss target
+                        e_loss = e_criterion(logits_search,target_search,sim_targets=origin_logits)
+                    elif e_criterion.loss_target=='embed': 
+                        e_loss = e_criterion(mixed_features,target_search,sim_targets=origin_embed) #using mix_fearures as loss
+                    else:
+                        print('Unknown loss target: ',e_criterion.loss_target)
+                        raise
                     if torch.is_tensor(e_loss):
                         loss += e_loss
                         ex_losses[str(e_criterion.__class__.__name__)] += e_loss.detach().item()

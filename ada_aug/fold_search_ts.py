@@ -26,7 +26,7 @@ from non_saturating_loss import NonSaturatingLoss,Wasserstein_loss
 from class_balanced_loss import ClassBalLoss,ClassDiffLoss,ClassDistLoss,make_class_balance_count,make_class_weights,make_loss,make_class_weights_maxrel \
     ,make_class_weights_samples
 import wandb
-from utils import plot_conf_wandb, select_output_source
+from utils import plot_conf_wandb, select_output_source, select_embed_source
 
 import ray
 import ray.tune as tune
@@ -107,6 +107,7 @@ parser.add_argument('--feature_mask', type=str, default='', help='add regular fo
         choices=['dropout','select','average','classonly',''])
 parser.add_argument('--class_dist', type=str, default='', help='class distance loss')
 parser.add_argument('--lambda_dist', type=float, default=1.0, help="class distance weight")
+parser.add_argument('--class_sim', action='store_true', default=False, help='class distance use similar or not')
 parser.add_argument('--noaug_reg', type=str, default='', help='add regular for noaugment ',
         choices=['cadd','add','creg','wreg','cwreg','pwreg','cpwreg',''])
 parser.add_argument('--output_source', type=str, default='', help='class output source',
@@ -334,12 +335,12 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         #class distance or use as noaug regular class weight
         self.class_criterion = None
         if args.class_dist:
-            self.class_criterion = ClassDistLoss(distance_func=args.class_dist,loss_choose=args.class_dist,lamda=args.lambda_dist,
-                num_classes=n_class)
+            self.class_criterion = ClassDistLoss(distance_func=args.class_dist,loss_choose=args.class_dist
+            ,similar=args.class_sim,lamda=args.lambda_dist,num_classes=n_class)
             self.extra_losses.append(self.class_criterion)
         elif 'c' in args.noaug_reg:
-            self.class_criterion = ClassDistLoss(distance_func='conf',loss_choose='conf',lamda=args.lambda_dist,
-            num_classes=n_class,use_loss=False)
+            self.class_criterion = ClassDistLoss(distance_func='conf',loss_choose='conf'
+            ,similar=args.class_sim,lamda=args.lambda_dist,num_classes=n_class,use_loss=False)
             self.extra_losses.append(self.class_criterion)
         #  AdaAug settings for search
         ind_mix,sub_mix = False,False
@@ -473,6 +474,9 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         if args.class_dist or 'c' in args.noaug_reg:
             select_output = select_output_source(args.output_source,table_dic,valid_table,search_table)
             self.class_criterion.update_classpair(select_output)
+            if 'embed' in args.class_dist:
+                select_embed = select_embed_source(args.output_source,table_dic,valid_table,search_table)
+                self.class_criterion.update_embed(select_embed)
         #test
         test_acc, test_obj, test_dic, test_table  = search_infer(self.test_queue, self.gf_model, self.criterion, 
             multilabel=self.multilabel,n_class=self.n_class,mode='test',map_select=self.mapselect)

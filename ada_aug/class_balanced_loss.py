@@ -299,15 +299,19 @@ def confidence_loss(logits,targets,target_pair,class_output,sim_target=None):
     return loss
 
 class ClassDistLoss(torch.nn.Module):
-    def __init__(self, distance_func='conf',loss_choose='conf',init_k=3,lamda=1.0,num_classes=10,use_loss=True):
+    def __init__(self, distance_func='conf',loss_choose='conf',similar=False,init_k=3,lamda=1.0,num_classes=10,use_loss=True):
         super().__init__()
-        self.distance_target = 'output' #['output','embed']
+        self.loss_target = 'output' #['output','embed']
         if '_' in distance_func:
-            self.distance_target = distance_func.split('_')[0]
+            self.loss_target = distance_func.split('_')[0]
             self.distance_func = distance_func.split('_')[1]
         else:
             self.distance_func = distance_func
-        self.loss_choose = loss_choose
+        if '_' in loss_choose:
+            self.distance_func = distance_func.split('_')[1]
+        else:
+            self.distance_func = distance_func
+        self.similar = similar
         self.class_output_mat = None
         self.classpair_dist = []
         self.class_pairs = None
@@ -391,16 +395,16 @@ class ClassDistLoss(torch.nn.Module):
             print('Unknown loss_choose ',self.loss_choose)
             raise
         #output / embedding as matrix
-        if self.distance_target=='output':
+        if self.loss_target=='output':
             class_out_mat = self.class_output_mat
-        elif self.distance_target=='embed':
+        elif self.loss_target=='embed':
             class_out_mat = self.class_embed_mat
         else:
             print('Unknown distance target choose ',self.loss_choose)
             raise
         #calculate
         classdist_loss = loss_func(logits,targets,self.class_pairs,class_out_mat) * self.lamda
-        if torch.is_tensor(sim_targets):
+        if self.similar and torch.is_tensor(sim_targets):
             classdist_loss -= loss_func(logits,targets,self.class_pairs,class_out_mat,sim_target=sim_targets) * self.lamda
         return classdist_loss
 

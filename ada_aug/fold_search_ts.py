@@ -369,7 +369,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             add_dir = '_'.join([f'{target}-{self.config[target]}' for target in self.config.get('grid_target',[])])
         else:
             add_dir = ''
-        dir_path = os.path.join(self.config['BASE_PATH'],self.config['save'],add_dir,f'fold{self.test_fold_idx}')
+        dir_path = os.path.join(self.config['BASE_PATH'],self.config['save'],add_dir,f'fold{test_fold_idx}')
         if not os.path.exists(dir_path):
             os.makedirs(dir_path)
         after_transforms = self.train_queue.dataset.after_transforms

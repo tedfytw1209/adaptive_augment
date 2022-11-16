@@ -484,12 +484,13 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
             top5.update(prec5.detach().item(), n)
             _, predicted = torch.max(logits.data, 1)
             soft_out = softmax_m(logits).detach().cpu()
+            embed_out = train_embed.detach().cpu()
             total += target.size(0)
             for t, p in zip(target.data.view(-1), predicted.view(-1)):
                 confusion_matrix[t.long(), p.long()] += 1
             for i,t in enumerate(target.data.view(-1)):
                 tr_output_matrix[t.long(),:] += soft_out[i]
-                tr_embed_matrix[t.long(),:] += train_embed[i] #11/14 add
+                tr_embed_matrix[t.long(),:] += embed_out[i] #11/14 add
                 tr_embed_count[t.long(),0] += 1
         else:
             predicted = torch.sigmoid(logits)
@@ -605,9 +606,10 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 #ori_loss = ori_loss.mean() #!to assert loss mean reduce
                 #output pred
                 soft_out = softmax_m(logits_search).detach().cpu() #(bs,n_class)
+                origin_embed_out = origin_embed.detach().cpu()
                 for i,t in enumerate(target_search.data.view(-1)):
                     sea_output_matrix[t.long()] += soft_out[i]
-                    sea_embed_matrix[t.long(),:] += origin_embed[i] #!!! 11/14 add, use origin
+                    sea_embed_matrix[t.long(),:] += origin_embed_out[i] #!!! 11/14 add, use origin
                     sea_embed_count[t.long(),0] += 1
 
                 #similar reweight?
@@ -782,11 +784,12 @@ def search_infer(valid_queue, gf_model, criterion, multilabel=False, n_class=10,
                 top1.update(prec1.detach().item(), n)
                 top5.update(prec5.detach().item(), n)
                 soft_out = softmax_m(logits).detach().cpu()
+                embed_out = embed.detach().cpu()
                 for t, p in zip(target.data.view(-1), predicted.view(-1)):
                     confusion_matrix[t.long(), p.long()] += 1
                 for i,t in enumerate(target.data.view(-1)):
                     output_matrix[t.long(),:] += soft_out[i]
-                    embed_matrix[t.long(),:] += embed[i] #11/14 add
+                    embed_matrix[t.long(),:] += embed_out[i] #11/14 add
                     embed_count[t.long(),0] += 1
                 _, predicted = torch.max(logits.data, 1)
                 total += target.size(0)

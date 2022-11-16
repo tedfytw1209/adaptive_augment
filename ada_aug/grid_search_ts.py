@@ -26,7 +26,7 @@ from step_function import train,infer,search_train,search_infer
 from non_saturating_loss import NonSaturatingLoss,Wasserstein_loss
 from class_balanced_loss import ClassBalLoss,ClassDiffLoss,ClassDistLoss,make_class_balance_count,make_class_weights,make_loss,make_class_weights_maxrel \
     ,make_class_weights_samples
-from utils import plot_conf_wandb,select_output_source
+from utils import plot_conf_wandb,select_output_source,select_embed_source
 from ray.tune.search.bayesopt import BayesOptSearch
 import wandb
 
@@ -64,6 +64,7 @@ parser.add_argument('--multilabel', action='store_true', default=False, help='us
 parser.add_argument('--train_portion', type=float, default=1, help='portion of training data')
 parser.add_argument('--default_split', action='store_true', help='use dataset deault split')
 parser.add_argument('--kfold', type=int, default=-1, help='use kfold cross validation')
+parser.add_argument('--not_save', action='store_true', help='not to save model')
 # policy
 parser.add_argument('--proj_learning_rate', type=float, default=1e-2, help='learning rate for h')
 parser.add_argument('--proj_weight_decay', type=float, default=1e-3, help='weight decay for h]')
@@ -109,6 +110,7 @@ parser.add_argument('--feature_mask', type=str, default='', help='add regular fo
         choices=['dropout','select','average','classonly',''])
 parser.add_argument('--class_dist', type=str, default='', help='class distance loss')
 parser.add_argument('--lambda_dist', type=float, default=1.0, help="class distance weight")
+parser.add_argument('--class_sim', action='store_true', default=False, help='class distance use similar or not')
 parser.add_argument('--noaug_reg', type=str, default='', help='add regular for noaugment ',
         choices=['cadd','add','creg','wreg','cwreg','pwreg','cpwreg',''])
 parser.add_argument('--output_source', type=str, default='', help='class output source',
@@ -191,7 +193,6 @@ fh.setFormatter(logging.Formatter(log_format))
 logging.getLogger().addHandler(fh)
 API_KEY = 'cb4c412d9f47cd551e38050ced659b0c58926986'
 
-#ray model
 #ray model
 class RayModel(WandbTrainableMixin, tune.Trainable):
     def setup(self, *_args): #use new setup replace _setup
@@ -337,12 +338,12 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         #class distance or use as noaug regular class weight
         self.class_criterion = None
         if args.class_dist:
-            self.class_criterion = ClassDistLoss(distance_func=args.class_dist,loss_choose=args.class_dist,lamda=args.lambda_dist,
-                num_classes=n_class)
+            self.class_criterion = ClassDistLoss(distance_func=args.class_dist,loss_choose=args.class_dist
+            ,similar=args.class_sim,lamda=args.lambda_dist,num_classes=n_class)
             self.extra_losses.append(self.class_criterion)
         elif 'c' in args.noaug_reg:
-            self.class_criterion = ClassDistLoss(distance_func='conf',loss_choose='conf',lamda=args.lambda_dist,
-            num_classes=n_class,use_loss=False)
+            self.class_criterion = ClassDistLoss(distance_func='conf',loss_choose='conf'
+            ,similar=args.class_sim,lamda=args.lambda_dist,num_classes=n_class,use_loss=False)
             self.extra_losses.append(self.class_criterion)
         #  AdaAug settings for search
         ind_mix,sub_mix = False,False
@@ -358,7 +359,21 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         else:
             #self.search_mult = 1
             sub_mix = 1
-
+        #for grid search
+        grid_search_list = self.config.get('grid_target',[])
+        if len(grid_search_list)>0:
+            self.grid_search = True
+        else:
+            self.grid_search = False
+        self.not_save = self.config['not_save']
+        #folds
+        if self.grid_search:
+            add_dir = '_'.join([f'{target}-{self.config[target]}' for target in self.config.get('grid_target',[])])
+        else:
+            add_dir = ''
+        dir_path = os.path.join(self.config['BASE_PATH'],self.config['save'],add_dir,f'fold{self.test_fold_idx}')
+        if not os.path.exists(dir_path):
+            os.makedirs(dir_path)
         after_transforms = self.train_queue.dataset.after_transforms
         adaaug_config = {'sampling': 'prob',
                     'k_ops': self.config['k_ops'], #as paper
@@ -378,7 +393,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 n_class=n_class,
                 gf_model=self.gf_model,
                 h_model=self.h_model,
-                save_dir=os.path.join(self.config['BASE_PATH'],self.config['save'],f'fold{test_fold_idx}'),
+                save_dir=dir_path,
                 #visualize=args.visualize,
                 config=adaaug_config,
                 keepaug_config=keepaug_config,
@@ -397,7 +412,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 n_class=n_class,
                 gf_model=self.gf_model,
                 h_model=self.h_model,
-                save_dir=os.path.join(self.config['BASE_PATH'],self.config['save'],f'fold{test_fold_idx}'),
+                save_dir=dir_path,
                 #visualize=args.visualize,
                 config=adaaug_config,
                 keepaug_config=keepaug_config,
@@ -476,16 +491,25 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         if args.class_dist or 'c' in args.noaug_reg:
             select_output = select_output_source(args.output_source,table_dic,valid_table,search_table)
             self.class_criterion.update_classpair(select_output)
+            if 'embed' in args.class_dist:
+                select_embed = select_embed_source(args.output_source,table_dic,valid_table,search_table)
+                self.class_criterion.update_embed(select_embed)
         #test
         test_acc, test_obj, test_dic, test_table  = search_infer(self.test_queue, self.gf_model, self.criterion, 
             multilabel=self.multilabel,n_class=self.n_class,mode='test',map_select=self.mapselect)
-        #fold idx
-        if self.test_fold_idx>=0:
-            gf_path = os.path.join(f'fold{self.test_fold_idx}', 'gf_weights.pt')
-            h_path = os.path.join(f'fold{self.test_fold_idx}', 'h_weights.pt')
+        #fold idx fir prepare
+        if self.grid_search:
+            add_dir = '_'.join([f'{target}-{self.config[target]}' for target in self.config.get('grid_target',[])])
         else:
-            gf_path = 'gf_weights.pt'
-            h_path = 'h_weights.pt'
+            add_dir = ''
+        if self.test_fold_idx>=0:
+            dir_path = os.path.join(self.base_path,self.config['save'],add_dir,f'fold{self.test_fold_idx}')
+        else:
+            dir_path = os.path.join(self.base_path,self.config['save'],add_dir)
+        if not os.path.exists(dir_path):
+            os.makedirs(dir_path)
+        gf_name = 'gf_weights.pt'
+        h_name = 'h_weights.pt'
         #val select 10/31 debug
         if args.valselect and valid_acc>self.best_val_acc:
             self.best_val_acc = valid_acc
@@ -498,9 +522,9 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             self.result_table_dic.update(test_table)
             self.best_gf = self.gf_model
             self.best_h = self.h_model
-            if 'debug' not in self.config['save']:
-                utils.save_model(self.best_gf, os.path.join(self.base_path,self.config['save'],gf_path))
-                utils.save_model(self.best_h, os.path.join(self.base_path,self.config['save'],h_path))
+            if 'debug' not in self.config['save'] and not self.config['not_save']:
+                utils.save_model(self.best_gf, os.path.join(dir_path,gf_name))
+                utils.save_model(self.best_h, os.path.join(dir_path,h_name))
             else:
                 print('Debuging: not save at', self.config['save'])
         elif not args.valselect:
@@ -511,9 +535,9 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             self.result_table_dic.update(table_dic)
             self.result_table_dic.update(valid_table)
             self.result_table_dic.update(test_table)
-            if 'debug' not in self.config['save']:
-                utils.save_model(self.best_gf, os.path.join(self.base_path,self.config['save'],gf_path))
-                utils.save_model(self.best_h, os.path.join(self.base_path,self.config['save'],h_path))
+            if 'debug' not in self.config['save'] and not self.config['not_save']:
+                utils.save_model(self.best_gf, os.path.join(dir_path,gf_name))
+                utils.save_model(self.best_h, os.path.join(dir_path,h_name))
             else:
                 print('Debuging: not save at', self.config['save'])
         
@@ -629,9 +653,11 @@ def main():
     #hparams['sear_temp'] = tune.grid_search([1,3]) #tune.grid_search(hparams['search_round'])
     #hparams['temperature'] = tune.grid_search([1,3])
     #hparams['diff_aug'] = tune.grid_search([True,False])
-    hparams['lambda_dist'] = tune.grid_search([0.05, 0.1, 0.5, 1.0])
+    hparams['lambda_dist'] = tune.grid_search([0.05, 0.1, 0.5, 1.0, 2.0])
     hparams['noaug_reg'] = tune.grid_search(['creg','cwreg','cpwreg'])
     hparams['output_source'] = tune.grid_search(['train','search','allsearch'])
+    hparams['feature_mask'] = tune.grid_search(['','select','classonly'])
+    hparams['grid_target'] = ['lambda_dist','noaug_reg','output_source']
     print(hparams)
     #wandb
     wandb_config = {

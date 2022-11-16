@@ -653,10 +653,10 @@ def main():
     #hparams['sear_temp'] = tune.grid_search([1,3]) #tune.grid_search(hparams['search_round'])
     #hparams['temperature'] = tune.grid_search([1,3])
     #hparams['diff_aug'] = tune.grid_search([True,False])
-    #hparams['lambda_dist'] = tune.grid_search([0.05, 0.1, 0.5, 1.0, 2.0])
+    hparams['lambda_dist'] = tune.grid_search([0.05, 0.1, 0.5, 1.0, 2.0])
     hparams['noaug_reg'] = tune.grid_search(['creg','cwreg','cpwreg'])
-    #hparams['output_source'] = tune.grid_search(['train','search','allsearch'])
-    #hparams['feature_mask'] = tune.grid_search(['','select','classonly'])
+    hparams['output_source'] = tune.grid_search(['train','search','allsearch'])
+    hparams['feature_mask'] = tune.grid_search(['','select','classonly'])
     hparams['grid_target'] = ['lambda_dist','noaug_reg','output_source','feature_mask']
     print(hparams)
     #wandb

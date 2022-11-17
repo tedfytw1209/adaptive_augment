@@ -735,7 +735,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
             out_dic['search_loss'] = out_dic['adaptive_loss']+out_dic['difficult_loss']
         else:
             out_dic['search_loss'] = out_dic['adaptive_loss']
-        if lambda_noaug>0:
+        if use_noaug_reg:
             out_dic['noaug_reg'] = noaug_reg_sum / search_total
         
     out_dic[f'train_{ptype}_avg'] = perfrom

@@ -590,6 +590,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                         noaug_loss += tmp_loss
                         #print('prob loss: ',tmp_loss)
                     noaug_reg_sum += noaug_loss.detach().mean().item()
+                    print('noaug regular sum: ',noaug_reg_sum)
                 else:
                     noaug_loss = 0
                 #tea

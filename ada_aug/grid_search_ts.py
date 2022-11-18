@@ -649,16 +649,17 @@ def main():
     #hparams['lambda_aug'] = tune.quniform(hparams['lambda_aug'][0],hparams['lambda_aug'][1],0.01)
     #hparams['lambda_sim'] = tune.quniform(hparams['lambda_sim'][0],hparams['lambda_sim'][1],0.01)
     #hparams['keep_thres'] = hparams['keep_thres'] #tune.grid_search(hparams['keep_thres'])
-    #hparams['keep_len'] = tune.grid_search([50,100,200,400,600]) #tune.grid_search(hparams['keep_len'])
-    #hparams['loss_type'] = tune.grid_search(['minus','minusdiff','relative','relativesample','relativediff'])
-    #hparams['sear_temp'] = tune.grid_search([1,3]) #tune.grid_search(hparams['search_round'])
-    #hparams['temperature'] = tune.grid_search([1,3])
+    hparams['keep_len'] = tune.grid_search([50,100,200,400,600]) #tune.grid_search(hparams['keep_len'])
+    hparams['loss_type'] = tune.grid_search(['minus','minusdiff','relative','relativesample','relativediff'])
+    hparams['sear_temp'] = tune.grid_search([1,3]) #tune.grid_search(hparams['search_round'])
+    hparams['temperature'] = tune.grid_search([1,3])
     #hparams['diff_aug'] = tune.grid_search([True,False])
-    hparams['lambda_noaug'] = tune.grid_search([0.03, 0.1, 0.3, 1.0, 3.0])
-    hparams['noaug_reg'] = tune.grid_search(['creg','cwreg','cpwreg'])
-    hparams['output_source'] = tune.grid_search(['search'])
-    hparams['feature_mask'] = tune.grid_search(['','select','classonly'])
-    hparams['grid_target'] = ['noaug_reg','lambda_noaug','feature_mask']
+    #hparams['lambda_noaug'] = tune.grid_search([0.03, 0.1, 0.3, 1.0, 3.0])
+    #hparams['noaug_reg'] = tune.grid_search(['creg','cwreg','cpwreg'])
+    #hparams['output_source'] = tune.grid_search(['search'])
+    #hparams['feature_mask'] = tune.grid_search(['','select','classonly'])
+    #hparams['grid_target'] = ['noaug_reg','lambda_noaug','feature_mask']
+    hparams['grid_target'] = ['loss_type','keep_len','sear_temp','temperature']
     print(hparams)
     #wandb
     wandb_config = {

@@ -277,9 +277,10 @@ def wass_loss(logits,targets,target_pair,class_output,sim_target=None,embed=Fals
         else:
             soft_logits = logits.softmax(dim=1)
         pairs_label = target_pair[targets.detach().cpu()] #(batch, k)
+        print(f'class {targets} pair with {pairs_label}') #!tmp
         for e_k in range(pairs_label.shape[1]):
             target_output = class_output[pairs_label[:,e_k].view(-1)].to(soft_logits.device) #(batch, n_class)
-            print(target_output.shape)
+            print(target_output.shape) #!tmp
             each_loss = wasserstein_loss(target_output,soft_logits) #smaller more different
             loss += each_loss
 
@@ -411,8 +412,10 @@ class ClassDistLoss(torch.nn.Module):
             raise
         #calculate
         classdist_loss = loss_func(logits,targets,self.class_pairs,class_out_mat) * self.lamda
+        print('difference loss: ',classdist_loss) #!tmp
         if self.similar and torch.is_tensor(sim_targets):
             classdist_loss -= loss_func(logits,targets,self.class_pairs,class_out_mat,sim_target=sim_targets) * self.lamda
+            print('similar loss: ',classdist_loss) #!tmp
         return classdist_loss
 
 #train class weight loss

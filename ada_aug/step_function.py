@@ -575,8 +575,8 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                     #noaug_loss = lambda_noaug * (1.0 - train_perfrom) * noaug_criterion(aug_weight,noaug_target) #10/26 change
                     noaug_samplew = noaug_lossw[target_search.detach()]
                     #print('class noaug weight: ',noaug_lossw)
-                    print('target search: ',target_search)
-                    print('sample wise noaug weight: ',noaug_samplew)
+                    #print('target search: ',target_search)
+                    #print('sample wise noaug weight: ',noaug_samplew)
                     #print('noaug sample weight: ',noaug_samplew)
                     #print(noaug_criterion_w(aug_magnitude,noaug_mag_target).mean(1))
                     #print(noaug_criterion(aug_weight,noaug_w_target))
@@ -586,7 +586,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                         noaug_loss += tmp_loss
                         #print('magnitude loss: ',tmp_loss)
                     if 'p' in noaug_target:
-                        tmp_loss = (lambda_noaug * noaug_samplew *noaug_criterion(aug_weight,noaug_w_target)).mean()
+                        tmp_loss = (lambda_noaug * noaug_samplew * noaug_criterion(aug_weight,noaug_w_target)).mean()
                         noaug_loss += tmp_loss
                         #print('prob loss: ',tmp_loss)
                     noaug_reg_sum += noaug_loss.detach().mean().item()

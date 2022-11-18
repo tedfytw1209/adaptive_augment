@@ -313,6 +313,8 @@ class ClassDistLoss(torch.nn.Module):
             self.distance_func = distance_func.split('_')[1]
         else:
             self.distance_func = distance_func
+        print('loss_target: ',self.loss_target)
+        print('distance_func: ',self.distance_func)
         self.similar = similar
         self.class_output_mat = None
         self.classpair_dist = []

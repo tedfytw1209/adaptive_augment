@@ -26,6 +26,7 @@ from config import get_warmup_config
 from class_balanced_loss import ClassBalLoss,ClassDiffLoss,ClassDistLoss,make_class_balance_count,make_class_weights,make_loss,make_class_weights_maxrel \
     ,make_class_weights_samples
 import wandb
+import copy
 from utils import plot_conf_wandb
 import ray
 import ray.tune as tune
@@ -174,7 +175,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
     def setup(self, *_args): #use new setup replace _setup
         #self.trainer = TSeriesModelTrainer(self.config)
         #os.environ['WANDB_START_METHOD'] = 'thread' #tmp disable
-        args = self.config['args']
+        #args = self.config['args']
+        args = argparse.Namespace(**copy.deepcopy(self.config)) #for grid search
         #random seed setting
         utils.reproducibility(args.seed)
         #  dataset settings for search
@@ -350,7 +352,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             ptype = 'acc'
         print(f'Starting Ray ID {self.trial_id} Iteration: {self._iteration}')
         Curr_epoch = self.trained_epoch + self._iteration
-        args = self.config['args']
+        #args = self.config['args']
+        args = argparse.Namespace(**copy.deepcopy(self.config)) #for grid search
         step_dic={'epoch':Curr_epoch}
         diff_dic = {'difficult_aug':self.diff_augment,'reweight':self.diff_reweight,'lambda_aug':args.lambda_aug, 'class_adaptive':args.class_adapt
                 ,'visualize':args.visualize,'teach_rew':self.teach_model,'policy_apply':self.policy_apply,'noaug_reg':args.noaug_reg}

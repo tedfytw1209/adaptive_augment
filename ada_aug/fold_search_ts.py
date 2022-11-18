@@ -27,7 +27,7 @@ from class_balanced_loss import ClassBalLoss,ClassDiffLoss,ClassDistLoss,make_cl
     ,make_class_weights_samples
 import wandb
 from utils import plot_conf_wandb, select_output_source, select_embed_source
-
+import copy
 import ray
 import ray.tune as tune
 from ray.tune.integration.wandb import WandbTrainableMixin
@@ -111,6 +111,8 @@ parser.add_argument('--lambda_dist', type=float, default=1.0, help="class distan
 parser.add_argument('--class_sim', action='store_true', default=False, help='class distance use similar or not')
 parser.add_argument('--noaug_reg', type=str, default='', help='add regular for noaugment ',
         choices=['cadd','add','creg','wreg','cwreg','pwreg','cpwreg',''])
+parser.add_argument('--noaug_target', type=str, default='se', help='add regular for noaugment target difference',
+        choices=['se','s','e'])
 parser.add_argument('--output_source', type=str, default='', help='class output source',
         choices=['train','valid','search','allsearch',''])
 #loss
@@ -196,7 +198,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
     def setup(self, *_args): #use new setup replace _setup
         #self.trainer = TSeriesModelTrainer(self.config)
         #os.environ['WANDB_START_METHOD'] = 'thread' #tmp disable
-        args = self.config['args']
+        #args = self.config['args']
+        args = argparse.Namespace(**copy.deepcopy(self.config)) #for grid search
         utils.reproducibility(args.seed) #for reproduce
         #  dataset settings for search
         n_channel = get_num_channel(args.dataset)
@@ -337,11 +340,11 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         self.class_criterion = None
         if args.class_dist:
             self.class_criterion = ClassDistLoss(distance_func=args.class_dist,loss_choose=args.class_dist
-            ,similar=args.class_sim,lamda=args.lambda_dist,num_classes=n_class)
+            ,similar=args.class_sim,lamda=args.lambda_dist,num_classes=n_class,noaug_target=args.noaug_target)
             self.extra_losses.append(self.class_criterion)
         elif 'c' in args.noaug_reg:
             self.class_criterion = ClassDistLoss(distance_func='conf',loss_choose='conf'
-            ,similar=args.class_sim,lamda=args.lambda_dist,num_classes=n_class,use_loss=False)
+            ,similar=args.class_sim,lamda=args.lambda_dist,num_classes=n_class,use_loss=False,noaug_target=args.noaug_target)
             self.extra_losses.append(self.class_criterion)
         #  AdaAug settings for search
         ind_mix,sub_mix = False,False
@@ -450,7 +453,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         else:
             ptype = 'acc'
         print(f'Starting Ray ID {self.trial_id} Iteration: {self._iteration}')
-        args = self.config['args']
+        #args = self.config['args']
+        args = argparse.Namespace(**copy.deepcopy(self.config)) #for grid search
         lr = self.scheduler.get_last_lr()[0]
         step_dic={'epoch':self._iteration}
         diff_dic = {'difficult_aug':self.diff_augment,'same_train':args.same_train,'reweight':self.diff_reweight,'lambda_aug':args.lambda_aug,

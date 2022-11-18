@@ -299,7 +299,8 @@ def confidence_loss(logits,targets,target_pair,class_output,sim_target=None):
     return loss
 
 class ClassDistLoss(torch.nn.Module):
-    def __init__(self, distance_func='conf',loss_choose='conf',similar=False,init_k=3,lamda=1.0,num_classes=10,use_loss=True):
+    def __init__(self, distance_func='conf',loss_choose='conf',similar=False,init_k=3,lamda=1.0,num_classes=10,use_loss=True,
+        noaug_target='se'):
         super().__init__()
         self.loss_target = 'output' #['output','embed']
         if '_' in distance_func:
@@ -325,6 +326,7 @@ class ClassDistLoss(torch.nn.Module):
         self.classpair_dist = np.ones((num_classes,num_classes))
         self.classweight_dist = np.ones((num_classes))
         self.class_embed_mat = None
+        self.noaug_target = noaug_target
 
     def update_distance(self,class_output_mat): #(n_class,n_class)
         self.classpair_dist = []
@@ -353,14 +355,19 @@ class ClassDistLoss(torch.nn.Module):
     def update_weight(self,class_output_mat):
         '''
         Add noaug regular weight for:
-        (1) low perfromance (self output) (2) easy be predict
+        (1) self output low perfromance (s) (2) easy be predict (e)
         '''
         classweight_dist = []
         n_class = class_output_mat.shape[0]
         for c in range(n_class):
             c_output = class_output_mat[c,c] #0~1
-            c_been_output = (class_output_mat[:,c].sum() - c_output) #0~1
-            c_noaug_weight = (1.0-c_output) + c_been_output
+            c_been_output = (class_output_mat[:,c].sum() - c_output) + 1e-2 #0~1 + smooth
+            c_noaug_weight = 0
+            if 's' in self.noaug_target:
+                c_noaug_weight += 1.0-c_output
+            if 'e' in self.noaug_target:
+                c_noaug_weight += c_been_output
+            #c_noaug_weight = (1.0-c_output) + c_been_output
             classweight_dist.append(c_noaug_weight)
             print(f'Class {c} similar/noaug weight: c perfrom: {1.0-c_output}, c been output: {c_been_output}, total: {c_noaug_weight}')
         self.classweight_dist = np.array(classweight_dist)

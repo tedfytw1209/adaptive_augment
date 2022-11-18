@@ -28,12 +28,13 @@ def perturb_param(param, delta):
         return param
         
     amt = random.uniform(0, delta)
+    
     if random.random() < 0.5:
         #return torch.tensor(max(0, param.clone().detach()-amt))
-        return torch.maximum(param.clone().detach()-amt,0.0)
+        return torch.clip(param.clone().detach()-amt,min=0.0,max=1.0)
     else:
         #return torch.tensor(min(1, param.clone().detach()+amt))
-        return torch.minimum(param.clone().detach()+amt,1.0)
+        return torch.clip(param.clone().detach()+amt,min=0.0,max=1.0)
 
 def cuc_meanstd(values,idxs):
     mean_v = values[idxs].mean(0).detach().cpu().tolist()

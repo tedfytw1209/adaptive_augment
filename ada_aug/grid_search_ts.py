@@ -29,6 +29,7 @@ from class_balanced_loss import ClassBalLoss,ClassDiffLoss,ClassDistLoss,make_cl
 from utils import plot_conf_wandb,select_output_source,select_embed_source
 from ray.tune.search.bayesopt import BayesOptSearch
 import wandb
+import copy
 
 import ray
 import ray.tune as tune
@@ -198,7 +199,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
     def setup(self, *_args): #use new setup replace _setup
         #self.trainer = TSeriesModelTrainer(self.config)
         #os.environ['WANDB_START_METHOD'] = 'thread' #tmp disable
-        args = argparse.Namespace(**self.config) #for grid search
+        args = argparse.Namespace(**copy.deepcopy(self.config)) #for grid search
         utils.reproducibility(args.seed) #for reproduce
         #  dataset settings for search
         n_channel = get_num_channel(args.dataset)
@@ -452,7 +453,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         else:
             ptype = 'acc'
         print(f'Starting Ray ID {self.trial_id} Iteration: {self._iteration}')
-        args = argparse.Namespace(**self.config) #for grid search
+        args = argparse.Namespace(**copy.deepcopy(self.config)) #for grid search
         lr = self.scheduler.get_last_lr()[0]
         step_dic={'epoch':self._iteration}
         diff_dic = {'difficult_aug':self.diff_augment,'same_train':args.same_train,'reweight':self.diff_reweight,'lambda_aug':args.lambda_aug,

@@ -38,7 +38,7 @@ class AlphaAdd(nn.Module):
     def forward(self, X):
         bs, n_hidden = X.shape
         #print('Agg x shape: ',X.shape)
-        alpha = torch.rand(bs,1).cuda()
+        alpha = torch.ones(bs,1).cuda() * 0.5
         #print(alpha) #!tmp
         if self.training:
             '''binomial = torch.distributions.binomial.Binomial(probs=1-self.p)

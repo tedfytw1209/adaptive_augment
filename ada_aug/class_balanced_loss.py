@@ -310,11 +310,12 @@ class ClassDistLoss(torch.nn.Module):
         else:
             self.distance_func = distance_func
         if '_' in loss_choose:
-            self.distance_func = distance_func.split('_')[1]
+            self.loss_choose = loss_choose.split('_')[1]
         else:
-            self.distance_func = distance_func
+            self.loss_choose = loss_choose
         print('loss_target: ',self.loss_target)
         print('distance_func: ',self.distance_func)
+        print('loss choose: ',self.loss_choose)
         self.similar = similar
         self.class_output_mat = None
         self.classpair_dist = []

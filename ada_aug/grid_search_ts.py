@@ -657,7 +657,7 @@ def main():
     #hparams['diff_aug'] = tune.grid_search([True,False])
     hparams['lambda_noaug'] = tune.grid_search([0.03, 0.1, 0.3, 1.0, 3.0])
     hparams['noaug_reg'] = tune.grid_search(['creg','cwreg','cpwreg'])
-    #hparams['output_source'] = tune.grid_search(['search'])
+    hparams['output_source'] = tune.grid_search(['allsearch'])
     #hparams['feature_mask'] = tune.grid_search(['','select','classonly'])
     #hparams['grid_target'] = ['noaug_reg','lambda_noaug','feature_mask']
     hparams['grid_target'] = ['keep_len','noaug_reg','lambda_noaug']

@@ -665,12 +665,12 @@ def main():
     #hparams['diff_aug'] = tune.grid_search([True,False])
     hparams['lambda_noaug'] = tune.grid_search([0.01,0.03])
     hparams['noaug_reg'] = tune.grid_search(['creg','cpwreg'])
-    hparams['lambda_noaug'] = tune.grid_search([0.001,0.01,0.1,1])
-    hparams['class_dist'] = tune.grid_search(['wass','oembed_wass']) #tmp
+    hparams['lambda_dist'] = tune.grid_search([0.001,0.01,0.1,1])
+    hparams['class_dist'] = tune.grid_search(['wass','embed_wass']) #tmp
     hparams['output_source'] = tune.grid_search(['allsearch'])
     #hparams['feature_mask'] = tune.grid_search(['','select','classonly'])
     #hparams['grid_target'] = ['noaug_reg','lambda_noaug','feature_mask']
-    #hparams['grid_target'] = ['keep_len','noaug_reg','lambda_noaug']
+    hparams['grid_target'] = ['noaug_reg','lambda_noaug','class_dist','lambda_dist']
     print(hparams)
     #wandb
     wandb_config = {

@@ -285,8 +285,6 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         self.h_model = Projection_TSeries(in_features=h_input,label_num=label_num,label_embed=label_embed,
             n_layers=args.n_proj_layer, n_hidden=args.n_proj_hidden, augselect=args.augselect, proj_addition=proj_add,
             feature_mask=args.feature_mask).cuda()
-        if args.model_visual:
-            wandb.watch(self.h_model, log='all')
         #  training settings
         self.gf_optimizer = torch.optim.AdamW(self.gf_model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
         self.scheduler = torch.optim.lr_scheduler.OneCycleLR(self.gf_optimizer, max_lr=args.learning_rate, 
@@ -447,8 +445,11 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         self.result_table_dic = {}
         self.class_dist = None
     def step(self):#use step replace _train
+        args = argparse.Namespace(**copy.deepcopy(self.config)) #for grid search
         if self._iteration==0:
             wandb.config.update(self.config)
+            if args.model_visual:
+                wandb.watch(self.h_model,log_freq=100, log='all')
         if self.multilabel:
             if self.mapselect:
                 ptype = 'map'
@@ -458,7 +459,6 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             ptype = 'acc'
         print(f'Starting Ray ID {self.trial_id} Iteration: {self._iteration}')
         #args = self.config['args']
-        args = argparse.Namespace(**copy.deepcopy(self.config)) #for grid search
         lr = self.scheduler.get_last_lr()[0]
         step_dic={'epoch':self._iteration}
         diff_dic = {'difficult_aug':self.diff_augment,'same_train':args.same_train,'reweight':self.diff_reweight,'lambda_aug':args.lambda_aug,

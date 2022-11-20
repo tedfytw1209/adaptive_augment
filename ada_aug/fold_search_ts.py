@@ -145,6 +145,7 @@ parser.add_argument('--ema_rate', type=float, default=0.999, help="teacher ema r
 #visulaize
 parser.add_argument('--visualize', action='store_true', default=False, help='visualize')
 parser.add_argument('--output_visual', action='store_true', default=False, help='visualize output and confusion matrix')
+parser.add_argument('--model_visual', action='store_true', default=False, help='visualize h_model')
 parser.add_argument('--output_pred', action='store_true', default=False, help='output predict result and ture target')
 
 args = parser.parse_args()
@@ -284,6 +285,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         self.h_model = Projection_TSeries(in_features=h_input,label_num=label_num,label_embed=label_embed,
             n_layers=args.n_proj_layer, n_hidden=args.n_proj_hidden, augselect=args.augselect, proj_addition=proj_add,
             feature_mask=args.feature_mask).cuda()
+        if args.model_visual:
+            wandb.watch(self.h_model, log='all')
         #  training settings
         self.gf_optimizer = torch.optim.AdamW(self.gf_model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
         self.scheduler = torch.optim.lr_scheduler.OneCycleLR(self.gf_optimizer, max_lr=args.learning_rate, 

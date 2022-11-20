@@ -62,7 +62,7 @@ parser.add_argument('--multilabel', action='store_true', default=False, help='us
 parser.add_argument('--train_portion', type=float, default=1, help='portion of training data')
 parser.add_argument('--default_split', action='store_true', help='use dataset deault split')
 parser.add_argument('--kfold', type=int, default=-1, help='use kfold cross validation')
-parser.add_argument('--not_save', action='store_true', help='not to save model')
+parser.add_argument('--not_save', action='store_true', default=False, help='not to save model')
 # policy
 parser.add_argument('--proj_learning_rate', type=float, default=1e-2, help='learning rate for h')
 parser.add_argument('--proj_weight_decay', type=float, default=1e-3, help='weight decay for h]')

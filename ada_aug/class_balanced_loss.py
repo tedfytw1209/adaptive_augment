@@ -277,10 +277,9 @@ def wass_loss(logits,targets,target_pair,class_output,sim_target=None,embed=Fals
         else:
             soft_logits = logits.softmax(dim=1)
         pairs_label = target_pair[targets.detach().cpu()] #(batch, k)
-        print(f'class {targets} pair with {pairs_label}') #!tmp
+        #print(f'class {targets} pair with {pairs_label}') #!tmp
         for e_k in range(pairs_label.shape[1]):
             target_output = class_output[pairs_label[:,e_k].view(-1)].to(soft_logits.device) #(batch, n_class)
-            print(target_output.shape) #!tmp
             each_loss = wasserstein_loss(target_output,soft_logits) #smaller more different
             loss += each_loss
 
@@ -353,7 +352,8 @@ class ClassDistLoss(torch.nn.Module):
         return self.classpair_dist
     #update embed
     def update_embed(self,class_embed_mat):
-        self.class_embed_mat = np.array(class_embed_mat)
+        self.class_embed_mat = class_embed_mat
+        print('Update embed shape: ',class_embed_mat.shape)
         return self.class_embed_mat
     #for loss weight
     def update_weight(self,class_output_mat):
@@ -382,9 +382,9 @@ class ClassDistLoss(torch.nn.Module):
         self.update_weight(class_output_mat)
         self.class_output_mat = class_output_mat
         print('### updating class distance pair ###')
-        #print(self.class_output_mat)
-        #print(self.classpair_dist)
-        print(self.classweight_dist)
+        print(self.class_output_mat)
+        print(self.classpair_dist)
+        #print(self.classweight_dist)
         #min distance
         class_pairs = np.zeros((n_class,self.k))
         for c in range(n_class): #tmp use min distance

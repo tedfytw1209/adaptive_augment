@@ -370,6 +370,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         #folds
         if self.grid_search:
             add_dir = '_'.join([f'{target}-{self.config[target]}' for target in self.config.get('grid_target',[])])
+            add_dir = add_dir.replace(']','').replace('[','').replace(',','')
         else:
             add_dir = ''
         dir_path = os.path.join(self.config['BASE_PATH'],self.config['save'],add_dir,f'fold{test_fold_idx}')
@@ -502,6 +503,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         #fold idx fir prepare
         if self.grid_search:
             add_dir = '_'.join([f'{target}-{self.config[target]}' for target in self.config.get('grid_target',[])])
+            add_dir = add_dir.replace(']','').replace('[','').replace(',','')
         else:
             add_dir = ''
         if self.test_fold_idx>=0:

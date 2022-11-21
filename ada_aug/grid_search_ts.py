@@ -69,6 +69,8 @@ parser.add_argument('--not_save', action='store_true', default=False, help='not 
 # policy
 parser.add_argument('--proj_learning_rate', type=float, default=1e-2, help='learning rate for h')
 parser.add_argument('--proj_weight_decay', type=float, default=1e-3, help='weight decay for h]')
+parser.add_argument('--proj_nobias', type=str, default='', help='proj bias',
+        choices=['ep','e','p',''])
 parser.add_argument('--cutout', action='store_true', default=False, help='use cutout')
 parser.add_argument('--cutout_length', type=int, default=16, help='cutout length')
 parser.add_argument('--use_cuda', type=bool, default=True, help="use cuda default True")
@@ -284,9 +286,15 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 proj_add = 4 + 1
             elif args.adapt_target=='keep':
                 proj_add = 2 + 1
+        #proj bias
+        proj_b, embed_b = True, True
+        if 'p' in args.proj_nobias:
+            proj_b = False
+        if 'e' in args.proj_nobias:
+            embed_b = False
         self.h_model = Projection_TSeries(in_features=h_input,label_num=label_num,label_embed=label_embed,
             n_layers=args.n_proj_layer, n_hidden=args.n_proj_hidden, augselect=args.augselect, proj_addition=proj_add,
-            feature_mask=args.feature_mask).cuda()
+            feature_mask=args.feature_mask,proj_b=proj_b,embed_b=embed_b).cuda()
         #  training settings
         self.gf_optimizer = torch.optim.AdamW(self.gf_model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
         self.scheduler = torch.optim.lr_scheduler.OneCycleLR(self.gf_optimizer, max_lr=args.learning_rate, 

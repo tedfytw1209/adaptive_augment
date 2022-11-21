@@ -75,7 +75,7 @@ class Projection(nn.Module):
 
 class Projection_TSeries(nn.Module):
     def __init__(self, in_features, n_layers, n_hidden=128,label_num=0,label_embed=0, augselect='', proj_addition=0, 
-        feature_mask="", input_act=False):
+        feature_mask="", input_act=False,proj_b=True,embed_b=True):
         super(Projection_TSeries, self).__init__()
         self.ops_names = TS_OPS_NAMES.copy()
         if augselect.startswith('goodtrans'): #only use good transfrom
@@ -94,7 +94,7 @@ class Projection_TSeries(nn.Module):
         self.feature_embed = None
         if label_num>0 and label_embed>0:
             #self.label_embed = nn.Sequential(nn.Linear(label_num, label_embed),nn.ReLU()) #old ver
-            self.label_embed = nn.Linear(label_num, label_embed) #10/10 change
+            self.label_embed = nn.Linear(label_num, label_embed, bias=embed_b) #10/10 change
             n_label = label_embed
         elif label_num>0:
             n_label = label_num
@@ -105,9 +105,11 @@ class Projection_TSeries(nn.Module):
         layers = []
         self.input_act = input_act
         self.feature_mask = feature_mask
+        self.proj_b = proj_b
+        self.embed_b = embed_b
         #
         if self.n_layers > 0:
-            self.feature_embed = nn.Sequential(nn.Linear(in_features-n_label, n_hidden), nn.ReLU())
+            self.feature_embed = nn.Sequential(nn.Linear(in_features-n_label, n_hidden,bias=embed_b), nn.ReLU())
             layers = [] 
             if feature_mask=='dropout':
                 layers += [nn.Dropout(p=0.5)]
@@ -117,10 +119,10 @@ class Projection_TSeries(nn.Module):
                 layers += [AlphaAdd(fea_len=n_hidden,label_len=n_label)]
                 n_label = 0
             for _ in range(self.n_layers-1):
-                layers.append(nn.Linear(n_hidden + n_label, n_hidden))
+                layers.append(nn.Linear(n_hidden + n_label, n_hidden,bias=proj_b))
                 layers.append(nn.ReLU())
                 n_label = 0
-            layers.append(nn.Linear(n_hidden + n_label, proj_out))
+            layers.append(nn.Linear(n_hidden + n_label, proj_out,bias=proj_b))
         else:
             if feature_mask=='dropout':
                 layers += [nn.Dropout(p=0.5)]
@@ -128,7 +130,7 @@ class Projection_TSeries(nn.Module):
                 layers += [SelectDropout(p=0.5,fea_len=in_features-label_embed,label_len=n_label)]
             elif feature_mask == 'classonly':
                 in_features = label_embed
-            layers += [nn.Linear(in_features, proj_out)]
+            layers += [nn.Linear(in_features, proj_out,bias=proj_b)]
         self.projection = nn.Sequential(*layers)
 
     def forward(self, x,y=None):

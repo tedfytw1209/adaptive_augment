@@ -96,7 +96,7 @@ parser.add_argument('--search_sampler', type=str, default='', help='for search s
 parser.add_argument('--diff_aug', action='store_true', default=False, help='use valid select')
 parser.add_argument('--same_train', action='store_true', default=False, help='use valid select')
 parser.add_argument('--mix_type', type=str, default='embed', help='add regular for noaugment ',
-        choices=['embed','loss'])
+        choices=['embed','loss','output'])
 parser.add_argument('--not_reweight', action='store_true', default=False, help='use diff reweight')
 parser.add_argument('--sim_rew', action='store_true', default=False, help='use sim reweight')
 parser.add_argument('--pwarmup', type=int, default=0, help="warmup epoch for policy")

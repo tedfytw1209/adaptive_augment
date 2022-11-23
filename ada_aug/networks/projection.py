@@ -109,13 +109,15 @@ class Projection_TSeries(nn.Module):
         self.embed_b = embed_b
         #
         if self.n_layers > 0:
-            self.feature_embed = nn.Sequential(nn.Linear(in_features-n_label, n_hidden,bias=embed_b), nn.ReLU())
             layers = [] 
             if feature_mask=='dropout':
+                self.feature_embed = nn.Sequential(nn.Linear(in_features-n_label, n_hidden,bias=embed_b), nn.ReLU())
                 layers += [nn.Dropout(p=0.5)]
             elif feature_mask=='select':
+                self.feature_embed = nn.Sequential(nn.Linear(in_features-n_label, n_hidden,bias=embed_b), nn.ReLU())
                 layers += [SelectDropout(p=0.5,fea_len=n_hidden,label_len=n_label)] #custom dropout
             elif feature_mask=='average':
+                self.feature_embed = nn.Sequential(nn.Linear(in_features-n_label, n_hidden,bias=embed_b))
                 layers += [AlphaAdd(fea_len=n_hidden,label_len=n_label)]
                 n_label = 0
             for _ in range(self.n_layers-1):

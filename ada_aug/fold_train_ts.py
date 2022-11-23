@@ -104,6 +104,8 @@ parser.add_argument('--class_embed', action='store_true', default=False, help='c
 parser.add_argument('--feature_mask', type=str, default='', help='add regular for noaugment ',
         choices=['dropout','select','average','classonly',''])
 parser.add_argument('--noaug_reg', type=str, default='', help='add regular for noaugment ',
+        choices=['creg','wreg','cwreg','pwreg','cpwreg',''])
+parser.add_argument('--noaug_add', type=str, default='', help='add regular for noaugment ',
         choices=['cadd','add',''])
 parser.add_argument('--balance_loss', type=str, default='', help="loss type for model and policy training to acheive class balance")
 #info keep
@@ -144,7 +146,7 @@ if args.class_adapt:
     description += 'cada'
 else:
     description += ''
-description += args.noaug_reg
+description += args.noaug_add
 if args.diff_aug and not args.not_reweight:
     description+='rew'
 if args.keep_aug:
@@ -192,10 +194,10 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         diff_augment = args.diff_aug
         diff_reweight = not args.not_reweight
         self.class_noaug, self.noaug_add = False, False
-        if args.noaug_reg=='cadd':
+        if args.noaug_add=='cadd':
             self.class_noaug = True
             self.noaug_add = True
-        elif args.noaug_reg=='add':
+        elif args.noaug_add=='add':
             self.noaug_add = True
         test_fold_idx = self.config['kfold']
         train_val_test_folds = [[],[],[]] #train,valid,test
@@ -383,6 +385,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             class_acc = train_acc / 100.0
             if self.class_noaug:
                 class_acc = [train_dic[f'train_{ptype}_c{i}'] / 100.0 for i in range(self.n_class)]
+            
             self.adaaug.update_alpha(class_acc)
         self.pre_train_acc = train_acc / 100.0
         # validation

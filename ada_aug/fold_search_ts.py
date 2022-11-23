@@ -112,7 +112,9 @@ parser.add_argument('--class_dist', type=str, default='', help='class distance l
 parser.add_argument('--lambda_dist', type=float, default=1.0, help="class distance weight")
 parser.add_argument('--class_sim', action='store_true', default=False, help='class distance use similar or not')
 parser.add_argument('--noaug_reg', type=str, default='', help='add regular for noaugment ',
-        choices=['cadd','add','creg','wreg','cwreg','pwreg','cpwreg',''])
+        choices=['creg','wreg','cwreg','pwreg','cpwreg',''])
+parser.add_argument('--noaug_add', type=str, default='', help='add regular for noaugment ',
+        choices=['cadd','add','coadd',''])
 parser.add_argument('--noaug_target', type=str, default='se', help='add regular for noaugment target difference',
         choices=['se','s','e'])
 parser.add_argument('--output_source', type=str, default='', help='class output source',
@@ -166,7 +168,7 @@ if args.class_adapt:
     description += f'cada{args.policy_loss}'
 else:
     description += ''
-description += args.noaug_reg
+description += args.noaug_reg + args.noaug_add
 if args.diff_aug and not args.not_reweight:
     description+='rew'
 if args.keep_aug:
@@ -214,13 +216,18 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         multilabel = args.multilabel
         diff_augment = args.diff_aug
         diff_reweight = not args.not_reweight
+        #noaug add & noaug reg
         self.class_noaug, self.noaug_add, self.use_class_w = False, False, False
-        if args.noaug_reg=='cadd':
+        if args.noaug_add=='cadd':
             self.class_noaug = True
             self.noaug_add = True
-        elif args.noaug_reg=='add':
+        elif args.noaug_add=='coadd':
+            self.use_class_w = True
+            self.class_noaug = True
             self.noaug_add = True
-        elif args.noaug_reg=='creg':
+        elif args.noaug_add=='add':
+            self.noaug_add = True
+        if 'c' in args.noaug_reg:
             self.use_class_w = True
         test_fold_idx = self.config['kfold']
         train_val_test_folds = []
@@ -351,7 +358,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             self.class_criterion = ClassDistLoss(distance_func=args.class_dist,loss_choose=args.class_dist
             ,similar=args.class_sim,lamda=args.lambda_dist,num_classes=n_class,noaug_target=args.noaug_target)
             self.extra_losses.append(self.class_criterion)
-        elif 'c' in args.noaug_reg:
+        elif self.use_class_w:
             self.class_criterion = ClassDistLoss(distance_func='conf',loss_choose='conf'
             ,similar=args.class_sim,lamda=args.lambda_dist,num_classes=n_class,use_loss=False,noaug_target=args.noaug_target)
             self.extra_losses.append(self.class_criterion)
@@ -481,7 +488,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             search_round=args.search_round,search_repeat=self.search_repeat,multilabel=self.multilabel,n_class=self.n_class,map_select=self.mapselect, **diff_dic)
         if self.noaug_add:
             class_acc = train_acc / 100.0
-            if self.class_noaug:
+            if self.class_noaug and not self.use_class_w: #use train perfromance as noaug reg
                 class_acc = [train_dic[f'train_{ptype}_c{i}'] / 100.0 for i in range(self.n_class)]
             self.adaaug.update_alpha(class_acc)
         self.pre_train_acc = train_acc / 100.0
@@ -502,12 +509,17 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             print(class_acc)
             self.class_difficulty = 1 - np.array(class_acc)
             self.sim_criterion.update_weight(self.class_difficulty)
-        if args.class_dist or 'c' in args.noaug_reg:
+        if args.class_dist or 'c' in args.noaug_reg or args.noaug_add=='coadd':
             select_output = select_output_source(args.output_source,table_dic,valid_table,search_table)
             self.class_criterion.update_classpair(select_output)
             if 'embed' in args.class_dist:
                 select_embed = select_embed_source(args.output_source,table_dic,valid_table,search_table)
                 self.class_criterion.update_embed(select_embed)
+            if self.noaug_add:
+                class_outw = torch.from_numpy(self.class_criterion.classweight_dist)
+                print(f'Noaug add method {args.noaug_add} weights: ',class_outw)
+                assert class_outw.mean() <= 1.0
+                self.adaaug.update_alpha(class_outw)
         #test
         test_acc, test_obj, test_dic, test_table  = search_infer(self.test_queue, self.gf_model, self.criterion, 
             multilabel=self.multilabel,n_class=self.n_class,mode='test',map_select=self.mapselect)

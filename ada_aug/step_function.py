@@ -382,14 +382,14 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     noaug_criterion_w = nn.MSELoss(reduction='none').cuda()
     noaug_lossw = torch.tensor(1)
     noaug_target = ''
-    print('Using NOAUG regularation ',noaug_reg)
     if noaug_reg in ['creg','cwreg','cpwreg']:
+        print('Using NOAUG regularation ',noaug_reg)
         use_noaug_reg = True
         noaug_lossw = torch.from_numpy(extra_criterions[0].classweight_dist).cuda()
         print('NOAUG regularation class weights',noaug_lossw)
     elif noaug_reg:
+        print('Using NOAUG regularation ',noaug_reg)
         use_noaug_reg = True
-    
     if noaug_reg=='creg':
         noaug_target = 'p'
     elif noaug_reg=='cwreg':
@@ -678,8 +678,6 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 target_search_list.append(target_search.detach())
                 torch.cuda.empty_cache()
             #accumulation update
-            #tmp! visualize gradient
-            #for name, param in adaaug.h_model.named_parameters():   
             nn.utils.clip_grad_norm_(adaaug.h_model.parameters(), grad_clip)
             h_optimizer.step()
             #  log policy
@@ -737,16 +735,11 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
         ptype = 'auroc'
     #table dic
     table_dic = {}
-    #print(sea_output_matrix.sum()) #! tmp
-    #print(sea_output_matrix.sum(dim=1))
-    #print(sea_output_matrix) #! tmp
     table_dic['search_output'] = (sea_output_matrix / torch.clamp(sea_output_matrix.sum(dim=1,keepdim=True),min=1e-9))
     table_dic['train_output'] = (tr_output_matrix / torch.clamp(tr_output_matrix.sum(dim=1,keepdim=True),min=1e-9))
     table_dic['train_embed'] = tr_embed_matrix / torch.clamp(tr_embed_count.float(),min=1e-9)
     table_dic['search_embed'] = sea_embed_matrix / torch.clamp(sea_embed_count.float(),min=1e-9)
     table_dic['train_confusion'] = confusion_matrix
-    #print(table_dic['search_output'].sum()) #! tmp
-    #print(table_dic['search_output']) #! tmp
     #wandb dic
     out_dic = {}
     out_dic['train_loss'] = objs.avg

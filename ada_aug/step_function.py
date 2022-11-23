@@ -289,14 +289,14 @@ def cuc_loss(logits,target,criterion,multilabel,**kwargs):
 def embed_mix(gf_model,mixed_features,aug_weights,adv_criterion,target_trsearch,multilabel):
     aug_logits = gf_model.classify(mixed_features) 
     aug_loss = cuc_loss(aug_logits,target_trsearch,adv_criterion,multilabel)
-    return aug_loss, aug_logits
+    return aug_loss, aug_logits, aug_loss
 
 def output_mix(gf_model,mixed_features,aug_weights,adv_criterion,target_trsearch,multilabel):
     # batch, n_ops(sub), n_hidden
     print(mixed_features.shape)
-    # mixed_features=(batch, n_ops,keep_lens, n_hidden) or (batch, keep_lens, n_hidden) or (batch, n_ops, n_hidden)
+    # mixed_features=(batch, keep_lens, n_ops, n_hidden) or (batch, keep_lens, n_hidden) or (batch, n_ops, n_hidden)
     if len(aug_weights[1])==3: # batch, keep_lens, n_ops, n_hidden
-        batch, n_ops,keep_lens, n_hidden = mixed_features.shape
+        batch, keep_lens,n_ops, n_hidden = mixed_features.shape
         weights, keeplen_ws = aug_weights[0], aug_weights[2]
         mixed_features = mixed_features.reshape(batch*n_ops*keep_lens,n_hidden)
         aug_logits = gf_model.classify(mixed_features)
@@ -317,39 +317,39 @@ def output_mix(gf_model,mixed_features,aug_weights,adv_criterion,target_trsearch
 def embed_diff(gf_model,mixed_features,aug_weights,adv_criterion,target_trsearch,multilabel):
     aug_logits = gf_model.classify(mixed_features) 
     aug_loss = cuc_loss(aug_logits,target_trsearch,adv_criterion,multilabel)
-    return aug_loss, aug_logits
+    return aug_loss, aug_logits, aug_loss
 
 def loss_mix(gf_model,mixed_features,aug_weights,adv_criterion,target_trsearch,multilabel):
-    # mixed_features=(batch, n_ops,keep_lens, n_hidden) or (batch, keep_lens, n_hidden) or (batch, n_ops, n_hidden)
+    # mixed_features=(batch, keep_lens, n_ops, n_hidden) or (batch, keep_lens, n_hidden) or (batch, n_ops, n_hidden)
     target_trsearch = torch.unsqueeze(target_trsearch,dim=1) #(bs,1) !!!tmp not for multilabel
-    if len(aug_weights[1])==3: #(batch, n_ops,keep_lens, n_hidden)
-        batch, n_ops,keep_lens, n_hidden = mixed_features.shape
+    if len(aug_weights[1])==3: #(batch, keep_lens, n_ops, n_hidden)
+        batch, keep_lens,n_ops, n_hidden = mixed_features.shape
         weights, keeplen_ws = aug_weights[0], aug_weights[2]
         target_trsearch = target_trsearch.expand(-1,n_ops*keep_lens).reshape(batch*n_ops*keep_lens)
         mixed_features = mixed_features.reshape(batch*n_ops*keep_lens,n_hidden)
         aug_logits = gf_model.classify(mixed_features)
-        aug_loss = cuc_loss(aug_logits,target_trsearch,adv_criterion,multilabel)
-        aug_loss = aug_loss.reshape(batch, keep_lens, n_ops)
+        aug_loss_all = cuc_loss(aug_logits,target_trsearch,adv_criterion,multilabel)
+        aug_loss_all = aug_loss_all.reshape(batch, keep_lens, n_ops)
         # weights = (bs,n_ops), aug_loss = (batch,keep_lens,n_ops)
-        aug_loss = [w.matmul(feat) for w, feat in zip(weights, aug_loss)] #[(keep_lens)]
+        aug_loss = [w.matmul(feat) for w, feat in zip(weights, aug_loss_all)] #[(keep_lens)]
         aug_loss = torch.stack([len_w.matmul(feat) for len_w,feat in zip(keeplen_ws,aug_loss)], dim=0) #[(1)]
         #print('Loss mix aug_loss: ',aug_loss.shape,aug_loss)
         aug_loss = aug_loss.mean()
-        aug_logits = aug_logits.reshape(batch, keep_lens, n_ops,-1).mean(dim=(1,2))
+        aug_logits = aug_logits.reshape(batch, keep_lens, n_ops,-1)
     else:
         batch, n_param, n_hidden = mixed_features.shape
         weights = aug_weights[0]
         target_trsearch = target_trsearch.expand(-1,n_param).reshape(batch*n_param)
         mixed_features = mixed_features.reshape(batch*n_param,n_hidden)
         aug_logits = gf_model.classify(mixed_features)
-        aug_loss = cuc_loss(aug_logits,target_trsearch,adv_criterion,multilabel)
-        aug_loss = aug_loss.reshape(batch, n_param)
-        aug_loss = torch.stack([w.matmul(feat) for w, feat in zip(weights, aug_loss)], dim=0) #[(1)]
+        aug_loss_all = cuc_loss(aug_logits,target_trsearch,adv_criterion,multilabel)
+        aug_loss_all = aug_loss_all.reshape(batch, n_param)
+        aug_loss = torch.stack([w.matmul(feat) for w, feat in zip(weights, aug_loss_all)], dim=0) #[(1)]
         #print('Loss mix aug_loss: ',aug_loss.shape,aug_loss)
         aug_loss = aug_loss.mean()
-        aug_logits = aug_logits.reshape(batch, n_param,-1).mean(dim=1)
+        aug_logits = aug_logits.reshape(batch, n_param,-1)
     #print('Loss mix aug_logits: ',aug_logits.shape,aug_logits)
-    return aug_loss, aug_logits
+    return aug_loss, aug_logits, aug_loss_all
 
 def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, adaaug, criterion, gf_optimizer,scheduler,
             grad_clip, h_optimizer, epoch, search_freq,search_round=1,search_repeat=1, multilabel=False,n_class=10,
@@ -363,12 +363,17 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     confusion_matrix = torch.zeros(n_class,n_class)
     tr_output_matrix = torch.zeros(n_class,n_class).float()
     sea_output_matrix = torch.zeros(n_class,n_class).float()
-    tr_embed_matrix = torch.zeros(n_class,256).float() #tmp !!!
-    sea_embed_matrix = torch.zeros(n_class,256).float() #tmp !!!
+    tr_embed_matrix = torch.zeros(n_class,256).float()
+    sea_embed_matrix = torch.zeros(n_class,256).float()
     tr_embed_count = torch.zeros(n_class,1)
     sea_embed_count = torch.zeros(n_class,1)
     softmax_m = nn.Softmax(dim=1)
-    
+    #tmp for visualize
+    n_ops = adaaug.n_ops
+    aug_output_matrix = torch.zeros(n_class,n_ops,n_class).float()
+    aug_loss_mat = torch.zeros(n_ops).float()
+    aug_class_loss = torch.zeros(n_class,n_ops).float()
+
     print(loss_type)
     print(adv_criterion)
     if adv_criterion==None:
@@ -627,19 +632,35 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 else:
                     sim_model = teacher_model.module
                 #sim mix if need, calculate loss
-                loss, logits_search = mix_func(gf_model,mixed_features,aug_weights,sim_criterion,target_search,multilabel)
+                loss, logits_search, each_aug_loss = mix_func(gf_model,mixed_features,aug_weights,sim_criterion,target_search,multilabel)
                 origin_embed = sim_model.extract_features(input_search, seq_len, pool=True)
                 origin_logits = sim_model.classify(origin_embed)
                 #origin_logits = sim_model(input_search, seq_len)
                 ori_loss = cuc_loss(origin_logits,target_search,sim_criterion,multilabel)
                 #ori_loss = ori_loss.mean() #!to assert loss mean reduce
                 #output pred
-                soft_out = softmax_m(logits_search).detach().cpu() #(bs,n_class)
-                origin_embed_out = origin_embed.detach().cpu()
-                for i,t in enumerate(target_search.data.view(-1)):
-                    sea_output_matrix[t.long()] += soft_out[i]
-                    sea_embed_matrix[t.long(),:] += origin_embed_out[i] #!!! 11/14 add, use origin
-                    sea_embed_count[t.long(),0] += 1
+                if mix_type=='loss': #tmp for visualize
+                    if len(logits_search)==4:
+                        logits_search_avg = logits_search.mean(dim=(1,2))
+                    else:
+                        logits_search_avg = logits_search.mean(dim=1)
+                    soft_out = softmax_m(logits_search_avg).detach().cpu() #(bs,n_class) for embed or output mix
+                    soft_all = softmax_m(logits_search.reshape(-1,n_class)).detach().cpu().reshape(*logits_search.shape) #(bs,keep_len,n_ops)
+                    for i,t in enumerate(target_search.data.view(-1)):
+                        sea_output_matrix[t.long()] += soft_out[i]
+                        sea_embed_matrix[t.long(),:] += origin_embed_out[i] #!!! 11/14 add, use origin
+                        sea_embed_count[t.long(),0] += 1
+                        for aug_idx in range(aug_output_matrix.shape[0]):
+                            aug_output_matrix[t.long(),aug_idx] += soft_all[i,aug_idx]
+                            aug_loss_mat[aug_idx] += each_aug_loss[i,aug_idx]
+                            aug_class_loss[t.long(),aug_idx] += each_aug_loss[i,aug_idx]
+                else:
+                    soft_out = softmax_m(logits_search).detach().cpu() #(bs,n_class) for embed or output mix
+                    origin_embed_out = origin_embed.detach().cpu()
+                    for i,t in enumerate(target_search.data.view(-1)):
+                        sea_output_matrix[t.long()] += soft_out[i]
+                        sea_embed_matrix[t.long(),:] += origin_embed_out[i] #!!! 11/14 add, use origin
+                        sea_embed_count[t.long(),0] += 1
 
                 #similar reweight?
                 aug_search_loss += loss.detach().mean().item()
@@ -742,6 +763,14 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     table_dic['train_embed'] = tr_embed_matrix / torch.clamp(tr_embed_count.float(),min=1e-9)
     table_dic['search_embed'] = sea_embed_matrix / torch.clamp(sea_embed_count.float(),min=1e-9)
     table_dic['train_confusion'] = confusion_matrix
+    #tmp for aug loss visual
+    if mix_type=='loss':
+        table_dic['aug_output'] = aug_output_matrix / torch.clamp(aug_output_matrix.sum(dim=-1,keepdim=True),min=1e-9)
+        table_dic['aug_loss'] = aug_loss_mat / torch.sum(sea_embed_count.float())
+        table_dic['class_aug_loss'] = aug_class_loss / torch.clamp(sea_embed_count.float(),min=1e-9)
+        print('aug_output: ',table_dic['aug_output'])
+        print('aug_loss: ',table_dic['aug_loss'])
+        print('class_aug_loss: ',table_dic['class_aug_loss'])
     #wandb dic
     out_dic = {}
     out_dic['train_loss'] = objs.avg

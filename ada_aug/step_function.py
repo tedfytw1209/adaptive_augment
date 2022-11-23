@@ -291,6 +291,29 @@ def embed_mix(gf_model,mixed_features,aug_weights,adv_criterion,target_trsearch,
     aug_loss = cuc_loss(aug_logits,target_trsearch,adv_criterion,multilabel)
     return aug_loss, aug_logits
 
+def output_mix(gf_model,mixed_features,aug_weights,adv_criterion,target_trsearch,multilabel):
+    aug_logits = gf_model.classify(mixed_features)
+    # mixed_features=(batch, n_ops,keep_lens, n_hidden) or (batch, keep_lens, n_hidden) or (batch, n_ops, n_hidden)
+    if len(aug_weights[1])==3: # batch, keep_lens, n_ops, n_hidden
+        batch, n_ops,keep_lens, n_hidden = mixed_features.shape
+        weights, keeplen_ws = aug_weights[0], aug_weights[2]
+        target_trsearch = target_trsearch.expand(-1,n_ops*keep_lens).reshape(batch*n_ops*keep_lens)
+        mixed_features = mixed_features.reshape(batch*n_ops*keep_lens,n_hidden)
+        aug_logits = gf_model.classify(mixed_features)
+        aug_logits = aug_logits.reshape(batch, keep_lens, n_ops)
+        aug_logits = [w.matmul(feat) for w, feat in zip(weights, aug_logits)] #[(keep_lens)]
+        aug_logits = torch.stack([len_w.matmul(feat) for len_w,feat in zip(keeplen_ws,aug_logits)], dim=0) #[(1)]
+    else:
+        batch, n_param, n_hidden = mixed_features.shape
+        weights = aug_weights[0]
+        mixed_features = mixed_features.reshape(batch*n_param,n_hidden)
+        aug_logits = gf_model.classify(mixed_features)
+        aug_logits = aug_logits.reshape(batch, n_param)
+        aug_logits = torch.stack([w.matmul(feat) for w, feat in zip(weights, aug_logits)], dim=0) #[(1)]
+
+    aug_loss = cuc_loss(aug_logits,target_trsearch,adv_criterion,multilabel)
+    return aug_loss, aug_logits
+
 def embed_diff(gf_model,mixed_features,aug_weights,adv_criterion,target_trsearch,multilabel):
     aug_logits = gf_model.classify(mixed_features) 
     aug_loss = cuc_loss(aug_logits,target_trsearch,adv_criterion,multilabel)
@@ -306,13 +329,13 @@ def loss_mix(gf_model,mixed_features,aug_weights,adv_criterion,target_trsearch,m
         mixed_features = mixed_features.reshape(batch*n_ops*keep_lens,n_hidden)
         aug_logits = gf_model.classify(mixed_features)
         aug_loss = cuc_loss(aug_logits,target_trsearch,adv_criterion,multilabel)
-        aug_loss = aug_loss.reshape(batch, n_ops,keep_lens).permute(0,2,1)
+        aug_loss = aug_loss.reshape(batch, keep_lens, n_ops)
         # weights = (bs,n_ops), aug_loss = (batch,keep_lens,n_ops)
         aug_loss = [w.matmul(feat) for w, feat in zip(weights, aug_loss)] #[(keep_lens)]
         aug_loss = torch.stack([len_w.matmul(feat) for len_w,feat in zip(keeplen_ws,aug_loss)], dim=0) #[(1)]
         #print('Loss mix aug_loss: ',aug_loss.shape,aug_loss)
         aug_loss = aug_loss.mean()
-        aug_logits = aug_logits.reshape(batch, n_ops,keep_lens,-1).mean(dim=(1,2))
+        aug_logits = aug_logits.reshape(batch, keep_lens, n_ops,-1).mean(dim=(1,2))
     else:
         batch, n_param, n_hidden = mixed_features.shape
         weights = aug_weights[0]
@@ -402,6 +425,9 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
         mix_feature = True
         mix_func = embed_mix
         print('Embed mix type')
+    elif mix_type=='output':
+        mix_func = output_mix
+        print('Output mix type')
     elif mix_type=='loss':
         mix_func = loss_mix
         print('Loss mix type')

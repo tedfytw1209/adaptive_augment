@@ -709,7 +709,7 @@ class AdaAugkeep_TS(AdaAug):
             else:
                 return ba_features, [out_w, mag_subset]
         else:
-            # batch, n_ops,keep_lens, n_hidden ###11/08 bugfix=> first len then n_ops
+            # batch, keep_lens, n_ops, n_hidden ###11/08 bugfix=> first len then n_ops
             ### ba_features = a_features.reshape(len(images), n_ops_sub, self.adapt_len, -1).permute(0,2,1,3)
             ba_features = a_features.reshape(len(images), self.adapt_len, n_ops_sub, -1)
             #print

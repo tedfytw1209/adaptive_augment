@@ -567,7 +567,12 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 utils.save_model(self.best_h, os.path.join(dir_path,h_name))
             else:
                 print('Debuging: not save at', self.config['save'])
-        
+        #tmp augment losses
+        if args.mix_type=='loss':
+            augment_loss_dic = {}
+            for aug_idx in range(self.adaaug.n_ops):
+                print(aug_idx)
+        #wandb update
         step_dic.update(test_dic)
         step_dic.update(train_dic)
         step_dic.update(valid_dic)

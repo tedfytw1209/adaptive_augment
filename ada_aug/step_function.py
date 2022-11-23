@@ -292,8 +292,8 @@ def embed_mix(gf_model,mixed_features,aug_weights,adv_criterion,target_trsearch,
     return aug_loss, aug_logits
 
 def output_mix(gf_model,mixed_features,aug_weights,adv_criterion,target_trsearch,multilabel):
+    # batch, n_ops(sub), n_hidden
     print(mixed_features.shape)
-    aug_logits = gf_model.classify(mixed_features)
     # mixed_features=(batch, n_ops,keep_lens, n_hidden) or (batch, keep_lens, n_hidden) or (batch, n_ops, n_hidden)
     if len(aug_weights[1])==3: # batch, keep_lens, n_ops, n_hidden
         batch, n_ops,keep_lens, n_hidden = mixed_features.shape

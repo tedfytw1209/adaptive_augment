@@ -112,7 +112,7 @@ parser.add_argument('--class_dist', type=str, default='', help='class distance l
 parser.add_argument('--lambda_dist', type=float, default=1.0, help="class distance weight")
 parser.add_argument('--class_sim', action='store_true', default=False, help='class distance use similar or not')
 parser.add_argument('--noaug_reg', type=str, default='', help='add regular for noaugment ',
-        choices=['creg','wreg','cwreg','pwreg','cpwreg',''])
+        choices=['reg','creg','wreg','cwreg','pwreg','cpwreg',''])
 parser.add_argument('--noaug_add', type=str, default='', help='add regular for noaugment ',
         choices=['cadd','add','coadd',''])
 parser.add_argument('--noaug_target', type=str, default='se', help='add regular for noaugment target difference',
@@ -515,7 +515,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             if 'embed' in args.class_dist:
                 select_embed = select_embed_source(args.output_source,table_dic,valid_table,search_table)
                 self.class_criterion.update_embed(select_embed)
-            if self.noaug_add:
+            if args.noaug_add=='coadd':
                 class_outw = torch.from_numpy(self.class_criterion.classweight_dist)
                 print(f'Noaug add method {args.noaug_add} weights: ',class_outw)
                 assert class_outw.mean() <= 1.0

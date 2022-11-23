@@ -380,7 +380,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     noaug_criterion = nn.CrossEntropyLoss(reduction='none').cuda()
     #noaug_criterion_w = nn.BCELoss(reduction='none').cuda()
     noaug_criterion_w = nn.MSELoss(reduction='none').cuda()
-    noaug_lossw = torch.tensor(1)
+    noaug_lossw = torch.ones(n_class).cuda() * (1.0 - train_perfrom) #first reg
     noaug_target = ''
     if noaug_reg in ['creg','cwreg','cpwreg']:
         print('Using NOAUG regularation ',noaug_reg)
@@ -389,8 +389,9 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
         print('NOAUG regularation class weights',noaug_lossw)
     elif noaug_reg:
         print('Using NOAUG regularation ',noaug_reg)
+        print(noaug_lossw)
         use_noaug_reg = True
-    if noaug_reg=='creg':
+    if noaug_reg=='creg' or noaug_reg=='reg':
         noaug_target = 'p'
     elif noaug_reg=='cwreg':
         noaug_target = 'w'
@@ -615,7 +616,8 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                         tmp_loss = (lambda_noaug * noaug_samplew * noaug_criterion(aug_weight,noaug_w_target)).mean()
                         noaug_loss += tmp_loss
                         #print('prob loss: ',tmp_loss)
-                    noaug_reg_sum += noaug_loss.detach().mean().item()
+                    if torch.is_tensor(noaug_loss):
+                        noaug_reg_sum += noaug_loss.detach().mean().item()
                     #print('noaug regular sum: ',noaug_reg_sum)
                 else:
                     noaug_loss = 0

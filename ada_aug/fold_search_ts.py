@@ -587,9 +587,9 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                     augment_loss_dic[f'{aug_name}_c{class_idx}_loss'] = table_dic['class_aug_loss'][class_idx,aug_idx]
                     if class_min_loss[class_idx]>table_dic['class_aug_loss'][class_idx,aug_idx]:
                         class_min_loss[class_idx] = table_dic['class_aug_loss'][class_idx,aug_idx]
-            augment_loss_dic['similar_all_loss'] = rel_min_loss / table_dic['aug_loss'][0]
+            augment_loss_dic['similar_all_loss'] = rel_min_loss / torch.clamp(table_dic['aug_loss'][0],min=1e-9)
             for class_idx in range(self.n_class):
-                augment_loss_dic[f'min_c{class_idx}_loss'] = class_min_loss[class_idx] / table_dic['class_aug_loss'][class_idx,0]
+                augment_loss_dic[f'min_c{class_idx}_loss'] = class_min_loss[class_idx] / torch.clamp(table_dic['class_aug_loss'][class_idx,0],min=1e-9)
             step_dic.update(augment_loss_dic)
         #wandb update
         step_dic.update(test_dic)

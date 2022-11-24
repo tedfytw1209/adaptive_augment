@@ -295,7 +295,7 @@ def output_mix(gf_model,mixed_features,aug_weights,adv_criterion,target_trsearch
     # batch, n_ops(sub), n_hidden
     print(mixed_features.shape)
     # mixed_features=(batch, keep_lens, n_ops, n_hidden) or (batch, keep_lens, n_hidden) or (batch, n_ops, n_hidden)
-    if len(aug_weights[1])==3: # batch, keep_lens, n_ops, n_hidden
+    if len(aug_weights[1].shape)==3: # batch, keep_lens, n_ops, n_hidden
         batch, keep_lens,n_ops, n_hidden = mixed_features.shape
         weights, keeplen_ws = aug_weights[0], aug_weights[2]
         mixed_features = mixed_features.reshape(batch*n_ops*keep_lens,n_hidden)
@@ -322,7 +322,7 @@ def embed_diff(gf_model,mixed_features,aug_weights,adv_criterion,target_trsearch
 def loss_mix(gf_model,mixed_features,aug_weights,adv_criterion,target_trsearch,multilabel):
     # mixed_features=(batch, keep_lens, n_ops, n_hidden) or (batch, keep_lens, n_hidden) or (batch, n_ops, n_hidden)
     target_trsearch = torch.unsqueeze(target_trsearch,dim=1) #(bs,1) !!!tmp not for multilabel
-    if len(aug_weights[1])==3: #(batch, keep_lens, n_ops, n_hidden)
+    if len(aug_weights[1].shape)==3: #(batch, keep_lens, n_ops, n_hidden)
         batch, keep_lens,n_ops, n_hidden = mixed_features.shape
         weights, keeplen_ws = aug_weights[0], aug_weights[2]
         target_trsearch = target_trsearch.expand(-1,n_ops*keep_lens).reshape(batch*n_ops*keep_lens)
@@ -559,10 +559,12 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                             policy_y = target_trsearch.cuda().float()
                     mixed_features, aug_weights = adaaug(input_trsearch, seq_len, mode='explore',mix_feature=diff_mix_feature,y=policy_y,update_w=diff_update_w)
                     aug_loss, aug_logits, each_aug_loss = mix_func(gf_model,mixed_features,aug_weights,adv_criterion,target_trsearch,multilabel)
-                    if len(aug_logits)==4:
+                    print('aug_logits shape ',aug_logits.shape)
+                    if len(aug_logits.shape)==4:
                         aug_logits = aug_logits.mean(dim=(1,2))
-                    elif len(aug_logits)==3:
+                    elif len(aug_logits.shape)==3:
                         aug_logits = aug_logits.mean(dim=1)
+                    print('aug_logits shape ',aug_logits.shape)
                     ori_loss = cuc_loss(origin_logits,target_trsearch,adv_criterion,multilabel).mean().detach() #!to assert loss mean reduce
                     aug_diff_loss += aug_loss.detach().mean().item()
                     ori_diff_loss += ori_loss.detach().mean().item()
@@ -644,17 +646,21 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 #ori_loss = ori_loss.mean() #!to assert loss mean reduce
                 #output pred
                 if mix_type=='loss': #tmp for visualize
-                    if len(logits_search)==4:
+                    if len(logits_search.shape)==4:
                         logits_search_avg = logits_search.mean(dim=(1,2))
                     else:
                         logits_search_avg = logits_search.mean(dim=1)
                     soft_out = softmax_m(logits_search_avg).detach().cpu() #(bs,n_class) for embed or output mix
                     soft_all = softmax_m(logits_search.reshape(-1,n_class)).detach().cpu().reshape(*logits_search.shape) #(bs,keep_len,n_ops)
+                    origin_embed_out = origin_embed.detach().cpu()
+                    each_aug_loss = each_aug_loss.detach().cpu()
+                    print('soft all ',soft_all.shape)
+                    print('each_aug_loss ',each_aug_loss.shape)
                     for i,t in enumerate(target_search.data.view(-1)):
                         sea_output_matrix[t.long()] += soft_out[i]
                         sea_embed_matrix[t.long(),:] += origin_embed_out[i] #!!! 11/14 add, use origin
                         sea_embed_count[t.long(),0] += 1
-                        for aug_idx in range(aug_output_matrix.shape[0]):
+                        for aug_idx in range(n_ops):
                             aug_output_matrix[t.long(),aug_idx] += soft_all[i,aug_idx]
                             aug_loss_mat[aug_idx] += each_aug_loss[i,aug_idx]
                             aug_class_loss[t.long(),aug_idx] += each_aug_loss[i,aug_idx]
@@ -772,9 +778,12 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
         table_dic['aug_output'] = aug_output_matrix / torch.clamp(aug_output_matrix.sum(dim=-1,keepdim=True),min=1e-9)
         table_dic['aug_loss'] = aug_loss_mat / torch.sum(sea_embed_count.float())
         table_dic['class_aug_loss'] = aug_class_loss / torch.clamp(sea_embed_count.float(),min=1e-9)
-        print('aug_output: ',table_dic['aug_output'])
-        print('aug_loss: ',table_dic['aug_loss'])
-        print('class_aug_loss: ',table_dic['class_aug_loss'])
+        print('aug_output: ',table_dic['aug_output'].shape) #tmp
+        print('aug_loss: ',table_dic['aug_loss'].shape) #tmp
+        print('class_aug_loss: ',table_dic['class_aug_loss'].shape) #tmp
+        print('aug_output: ',table_dic['aug_output']) #tmp
+        print('aug_loss: ',table_dic['aug_loss']) #tmp
+        print('class_aug_loss: ',table_dic['class_aug_loss']) #tmp
     #wandb dic
     out_dic = {}
     out_dic['train_loss'] = objs.avg

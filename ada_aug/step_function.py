@@ -559,6 +559,10 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                             policy_y = target_trsearch.cuda().float()
                     mixed_features, aug_weights = adaaug(input_trsearch, seq_len, mode='explore',mix_feature=diff_mix_feature,y=policy_y,update_w=diff_update_w)
                     aug_loss, aug_logits, each_aug_loss = mix_func(gf_model,mixed_features,aug_weights,adv_criterion,target_trsearch,multilabel)
+                    if len(aug_logits)==4:
+                        aug_logits = aug_logits.mean(dim=(1,2))
+                    elif len(aug_logits)==3:
+                        aug_logits = aug_logits.mean(dim=1)
                     ori_loss = cuc_loss(origin_logits,target_trsearch,adv_criterion,multilabel).mean().detach() #!to assert loss mean reduce
                     aug_diff_loss += aug_loss.detach().mean().item()
                     ori_diff_loss += ori_loss.detach().mean().item()

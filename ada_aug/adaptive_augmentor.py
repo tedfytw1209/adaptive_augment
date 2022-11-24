@@ -522,7 +522,9 @@ class AdaAug_TS(AdaAug):
     
     def update_alpha(self,class_acc):
         self.alpha = torch.tensor(class_acc).view(1,-1).cuda()
-        self.multi_tensor = (1.0 - self.max_noaug_reduce) * class_acc * torch.ones(1,self.n_ops).float()
+        #tmp disable
+        if self.max_noaug_reduce > 0:
+            self.multi_tensor = (1.0 - self.max_noaug_reduce) * class_acc * torch.ones(1,self.n_ops).float()
         print('new alpha for noaug cadd: ',self.alpha)
         print('new reduce magnitude for cadd: ',self.multi_tensor)
 

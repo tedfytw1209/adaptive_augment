@@ -571,7 +571,11 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         if args.mix_type=='loss':
             augment_loss_dic = {}
             for aug_idx in range(self.adaaug.n_ops):
-                print(aug_idx)
+                aug_name = self.adaaug.ops_names[aug_idx]
+                augment_loss_dic[f'{aug_name}_all_loss'] = table_dic['aug_loss'][aug_idx]
+                for class_idx in range(self.n_class):
+                    augment_loss_dic[f'{aug_name}_c{class_idx}_loss'] = table_dic['class_aug_loss'][class_idx,aug_idx]
+            step_dic.update(augment_loss_dic)
         #wandb update
         step_dic.update(test_dic)
         step_dic.update(train_dic)
@@ -599,6 +603,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 tables_dic['search_output'] = plot_conf_wandb(self.result_table_dic['search_output'],title='search_output')
                 tables_dic['valid_output'] = plot_conf_wandb(self.result_table_dic['valid_output'],title='valid_output')
                 tables_dic['test_output'] = plot_conf_wandb(self.result_table_dic['test_output'],title='test_output')
+                tables_dic['aug_output'] = plot_conf_wandb(self.result_table_dic['aug_output'],title='aug_output')
                 wandb.log(tables_dic)
             self.adaaug.save_history(self.class2label)
             figure = self.adaaug.plot_history()

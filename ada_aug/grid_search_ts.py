@@ -662,11 +662,11 @@ def main():
     #hparams['search_freq'] = tune.grid_search([5,10]) #tune.grid_search(hparams['search_freq'])
     #hparams['search_round'] = tune.grid_search([4,8,16]) #tune.grid_search(hparams['search_round'])
     hparams['proj_learning_rate'] = tune.grid_search([1e-12,0.00003,0.0001,0.0003,0.001,0.003,0.01])
-    hparams['k_ops'] = tune.grid_search([1,2])
+    #hparams['k_ops'] = tune.grid_search([1,2])
     #hparams['lambda_aug'] = tune.quniform(hparams['lambda_aug'][0],hparams['lambda_aug'][1],0.01)
     #hparams['lambda_sim'] = tune.quniform(hparams['lambda_sim'][0],hparams['lambda_sim'][1],0.01)
     #hparams['keep_thres'] = hparams['keep_thres'] #tune.grid_search(hparams['keep_thres'])
-    keep_lens = [[n] for n in [25,50,100,200,400,800]]
+    keep_lens = [[n] for n in [50,100,400]]
     hparams['keep_len'] = tune.grid_search(keep_lens) #tune.grid_search(hparams['keep_len'])
     #hparams['loss_type'] = tune.grid_search(['minus','minusdiff','relative','relativesample','relativediff'])
     #hparams['sear_temp'] = tune.grid_search([1,3]) #tune.grid_search(hparams['search_round'])

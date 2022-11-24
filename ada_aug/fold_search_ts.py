@@ -115,6 +115,8 @@ parser.add_argument('--noaug_reg', type=str, default='', help='add regular for n
         choices=['reg','creg','wreg','cwreg','pwreg','cpwreg',''])
 parser.add_argument('--noaug_add', type=str, default='', help='add regular for noaugment ',
         choices=['cadd','add','coadd',''])
+parser.add_argument('--noaug_max', type=float, default=0.5, help='max noaugment regular')
+parser.add_argument('--reduce_mag', type=float, default=0, help='max reduce magnitude (default 0 is no reduce mag')
 parser.add_argument('--noaug_target', type=str, default='se', help='add regular for noaugment target difference',
         choices=['se','s','e'])
 parser.add_argument('--output_source', type=str, default='', help='class output source',
@@ -422,6 +424,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 search_temp=args.sear_temp,
                 sub_mix=sub_mix,
                 noaug_add=self.noaug_add,
+                max_noaug_add=args.noaug_max,
+                max_noaug_reduce=args.reduce_mag,
                 transfrom_dic=trans_config,
                 preprocessors=preprocessors)
         else:
@@ -440,6 +444,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 search_temp=args.sear_temp,
                 sub_mix=sub_mix,
                 noaug_add=self.noaug_add,
+                max_noaug_add=args.noaug_max,
+                max_noaug_reduce=args.reduce_mag,
                 transfrom_dic=trans_config,
                 preprocessors=preprocessors)
         #to self
@@ -570,11 +576,20 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         #tmp augment losses
         if args.mix_type=='loss':
             augment_loss_dic = {}
+            rel_min_loss = 1e6
+            class_min_loss = [1e6 for ci in range(self.n_class)]
             for aug_idx in range(self.adaaug.n_ops):
                 aug_name = self.adaaug.ops_names[aug_idx]
                 augment_loss_dic[f'{aug_name}_all_loss'] = table_dic['aug_loss'][aug_idx]
+                if rel_min_loss>table_dic['aug_loss'][aug_idx]:
+                    rel_min_loss = table_dic['aug_loss'][aug_idx]
                 for class_idx in range(self.n_class):
                     augment_loss_dic[f'{aug_name}_c{class_idx}_loss'] = table_dic['class_aug_loss'][class_idx,aug_idx]
+                    if class_min_loss[class_idx]>table_dic['class_aug_loss'][class_idx,aug_idx]:
+                        class_min_loss[class_idx] = table_dic['class_aug_loss'][class_idx,aug_idx]
+            augment_loss_dic['similar_all_loss'] = rel_min_loss / table_dic['aug_loss'][0]
+            for class_idx in range(self.n_class):
+                augment_loss_dic[f'min_c{class_idx}_loss'] = class_min_loss[class_idx] / table_dic['class_aug_loss'][class_idx,0]
             step_dic.update(augment_loss_dic)
         #wandb update
         step_dic.update(test_dic)

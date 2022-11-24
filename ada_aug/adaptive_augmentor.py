@@ -243,7 +243,7 @@ class AdaAug(nn.Module):
 class AdaAug_TS(AdaAug):
     def __init__(self, after_transforms, n_class, gf_model, h_model, save_dir=None, visualize=False,
                     config=default_config,keepaug_config=default_config, multilabel=False, augselect='',class_adaptive=False,
-                    sub_mix=1.0,search_temp=1.0,noaug_add=False,transfrom_dic={},preprocessors=[]):
+                    sub_mix=1.0,search_temp=1.0,noaug_add=False,transfrom_dic={},preprocessors=[],max_noaug_add=0.5,max_noaug_reduce=0):
         super(AdaAug_TS, self).__init__(after_transforms, n_class, gf_model, h_model, save_dir, config)
         #other already define in AdaAug
         self.ops_names,self.aug_dict = select_augments(augselect)
@@ -265,8 +265,13 @@ class AdaAug_TS(AdaAug):
         self.visualize = visualize
         self.noaug_add = noaug_add
         self.alpha = torch.tensor([0.5]).view(1,-1).cuda()
-        self.noaug_max = 0.5
+        self.noaug_max = max_noaug_add
+        self.max_noaug_reduce = max_noaug_reduce
         self.noaug_tensor = self.noaug_max * F.one_hot(torch.tensor([0]), num_classes=self.n_ops).float()
+        self.magreduce_tensor = self.max_noaug_reduce * torch.ones(1,self.n_ops).float()
+        if self.max_noaug_reduce>0:
+            self.delta = self.delta * (1.0 - self.max_noaug_reduce)
+            print('Reduce delta to ',self.delta)
         self.sub_mix = sub_mix
         self.search_temp = search_temp
         self.preprocessors=preprocessors
@@ -291,14 +296,21 @@ class AdaAug_TS(AdaAug):
             #print('Using random augments when warm up')
             magnitudes = torch.ones(bs,self.n_ops) * 0.5 #!!!tmp change to mimic randaug
             weights = torch.ones(bs,self.n_ops) / self.n_ops
-            #print(magnitudes.mean())
-            #print(weights.mean())
         if self.noaug_add: #add noaug reweights
             if self.class_adaptive: #alpha: (1,n_class), y: (batch_szie,n_class)=>(batch_size,1) one hotted
                 batch_alpha = torch.sum(self.alpha * y,dim=-1,keepdim=True) / torch.sum(y,dim=-1,keepdim=True)
             else:
                 batch_alpha = self.alpha.view(-1)
+            print('batch_alpha: ',batch_alpha)
             weights = batch_alpha * weights + (1.0-batch_alpha) * (self.noaug_tensor.cuda() + weights/2)
+        if self.max_noaug_reduce > 0:
+            if self.class_adaptive: #alpha: (1,n_class), y: (batch_szie,n_class)=>(batch_size,1) one hotted
+                magnitude_multi = (1.0 - (torch.sum(self.magreduce_tensor * y,dim=-1,keepdim=True) / torch.sum(y,dim=-1,keepdim=True)))
+            else:
+                magnitude_multi = (1.0 - self.magreduce_tensor)
+            print('magnitude_multi: ',magnitude_multi)
+            magnitudes = magnitudes * magnitude_multi
+        
         return magnitudes, weights
 
     def add_history(self, images, seq_len, targets,y=None):
@@ -510,12 +522,14 @@ class AdaAug_TS(AdaAug):
     
     def update_alpha(self,class_acc):
         self.alpha = torch.tensor(class_acc).view(1,-1).cuda()
+        self.magreduce_tensor = self.max_noaug_reduce * class_acc * torch.ones(1,self.n_ops).float()
         print('new alpha for noaug cadd: ',self.alpha)
+        print('new reduce magnitude for cadd: ',self.magreduce_tensor)
 
 class AdaAugkeep_TS(AdaAug):
     def __init__(self, after_transforms, n_class, gf_model, h_model, save_dir=None, visualize=False,
                     config=default_config,keepaug_config=default_config, multilabel=False, augselect='',class_adaptive=False,ind_mix=False,
-                    sub_mix=1.0,search_temp=1.0,noaug_add=False,transfrom_dic={},preprocessors=[]):
+                    sub_mix=1.0,search_temp=1.0,noaug_add=False,transfrom_dic={},preprocessors=[],max_noaug_add=0.5,max_noaug_reduce=0):
         super(AdaAugkeep_TS, self).__init__(after_transforms, n_class, gf_model, h_model, save_dir, config)
         #other already define in AdaAug
         self.ops_names,self.aug_dict = select_augments(augselect)
@@ -574,9 +588,14 @@ class AdaAugkeep_TS(AdaAug):
         self.class_adaptive = class_adaptive
         self.visualize = visualize
         self.noaug_add = noaug_add
-        self.alpha = 0.5
-        self.noaug_max = 0.5
+        self.alpha = torch.tensor([0.5]).view(1,-1).cuda()
+        self.noaug_max = max_noaug_add
+        self.max_noaug_reduce = max_noaug_reduce
         self.noaug_tensor = self.noaug_max * F.one_hot(torch.tensor([0]), num_classes=self.n_ops).float()
+        self.magreduce_tensor = self.max_noaug_reduce * torch.ones(1,self.n_ops).float()
+        if self.max_noaug_reduce>0:
+            self.delta = self.delta * (1.0 - self.max_noaug_reduce)
+            print('Reduce delta to ',self.delta)
         self.sub_mix = sub_mix
         self.search_temp = search_temp
         self.preprocessors=preprocessors
@@ -612,7 +631,16 @@ class AdaAugkeep_TS(AdaAug):
                 batch_alpha = torch.sum(self.alpha * y,dim=-1,keepdim=True) / torch.sum(y,dim=-1,keepdim=True)
             else:
                 batch_alpha = self.alpha.view(-1)
+            print('batch_alpha: ',batch_alpha)
             weights = batch_alpha * weights + (1.0-batch_alpha) * (self.noaug_tensor.cuda() + weights/2)
+        if self.max_noaug_reduce > 0:
+            if self.class_adaptive: #alpha: (1,n_class), y: (batch_szie,n_class)=>(batch_size,1) one hotted
+                magnitude_multi = (1.0 - (torch.sum(self.magreduce_tensor * y,dim=-1,keepdim=True) / torch.sum(y,dim=-1,keepdim=True)))
+            else:
+                magnitude_multi = (1.0 - self.magreduce_tensor)
+            print('magnitude_multi: ',magnitude_multi)
+            magnitudes = magnitudes * magnitude_multi
+
         return magnitudes, weights, keeplen_ws, keep_thres
 
     def add_history(self, images, seq_len, targets,y=None):

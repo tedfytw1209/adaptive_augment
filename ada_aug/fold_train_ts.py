@@ -106,7 +106,9 @@ parser.add_argument('--feature_mask', type=str, default='', help='add regular fo
 parser.add_argument('--noaug_reg', type=str, default='', help='add regular for noaugment ',
         choices=['creg','wreg','cwreg','pwreg','cpwreg',''])
 parser.add_argument('--noaug_add', type=str, default='', help='add regular for noaugment ',
-        choices=['cadd','add',''])
+        choices=['cadd','add','coadd',''])
+parser.add_argument('--noaug_max', type=float, default=0.5, help='max noaugment regular')
+parser.add_argument('--reduce_mag', type=float, default=0, help='max reduce magnitude (default 0 is no reduce mag')
 parser.add_argument('--balance_loss', type=str, default='', help="loss type for model and policy training to acheive class balance")
 #info keep
 parser.add_argument('--keep_aug', action='store_true', default=False, help='info keep augment')
@@ -315,6 +317,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 augselect=args.augselect,
                 class_adaptive=self.class_noaug,
                 noaug_add=self.noaug_add,
+                max_noaug_add=args.noaug_max,
+                max_noaug_reduce=args.reduce_mag,
                 transfrom_dic=trans_config,
                 preprocessors=preprocessors)
         else:
@@ -331,6 +335,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 augselect=args.augselect,
                 class_adaptive=self.class_noaug,
                 noaug_add=self.noaug_add,
+                max_noaug_add=args.noaug_max,
+                max_noaug_reduce=args.reduce_mag,
                 transfrom_dic=trans_config,
                 preprocessors=preprocessors)
         #to self

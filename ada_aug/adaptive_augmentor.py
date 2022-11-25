@@ -268,7 +268,7 @@ class AdaAug_TS(AdaAug):
         self.noaug_max = max_noaug_add
         self.max_noaug_reduce = max_noaug_reduce 
         self.noaug_tensor = self.noaug_max * F.one_hot(torch.tensor([0]), num_classes=self.n_ops).float()
-        self.multi_tensor = (1.0 - self.max_noaug_reduce) * torch.ones(1,self.n_ops).float() #higher low noaug regulate
+        self.multi_tensor = (1.0 - self.max_noaug_reduce) * torch.ones(1,self.n_class).float() #higher low noaug regulate
         if self.max_noaug_reduce>0:
             self.delta = self.delta * (1.0 - self.max_noaug_reduce)
             print('Reduce delta to ',self.delta)
@@ -304,7 +304,7 @@ class AdaAug_TS(AdaAug):
             #print('batch_alpha: ',batch_alpha)
             weights = batch_alpha * weights + (1.0-batch_alpha) * (self.noaug_tensor.cuda() + weights/2)
         if self.max_noaug_reduce > 0:
-            if self.class_adaptive: #alpha: (1,n_class), y: (batch_szie,n_class)=>(batch_size,1) one hotted
+            if self.class_adaptive: #multi_tensor: (1,n_class), y: (batch_szie,n_class)=>(batch_size,1) one hotted
                 magnitude_multi = (torch.sum(self.multi_tensor * y,dim=-1,keepdim=True) / torch.sum(y,dim=-1,keepdim=True))
             else:
                 magnitude_multi = self.multi_tensor
@@ -524,7 +524,8 @@ class AdaAug_TS(AdaAug):
         self.alpha = torch.tensor(class_acc).view(1,-1).cuda()
         #tmp disable
         if self.max_noaug_reduce > 0:
-            self.multi_tensor = (1.0 - self.max_noaug_reduce) * class_acc * torch.ones(1,self.n_ops).float()
+            self.multi_tensor = (1.0 - self.max_noaug_reduce) * class_acc * torch.ones(1,self.n_class).float()
+
         print('new alpha for noaug cadd: ',self.alpha)
         print('new reduce magnitude for cadd: ',self.multi_tensor)
 

@@ -301,16 +301,18 @@ class AdaAug_TS(AdaAug):
                 batch_alpha = torch.sum(self.alpha * y,dim=-1,keepdim=True) / torch.sum(y,dim=-1,keepdim=True)
             else:
                 batch_alpha = self.alpha.view(-1)
-            #print('batch_alpha: ',batch_alpha)
+            print('batch_alpha: ',batch_alpha)
             weights = batch_alpha * weights + (1.0-batch_alpha) * \
                 (self.noaug_tensor.cuda() + weights * (1.0-self.noaug_max))
+            print('after weight: ',weights)
         if self.max_noaug_reduce > 0:
             if self.class_adaptive: #multi_tensor: (1,n_class), y: (batch_szie,n_class)=>(batch_size,1) one hotted
                 magnitude_multi = (torch.sum(self.multi_tensor * y,dim=-1,keepdim=True) / torch.sum(y,dim=-1,keepdim=True))
             else:
                 magnitude_multi = self.multi_tensor
-            #print('magnitude_multi: ',magnitude_multi)
+            print('magnitude_multi: ',magnitude_multi)
             magnitudes = magnitudes * magnitude_multi
+            print('after mag: ',magnitudes)
         
         return magnitudes, weights
 

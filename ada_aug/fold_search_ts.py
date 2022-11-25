@@ -26,7 +26,7 @@ from non_saturating_loss import NonSaturatingLoss,Wasserstein_loss
 from class_balanced_loss import ClassBalLoss,ClassDiffLoss,ClassDistLoss,make_class_balance_count,make_class_weights,make_loss,make_class_weights_maxrel \
     ,make_class_weights_samples
 import wandb
-from utils import plot_conf_wandb, select_output_source, select_embed_source
+from utils import plot_conf_wandb, select_output_source, select_embed_source, select_perfrom_source
 import copy
 import ray
 import ray.tune as tune
@@ -492,12 +492,6 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         train_acc, train_obj, train_dic, table_dic = search_train(args,self.train_queue, self.search_queue, self.tr_search_queue, self.gf_model, self.adaaug,
             self.criterion, self.gf_optimizer,self.scheduler, args.grad_clip, self.h_optimizer, self._iteration, args.search_freq, 
             search_round=args.search_round,search_repeat=self.search_repeat,multilabel=self.multilabel,n_class=self.n_class,map_select=self.mapselect, **diff_dic)
-        if self.noaug_add:
-            class_acc = train_acc / 100.0
-            if self.class_noaug and not self.use_class_w: #use train perfromance as noaug reg
-                class_acc = [train_dic[f'train_{ptype}_c{i}'] / 100.0 for i in range(self.n_class)]
-            self.adaaug.update_alpha(class_acc)
-        self.pre_train_acc = train_acc / 100.0
         # validation
         valid_acc, valid_obj,valid_dic,valid_table = search_infer(self.valid_queue, self.gf_model, self.criterion, 
             multilabel=self.multilabel,n_class=self.n_class,mode='valid',map_select=self.mapselect)
@@ -508,6 +502,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             print('Evaluate search data:')
             print(search_dic)
         else:
+            search_dic={}
             search_table = {}
         #update runtime weights
         if args.policy_loss=='classdiff':
@@ -521,11 +516,18 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             if 'embed' in args.class_dist:
                 select_embed = select_embed_source(args.output_source,table_dic,valid_table,search_table)
                 self.class_criterion.update_embed(select_embed)
-            if args.noaug_add=='coadd':
+            if args.noaug_add=='coadd': #cadd use output
                 class_outw = torch.from_numpy(self.class_criterion.classweight_dist)
                 print(f'Noaug add method {args.noaug_add} weights: ',class_outw)
                 assert class_outw.mean() <= 1.0
                 self.adaaug.update_alpha(class_outw)
+        if self.noaug_add and not self.use_class_w: #cadd use perfrom
+            '''class_acc = train_acc / 100.0
+            if self.class_noaug: #use train perfromance as noaug reg
+                class_acc = [train_dic[f'train_{ptype}_c{i}'] / 100.0 for i in range(self.n_class)]'''
+            class_acc = select_perfrom_source(args.output_source,train_dic,valid_dic,search_dic,ptype,self.n_class,self.class_noaug)
+            self.adaaug.update_alpha(class_acc)
+        self.pre_train_acc = train_acc / 100.0
         #test
         test_acc, test_obj, test_dic, test_table  = search_infer(self.test_queue, self.gf_model, self.criterion, 
             multilabel=self.multilabel,n_class=self.n_class,mode='test',map_select=self.mapselect)

@@ -18,6 +18,26 @@ from sklearn.utils.class_weight import compute_sample_weight
 
 sns.set()
 
+def select_perfrom_source(output_source,train_table,valid_table,search_table,ptype,n_class,class_noaug=False):
+    if output_source=='':
+        print('No specify output source, use train')
+        output_source = 'train'
+    mode = output_source
+    if output_source=='allsearch':
+        tmp_dic = search_table
+        mode = 'search'
+    else:
+        tmp_dic = {}
+        tmp_dic.update(train_table)
+        tmp_dic.update(valid_table)
+    print('out source: ',output_source,'out dic keys: ',sorted(tmp_dic))
+    overall_acc = tmp_dic[f'{mode}_{ptype}_avg']
+    class_acc = overall_acc / 100.0
+    if class_noaug: #use train perfromance as noaug reg
+        class_acc = [tmp_dic[f'{mode}_{ptype}_c{i}'] / 100.0 for i in range(n_class)]
+    
+    return class_acc
+
 def select_output_source(output_source,train_table,valid_table,search_table):
     output = None
     out_key = '%s_output'

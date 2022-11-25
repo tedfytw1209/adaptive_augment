@@ -302,7 +302,8 @@ class AdaAug_TS(AdaAug):
             else:
                 batch_alpha = self.alpha.view(-1)
             #print('batch_alpha: ',batch_alpha)
-            weights = batch_alpha * weights + (1.0-batch_alpha) * (self.noaug_tensor.cuda() + weights/2)
+            weights = batch_alpha * weights + (1.0-batch_alpha) * \
+                (self.noaug_tensor.cuda() + weights * (1.0-self.noaug_max))
         if self.max_noaug_reduce > 0:
             if self.class_adaptive: #multi_tensor: (1,n_class), y: (batch_szie,n_class)=>(batch_size,1) one hotted
                 magnitude_multi = (torch.sum(self.multi_tensor * y,dim=-1,keepdim=True) / torch.sum(y,dim=-1,keepdim=True))

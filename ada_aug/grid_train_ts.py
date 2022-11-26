@@ -576,7 +576,7 @@ def main():
     h_model_dir = args.h_model_path
     h_model_dir = h_model_dir.strip('/').split('/')[-1][:16]
     #wandb
-    group_name = f'{Aug_type}_train{args.augselect}_{args.dataset}{args.labelgroup}_{args.model_name}_hmodel{h_model_dir}'
+    group_name = f'{Aug_type}_gridtrain{args.augselect}_{args.dataset}{args.labelgroup}_{args.model_name}_hmodel{h_model_dir}'
     if args.search_size>0: #reduce train
         reduce_train = 1.0 - args.search_size
         data_add = '_r' + str(round(reduce_train,3))
@@ -613,9 +613,9 @@ def main():
     #hparams['temperature'] = tune.grid_search([1,3])
     #hparams['diff_aug'] = tune.grid_search([True,False])
     #hparams['lambda_noaug'] = tune.grid_search([1,10,50])
-    hparams['noaug_add'] = tune.grid_search(['cadd','coadd','add'])
+    hparams['noaug_add'] = tune.grid_search(['cadd','coadd'])
     hparams['noaug_target'] = tune.grid_search(['s','e','se'])
-    hparams['noaug_max'] = tune.grid_search([0,0.1,0.3,0.5,0.7,0.9])
+    hparams['noaug_max'] = tune.grid_search([0,0.3,0.5,0.7,0.9])
     hparams['reduce_mag'] = tune.grid_search([0,0.2,0.4,0.6])
     hparams['output_source'] = tune.grid_search(['train','valid'])
     #hparams['feature_mask'] = tune.grid_search(['','select','classonly'])
@@ -624,7 +624,7 @@ def main():
     #wandb
     wandb_config = {
         #'config':FLAGS, 
-        'project':'AdaAug',
+        'project':'AdaAug_grid',
         'group':f'{now_str}_' + experiment_name,
         #'name':experiment_name,
         'dir':'./',

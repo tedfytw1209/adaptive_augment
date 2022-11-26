@@ -27,7 +27,7 @@ from class_balanced_loss import ClassBalLoss,ClassDiffLoss,ClassDistLoss,make_cl
     ,make_class_weights_samples
 import wandb
 import copy
-from utils import plot_conf_wandb
+from utils import plot_conf_wandb, select_output_source, select_embed_source, select_perfrom_source
 import ray
 import ray.tune as tune
 from ray.tune.integration.wandb import WandbTrainableMixin
@@ -306,8 +306,24 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         #noaug regular class dist
         if self.use_class_w:
             self.class_criterion = ClassDistLoss(distance_func='conf',loss_choose='conf'
-            ,similar=args.class_sim,lamda=args.lambda_dist,num_classes=n_class,use_loss=False,noaug_target=args.noaug_target)
+            ,similar=False,lamda=0,num_classes=n_class,use_loss=False,noaug_target=args.noaug_target)
             self.extra_losses.append(self.class_criterion)
+        #for grid search
+        grid_search_list = self.config.get('grid_target',[])
+        if len(grid_search_list)>0:
+            self.grid_search = True
+        else:
+            self.grid_search = False
+        self.not_save = self.config['not_save']
+        #folds
+        if self.grid_search:
+            add_dir = '_'.join([f'{target}-{self.config[target]}' for target in self.config.get('grid_target',[])])
+            add_dir = add_dir.replace(']','').replace('[','').replace(',','')
+        else:
+            add_dir = ''
+        dir_path = os.path.join(self.config['BASE_PATH'],self.config['save'],add_dir,f'fold{test_fold_idx}')
+        if not os.path.exists(dir_path):
+            os.makedirs(dir_path)
         #AdaAug / Keep
         after_transforms = self.train_queue.dataset.after_transforms
         adaaug_config = {'sampling': 'prob',
@@ -327,7 +343,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 n_class=n_class,
                 gf_model=self.gf_model,
                 h_model=self.h_model,
-                save_dir=os.path.join(self.config['BASE_PATH'],self.config['save'],f'fold{test_fold_idx}'),
+                save_dir=dir_path,
                 #visualize=args.visualize,
                 config=adaaug_config,
                 keepaug_config=keepaug_config,
@@ -345,7 +361,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 n_class=n_class,
                 gf_model=self.gf_model,
                 h_model=self.h_model,
-                save_dir=os.path.join(self.config['BASE_PATH'],self.config['save'],f'fold{test_fold_idx}'),
+                save_dir=dir_path,
                 #visualize=args.visualize,
                 config=adaaug_config,
                 keepaug_config=keepaug_config,
@@ -374,7 +390,10 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         self.pre_train_acc = 0.0
         self.result_table_dic = {}
         self.policy_apply = not args.randaug
+        self.class_dist = None
     def step(self):#use step replace _train
+        #args = self.config['args']
+        args = argparse.Namespace(**copy.deepcopy(self.config)) #for grid search
         if self._iteration==0:
             wandb.config.update(self.config)
         if self.multilabel:
@@ -386,8 +405,6 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             ptype = 'acc'
         print(f'Starting Ray ID {self.trial_id} Iteration: {self._iteration}')
         Curr_epoch = self.trained_epoch + self._iteration
-        #args = self.config['args']
-        args = argparse.Namespace(**copy.deepcopy(self.config)) #for grid search
         step_dic={'epoch':Curr_epoch}
         diff_dic = {'difficult_aug':self.diff_augment,'reweight':self.diff_reweight,'lambda_aug':args.lambda_aug, 'class_adaptive':args.class_adapt
                 ,'visualize':args.visualize,'teach_rew':self.teach_model,'policy_apply':self.policy_apply,'noaug_reg':args.noaug_reg}
@@ -415,9 +432,37 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         # validation
         valid_acc, valid_obj, _, _, valid_dic, valid_table = infer(self.valid_queue, self.task_model, self.criterion, multilabel=self.multilabel,
                 n_class=self.n_class,mode='valid',map_select=self.mapselect)
+        search_dic={}
+        search_table = {}
+        #update runtime weights
+        if 'c' in args.noaug_reg or args.noaug_add=='coadd':
+            select_output = select_output_source(args.output_source,train_table,valid_table,search_table)
+            self.class_criterion.update_classpair(select_output)
+            if args.noaug_add=='coadd': #cadd use output
+                class_outw = torch.from_numpy(self.class_criterion.classweight_dist)
+                print(f'Noaug add method {args.noaug_add} weights: ',class_outw)
+                assert class_outw.mean() <= 1.0
+                self.adaaug.update_alpha(class_outw)
+        if self.noaug_add and not self.use_class_w: #cadd use perfrom
+            class_acc = select_perfrom_source(args.output_source,train_dic,valid_dic,search_dic,ptype,self.n_class,self.class_noaug)
+            self.adaaug.update_alpha(class_acc)
+        self.pre_train_acc = train_acc / 100.0
         #test
         test_acc, test_obj, test_acc5, _,test_dic, test_table  = infer(self.test_queue, self.task_model, self.criterion, multilabel=self.multilabel,
                 n_class=self.n_class,mode='test',map_select=self.mapselect)
+        #fold idx fir prepare
+        if self.grid_search:
+            add_dir = '_'.join([f'{target}-{self.config[target]}' for target in self.config.get('grid_target',[])])
+            add_dir = add_dir.replace(']','').replace('[','').replace(',','')
+        else:
+            add_dir = ''
+        if self.test_fold_idx>=0:
+            dir_path = os.path.join(self.base_path,self.config['save'],add_dir,f'fold{self.test_fold_idx}')
+        else:
+            dir_path = os.path.join(self.base_path,self.config['save'],add_dir)
+        if not os.path.exists(dir_path):
+            os.makedirs(dir_path)
+        model_name = 'weights.pt'
         #val select 10/31 debug
         if args.valselect and valid_acc>self.best_val_acc:
             self.best_val_acc = valid_acc
@@ -431,7 +476,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             self.best_task = self.task_model
             if 'debug' not in self.config['save'] and not args.restore:
                 utils.save_ckpt(self.best_task, self.optimizer, self.scheduler, Curr_epoch,
-                    os.path.join(self.base_path,self.config['save'],f'fold{self.test_fold_idx}', 'weights.pt'))
+                    os.path.join(dir_path,model_name))
             else:
                 print('Debuging: not save at', self.config['save'])
         elif not args.valselect:
@@ -443,7 +488,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             self.result_table_dic.update(test_table)
             if 'debug' not in self.config['save'] and not args.restore:
                 utils.save_ckpt(self.best_task, self.optimizer, self.scheduler, Curr_epoch,
-                    os.path.join(self.base_path,self.config['save'],f'fold{self.test_fold_idx}', 'weights.pt'))
+                    os.path.join(dir_path,model_name))
             else:
                 print('Debuging: not save at', self.config['save'])
         step_dic.update(test_dic)
@@ -457,9 +502,9 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             #output pred
             if args.output_pred:
                 utils.save_pred(self.result_table_dic['valid_target'],self.result_table_dic['valid_predict'],
-                        os.path.join(self.base_path,self.config['save'],f'fold{self.test_fold_idx}', 'valid_prediction.csv'))
+                        os.path.join(dir_path, 'valid_prediction.csv'))
                 utils.save_pred(self.result_table_dic['test_target'],self.result_table_dic['test_predict'],
-                        os.path.join(self.base_path,self.config['save'],f'fold{self.test_fold_idx}', 'test_prediction.csv'))
+                        os.path.join(dir_path, 'test_prediction.csv'))
             #save&log
             wandb.log(step_dic)
             if args.output_visual:

@@ -615,7 +615,7 @@ def main():
     #hparams['lambda_noaug'] = tune.grid_search([1,10,50])
     hparams['noaug_add'] = tune.grid_search(['cadd','coadd'])
     hparams['noaug_target'] = tune.grid_search(['s','e','se'])
-    hparams['noaug_max'] = tune.grid_search([0,0.3,0.5,0.7,0.9])
+    hparams['noaug_max'] = tune.grid_search([0,0.5,0.9])
     hparams['reduce_mag'] = tune.grid_search([0,0.2,0.4,0.6])
     hparams['output_source'] = tune.grid_search(['train','valid'])
     #hparams['feature_mask'] = tune.grid_search(['','select','classonly'])

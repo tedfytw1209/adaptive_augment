@@ -13,26 +13,26 @@ import numpy as np
 from sklearn.metrics import average_precision_score,roc_auc_score
 import torch.nn as nn
 import torch.utils
-import torch.optim as optim
 
-from adaptive_augmentor import AdaAug_TS,AdaAugkeep_TS
+from adaptive_augmentor import AdaAug_TS, AdaAugkeep_TS
 from networks import get_model_tseries
 from networks.projection import Projection_TSeries
 from config import get_search_divider
 from dataset import get_ts_dataloaders, get_num_class, get_label_name, get_dataset_dimension,get_num_channel,Freq_dict,TimeS_dict
 from operation_tseries import TS_OPS_NAMES,ECG_OPS_NAMES,TS_ADD_NAMES,MAG_TEST_NAMES,NOMAG_TEST_NAMES
 from step_function import train,infer,search_train,search_infer
-from non_saturating_loss import NonSaturatingLoss,Wasserstein_loss
+from warmup_scheduler import GradualWarmupScheduler
+from config import get_warmup_config
 from class_balanced_loss import ClassBalLoss,ClassDiffLoss,ClassDistLoss,make_class_balance_count,make_class_weights,make_loss,make_class_weights_maxrel \
     ,make_class_weights_samples
 import wandb
-from utils import plot_conf_wandb, select_output_source, select_embed_source, select_perfrom_source
 import copy
+from utils import plot_conf_wandb, select_output_source, select_embed_source, select_perfrom_source
 import ray
 import ray.tune as tune
 from ray.tune.integration.wandb import WandbTrainableMixin
 
-#os.environ['WANDB_START_METHOD'] = 'thread'
+os.environ['WANDB_START_METHOD'] = 'thread'
 RAY_DIR = './ray_results'
 parser = argparse.ArgumentParser("ada_aug")
 parser.add_argument('--base_path', type=str, default='/mnt/data2/teddy/adaptive_augment/', help='base path of code')
@@ -40,7 +40,7 @@ parser.add_argument('--dataroot', type=str, default='./', help='location of the 
 parser.add_argument('--dataset', type=str, default='cifar10', help='name of dataset')
 parser.add_argument('--labelgroup', default='')
 parser.add_argument('--test_size', type=float, default=0.2, help='test size')
-parser.add_argument('--search_size', type=float, default=0.5, help='test size')
+parser.add_argument('--search_size', type=float, default=0, help='use search size to reduce train data')
 parser.add_argument('--batch_size', type=int, default=512, help='batch size')
 parser.add_argument('--learning_rate', type=float, default=0.400, help='init learning rate')
 parser.add_argument('--learning_rate_min', type=float, default=0.001, help='min learning rate')
@@ -61,9 +61,9 @@ parser.add_argument('--grad_clip', type=float, default=5, help='gradient clippin
 parser.add_argument('--multilabel', action='store_true', default=False, help='using multilabel default False')
 parser.add_argument('--train_portion', type=float, default=1, help='portion of training data')
 parser.add_argument('--default_split', action='store_true', help='use dataset deault split')
-parser.add_argument('--kfold', type=int, default=-1, help='use kfold cross validation')
+parser.add_argument('--kfold', type=int, default=0, help='use kfold cross validation')
 parser.add_argument('--not_save', action='store_true', default=False, help='not to save model')
-# policy
+#policy
 parser.add_argument('--proj_learning_rate', type=float, default=1e-2, help='learning rate for h')
 parser.add_argument('--proj_weight_decay', type=float, default=1e-3, help='weight decay for h]')
 parser.add_argument('--proj_nobias', type=str, default='', help='proj bias',
@@ -74,45 +74,38 @@ parser.add_argument('--use_cuda', type=bool, default=True, help="use cuda defaul
 parser.add_argument('--use_parallel', type=bool, default=False, help="use data parallel default False")
 parser.add_argument('--model_name', type=str, default='wresnet40_2', help="mode _name")
 parser.add_argument('--num_workers', type=int, default=0, help="num_workers")
+parser.add_argument('--search_dataset', type=str, default='./', help='search dataset name')
+parser.add_argument('--gf_model_name', type=str, default='./', help='gf_model name')
+parser.add_argument('--gf_model_path', type=str, default='./', help='gf_model path')
+parser.add_argument('--h_model_path', type=str, default='./', help='h_model path')
 parser.add_argument('--k_ops', type=int, default=1, help="number of augmentation applied during training")
+parser.add_argument('--delta', type=float, default=0.3, help="degree of perturbation in magnitude")
 parser.add_argument('--temperature', type=float, default=1.0, help="temperature")
-parser.add_argument('--sear_temp', type=float, default=1.0, help="temperature for search")
-parser.add_argument('--search_freq', type=float, default=1, help='exploration frequency')
-parser.add_argument('--search_round', type=int, default=1, help='exploration frequency') #search_round
-parser.add_argument('--n_proj_layer', type=int, default=0, help="number of hidden layer in augmentation policy projection")
+parser.add_argument('--n_proj_layer', type=int, default=0, help="number of additional hidden layer in augmentation policy projection")
 parser.add_argument('--n_proj_hidden', type=int, default=128, help="number of hidden units in augmentation policy projection layers")
-# select & search
-parser.add_argument('--valid_search', action='store_true', default=False, help='using valid set as search')
+#restore
+parser.add_argument('--restore_path', type=str, default='./', help='restore model path')
+parser.add_argument('--restore', action='store_true', default=False, help='restore model default False')
+#select&search
 parser.add_argument('--mapselect', action='store_true', default=False, help='use map select for multilabel')
 parser.add_argument('--valselect', action='store_true', default=False, help='use valid select')
+parser.add_argument('--notwarmup', action='store_true', default=False, help='use valid select')
+parser.add_argument('--randaug', action='store_true', default=False, help="mimic randaug training")
 parser.add_argument('--augselect', type=str, default='', help="augmentation selection")
-parser.add_argument('--policy_optim', type=str, default='adam', help="policy optim")
 parser.add_argument('--alpha', type=float, default=1.0, help="alpha adpat")
 parser.add_argument('--train_sampler', type=str, default='', help='for train sampler',
         choices=['weight','wmaxrel',''])
-parser.add_argument('--search_sampler', type=str, default='', help='for search sampler',
-        choices=['weight','wmaxrel',''])
-# diff loss mix
+#diff
 parser.add_argument('--diff_aug', action='store_true', default=False, help='use valid select')
-parser.add_argument('--same_train', action='store_true', default=False, help='use valid select')
-parser.add_argument('--mix_type', type=str, default='embed', help='add regular for noaugment ',
-        choices=['embed','loss','output'])
-parser.add_argument('--not_reweight', action='store_true', default=False, help='use diff reweight')
-parser.add_argument('--sim_rew', action='store_true', default=False, help='use sim reweight')
-parser.add_argument('--pwarmup', type=int, default=0, help="warmup epoch for policy")
-parser.add_argument('--lambda_aug', type=float, default=1.0, help="augment sample weight (difficult)")
-parser.add_argument('--lambda_sim', type=float, default=1.0, help="augment sample weight (simular)")
-parser.add_argument('--lambda_noaug', type=float, default=0, help="no augment regular weight")
-# class adapt
+parser.add_argument('--not_reweight', action='store_true', default=False, help='use valid select')
+parser.add_argument('--lambda_aug', type=float, default=1.0, help="augment sample weight")
+#class adapt
 parser.add_argument('--class_adapt', action='store_true', default=False, help='class adaptive')
 parser.add_argument('--class_embed', action='store_true', default=False, help='class embed') #tmp use
 parser.add_argument('--feature_mask', type=str, default='', help='add regular for noaugment ',
         choices=['dropout','select','average','classonly',''])
-parser.add_argument('--class_dist', type=str, default='', help='class distance loss')
-parser.add_argument('--lambda_dist', type=float, default=1.0, help="class distance weight")
-parser.add_argument('--class_sim', action='store_true', default=False, help='class distance use similar or not')
 parser.add_argument('--noaug_reg', type=str, default='', help='add regular for noaugment ',
-        choices=['reg','creg','wreg','cwreg','pwreg','cpwreg',''])
+        choices=['creg','wreg','cwreg','pwreg','cpwreg',''])
 parser.add_argument('--noaug_add', type=str, default='', help='add regular for noaugment ',
         choices=['cadd','add','coadd',''])
 parser.add_argument('--noaug_max', type=float, default=0.5, help='max noaugment regular')
@@ -122,21 +115,15 @@ parser.add_argument('--noaug_target', type=str, default='se', help='add regular 
 parser.add_argument('--output_source', type=str, default='', help='class output source',
         choices=['train','valid','search','allsearch',''])
 #loss
-parser.add_argument('--loss_type', type=str, default='minus', help="loss type for difficult policy training",
-        choices=['minus','minusdiff','relative','relativesample','relativediff','adv','embed'])
 parser.add_argument('--balance_loss', type=str, default='', help="loss type for model and policy training to acheive class balance")
-parser.add_argument('--policy_loss', type=str, default='', help="loss type for simular policy training")
-# info keep
+#info keep
 parser.add_argument('--keep_aug', action='store_true', default=False, help='info keep augment')
-parser.add_argument('--keep_prob', type=float, default=1, help='info keep probabilty')
 parser.add_argument('--keep_mode', type=str, default='auto', help='info keep mode',choices=['auto','adapt','b','p','t','rand'])
-parser.add_argument('--aug_target', type=str, default='', help='info keep adapt target',choices=['kops',''])
-parser.add_argument('--adapt_target', type=str, default='len', help='info keep adapt target / keep auto cut/paste or len/ch keep',
-        choices=['fea','len','seg','way','keep','ch','cut','paste','recut','repaste'])
+parser.add_argument('--keep_prob', type=float, default=1, help='info keep probabilty')
+parser.add_argument('--adapt_target', type=str, default='len', help='info keep mode',
+        choices=['fea','len','seg','way','keep','ch','recut','repaste','recut','repaste'])
 parser.add_argument('--keep_back', type=str, default='', help='info keep how to paste back',
         choices=['fix','rpeak',''])
-parser.add_argument('--mix_method', type=str, default='', help='who search mix params',
-        choices=['ind','sub','indsub',''])
 parser.add_argument('--keep_seg', type=int, nargs='+', default=[1], help='info keep segment mode')
 parser.add_argument('--keep_lead', type=int, nargs='+', default=[12], help='leads (channel) keep, 12 means all lead keep')
 parser.add_argument('--lead_sel', type=str, default='thres', help='leads select ways',
@@ -146,12 +133,10 @@ parser.add_argument('--keep_thres', type=float, default=0.6, help="keep augment 
 parser.add_argument('--thres_adapt', action='store_false', default=True, help="keep augment thres adapt")
 parser.add_argument('--keep_len', type=int, nargs='+', default=[100], help="info keep seq len")
 parser.add_argument('--keep_bound', type=float, default=0.0, help="info keep bound %")
-parser.add_argument('--teach_aug', action='store_true', default=False, help='teacher augment')
-parser.add_argument('--ema_rate', type=float, default=0.999, help="teacher ema rate")
-#visulaize
+parser.add_argument('--teach_rew', action='store_true', default=False, help='teach reweight')
+#visulaize&output
 parser.add_argument('--visualize', action='store_true', default=False, help='visualize')
 parser.add_argument('--output_visual', action='store_true', default=False, help='visualize output and confusion matrix')
-parser.add_argument('--model_visual', action='store_true', default=False, help='visualize h_model')
 parser.add_argument('--output_pred', action='store_true', default=False, help='output predict result and ture target')
 
 args = parser.parse_args()
@@ -163,26 +148,23 @@ else:
 
 if args.diff_aug:
     description = 'diff2'
-    description += args.loss_type
 else:
     description = ''
 if args.class_adapt:
-    description += f'cada{args.policy_loss}'
+    description += 'cada'
 else:
     description += ''
-description += args.noaug_reg + args.noaug_add
+description += args.noaug_add
 if args.diff_aug and not args.not_reweight:
     description+='rew'
 if args.keep_aug:
-    keep_seg_str = ''.join([str(i) for i in args.keep_seg])
     keep_ch_str = ''.join([str(i) for i in args.keep_lead])
     if keep_ch_str=='12':
         keep_ch_str=''
     else:
         keep_ch_str='ch'+keep_ch_str
+    keep_seg_str = ''.join([str(i) for i in args.keep_seg])
     description+=f'keep{args.keep_mode}{keep_seg_str}{keep_ch_str}'
-if args.teach_aug:
-    description+=f'teach{args.ema_rate}'
 now_str = time.strftime("%Y%m%d-%H%M%S")
 args.save = '{}-{}-{}{}'.format(now_str, args.save,Aug_type,description+args.augselect+args.balance_loss)
 if debug:
@@ -207,7 +189,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         #os.environ['WANDB_START_METHOD'] = 'thread' #tmp disable
         #args = self.config['args']
         args = argparse.Namespace(**copy.deepcopy(self.config)) #for grid search
-        utils.reproducibility(args.seed) #for reproduce
+        #random seed setting
+        utils.reproducibility(args.seed)
         #  dataset settings for search
         n_channel = get_num_channel(args.dataset)
         n_class = get_num_class(args.dataset,args.labelgroup)
@@ -218,7 +201,6 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         multilabel = args.multilabel
         diff_augment = args.diff_aug
         diff_reweight = not args.not_reweight
-        #noaug add & noaug reg
         self.class_noaug, self.noaug_add, self.use_class_w = False, False, False
         if args.noaug_add=='cadd':
             self.class_noaug = True
@@ -229,49 +211,60 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             self.noaug_add = True
         elif args.noaug_add=='add':
             self.noaug_add = True
-        if 'c' in args.noaug_reg:
-            self.use_class_w = True
         test_fold_idx = self.config['kfold']
-        train_val_test_folds = []
-        if test_fold_idx>=0 and test_fold_idx<=9:
-            train_val_test_folds = [[],[],[]] #train,valid,test
-            for i in range(10):
-                curr_fold = (i+test_fold_idx)%10 +1 #fold is 1~10
-                if i==0:
-                    train_val_test_folds[2].append(curr_fold)
-                elif i==9:
-                    train_val_test_folds[1].append(curr_fold)
-                else:
-                    train_val_test_folds[0].append(curr_fold)
-            print('Train/Valid/Test fold split ',train_val_test_folds)
-        elif args.default_split:
-            print('Default Train 1~8 /Valid 9/Test 10 fold split')
-        else:
-            print('Warning: Random splitting train/test')
+        train_val_test_folds = [[],[],[]] #train,valid,test
+        for i in range(10):
+            curr_fold = (i+test_fold_idx)%10 +1 #fold is 1~10
+            if i==0:
+                train_val_test_folds[2].append(curr_fold)
+            elif i==9:
+                train_val_test_folds[1].append(curr_fold)
+            else:
+                train_val_test_folds[0].append(curr_fold)
+        print('Train/Valid/Test fold split ',train_val_test_folds)
         self.train_queue, self.valid_queue, self.search_queue, self.test_queue, self.tr_search_queue, preprocessors = get_ts_dataloaders(
             args.dataset, args.batch_size, args.num_workers,
             args.dataroot, args.cutout, args.cutout_length,
-            split=args.train_portion, split_idx=0, target_lb=-1,
-            search=True, search_divider=sdiv,search_size=args.search_size,
-            test_size=args.test_size,multilabel=args.multilabel,default_split=args.default_split,valid_search=args.valid_search,
-            fold_assign=train_val_test_folds,labelgroup=args.labelgroup,bal_ssampler=args.search_sampler,bal_trsampler=args.train_sampler,
+            split=args.train_portion, split_idx=0, target_lb=-1,search_size=args.search_size, #!use search size to reduce training dataset
+            search=False,test_size=args.test_size,multilabel=args.multilabel,default_split=args.default_split,
+            fold_assign=train_val_test_folds,labelgroup=args.labelgroup,bal_trsampler=args.train_sampler,
             sampler_alpha=args.alpha)
-        #  model settings
-        self.gf_model = get_model_tseries(model_name=args.model_name, num_class=n_class,n_channel=n_channel,
-            use_cuda=True, data_parallel=False,dataset=args.dataset)
-        #EMA if needed
-        self.ema_model = None
-        if args.teach_aug:
-            print('Using EMA teacher model')
-            avg_fn = lambda averaged_model_parameter, model_parameter, num_averaged: \
-                args.ema_rate * averaged_model_parameter + (1 - args.ema_rate) * model_parameter
-            self.ema_model = optim.swa_utils.AveragedModel(self.gf_model, avg_fn=avg_fn)
-            for ema_p in self.ema_model.parameters():
-                ema_p.requires_grad_(False)
-            self.ema_model.train()
-        #h model
+        #  task model settings
+        self.task_model = get_model_tseries(model_name=args.model_name,
+                            num_class=n_class,n_channel=n_channel,
+                            use_cuda=True, data_parallel=False,dataset=args.dataset)
+        #follow ptbxl batchmark!!!
+        self.optimizer = torch.optim.AdamW(self.task_model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
+        self.scheduler = torch.optim.lr_scheduler.OneCycleLR(self.optimizer, max_lr=args.learning_rate,
+            epochs = args.epochs, steps_per_epoch = len(self.train_queue)) #follow ptbxl batchmark!!!
+        if not args.notwarmup:
+            m, e = get_warmup_config(args.dataset)
+            self.scheduler = GradualWarmupScheduler( #paper not mention!!!
+                self.optimizer,
+                multiplier=m,
+                total_epoch=e,
+                after_scheduler=self.scheduler)
+        default_criterion = make_loss(multilabel=multilabel)
+        train_labels = self.train_queue.dataset.dataset.label
+        self.criterion = self.choose_criterion(train_labels,None,multilabel,n_class,
+            loss_type=args.balance_loss,default=default_criterion)
+        self.criterion = self.criterion.cuda()
+        #  restore setting
+        if args.restore:
+            trained_epoch = utils.restore_ckpt(self.task_model, self.optimizer, self.scheduler,
+                os.path.join(self.config['BASE_PATH'],args.restore_path,f'fold{test_fold_idx}', 'weights.pt'), location=0) + 1
+            trained_epoch = args.epochs #tmp fix!!!
+            print(f'From epoch {trained_epoch}, Resume')
+        else:
+            trained_epoch = 0
+        self.trained_epoch = trained_epoch
+        #  load trained adaaug sub models
+        search_n_class = get_num_class(args.search_dataset,args.labelgroup)
+        self.gf_model = get_model_tseries(model_name=args.gf_model_name,
+                            num_class=search_n_class,n_channel=n_channel,
+                            use_cuda=True, data_parallel=False,dataset=args.dataset)
         h_input = self.gf_model.fc.in_features
-        label_num, label_embed = 0,0
+        label_num,label_embed =0,0
         if args.class_adapt and args.class_embed:
             label_num = n_class
             label_embed = 32 #tmp use
@@ -302,82 +295,21 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         self.h_model = Projection_TSeries(in_features=h_input,label_num=label_num,label_embed=label_embed,
             n_layers=args.n_proj_layer, n_hidden=args.n_proj_hidden, augselect=args.augselect, proj_addition=proj_add,
             feature_mask=args.feature_mask,proj_b=proj_b,embed_b=embed_b).cuda()
-        #  training settings
-        self.gf_optimizer = torch.optim.AdamW(self.gf_model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
-        self.scheduler = torch.optim.lr_scheduler.OneCycleLR(self.gf_optimizer, max_lr=args.learning_rate, 
-            epochs = args.epochs, steps_per_epoch = len(self.train_queue)) #follow ptbxl batchmark
-        if args.policy_optim=='adam': #can try weight decay=0 case
-            self.h_optimizer = torch.optim.Adam(
-                self.h_model.parameters(),
-                lr=args.proj_learning_rate,
-                betas=(0.9, 0.999),
-                weight_decay=args.proj_weight_decay)
-        elif args.policy_optim=='sgdm': #SGD momentum as CADDA
-            self.h_optimizer = torch.optim.SGD(
-                self.h_model.parameters(),
-                lr=args.proj_learning_rate,
-                momentum=0.9,
-                weight_decay=args.proj_weight_decay)
-        elif args.policy_optim=='sgd': #SGD
-            self.h_optimizer = torch.optim.SGD(
-                self.h_model.parameters(),
-                lr=args.proj_learning_rate,
-                weight_decay=args.proj_weight_decay)
-        elif args.policy_optim=='rmsprop': #RMSprop
-            self.h_optimizer = torch.optim.RMSprop(
-                self.h_model.parameters(),
-                lr=args.proj_learning_rate,
-                weight_decay=args.proj_weight_decay)
-        else:
-            print(f'{args.policy_optim} Unknown optimizer')
-            raise
-        train_labels = self.train_queue.dataset.dataset.label
-        search_labels = self.search_queue.dataset.dataset.label
-        default_criterion = make_loss(multilabel=multilabel)
-        self.criterion = self.choose_criterion(train_labels,search_labels,multilabel,n_class,
-            loss_type=args.balance_loss,default=default_criterion)
-        self.criterion = self.criterion.cuda()
-        self.adv_criterion = None
-        if args.loss_type=='adv':
-            self.adv_criterion = NonSaturatingLoss(epsilon=0.1).cuda()
-        elif args.loss_type=='embed':
-            #self.adv_criterion = nn.MSELoss(reduction='mean') #default
-            self.adv_criterion = Wasserstein_loss(reduction='mean')
-        elif args.mix_type=='loss' or 'sample' in args.loss_type: #for sample-wise loss
-            if not multilabel:
-                self.adv_criterion = nn.CrossEntropyLoss(reduction='none')
-            else:
-                self.adv_criterion = nn.BCEWithLogitsLoss(reduction='none')
-        
-        self.sim_criterion = None
-        #bug!: can not with loss_mix
-        self.sim_criterion = self.choose_criterion(train_labels,search_labels,multilabel,n_class,
-            loss_type=args.policy_loss,mix_type=args.mix_type)
+        utils.load_model(self.gf_model, os.path.join(self.config['BASE_PATH'],f'{args.gf_model_path}',f'fold{test_fold_idx}', 'gf_weights.pt'), location=0)
+        utils.load_model(self.h_model, os.path.join(self.config['BASE_PATH'],f'{args.h_model_path}',f'fold{test_fold_idx}', 'h_weights.pt'), location=0)
+        for param in self.gf_model.parameters():
+            param.requires_grad = False
+        for param in self.h_model.parameters():
+            param.requires_grad = False
+        self.teach_model = None
+        if args.teach_rew: #teacher reweight, only use when search&train same
+            self.teach_model = self.gf_model
+        #noaug regular class dist
         self.extra_losses = []
-        #class distance or use as noaug regular class weight
-        self.class_criterion = None
-        if args.class_dist:
-            self.class_criterion = ClassDistLoss(distance_func=args.class_dist,loss_choose=args.class_dist
-            ,similar=args.class_sim,lamda=args.lambda_dist,num_classes=n_class,noaug_target=args.noaug_target)
-            self.extra_losses.append(self.class_criterion)
-        elif self.use_class_w:
+        if self.use_class_w:
             self.class_criterion = ClassDistLoss(distance_func='conf',loss_choose='conf'
-            ,similar=args.class_sim,lamda=args.lambda_dist,num_classes=n_class,use_loss=False,noaug_target=args.noaug_target)
+            ,similar=False,lamda=0,num_classes=n_class,use_loss=False,noaug_target=args.noaug_target)
             self.extra_losses.append(self.class_criterion)
-        #  AdaAug settings for search
-        ind_mix,sub_mix = False,False
-        if 'ind' in args.mix_method:
-            ind_mix = True
-            self.search_repeat = 2 #same batch for two aspect
-        else:
-            self.search_repeat = 1
-        #need double search round
-        if 'sub' in args.mix_method:
-            sub_mix = 0.5 #!!!tmp dedault for subset mix
-            #self.search_mult = 2
-        else:
-            #self.search_mult = 1
-            sub_mix = 1
         #for grid search
         grid_search_list = self.config.get('grid_target',[])
         if len(grid_search_list)>0:
@@ -394,18 +326,18 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         dir_path = os.path.join(self.config['BASE_PATH'],self.config['save'],add_dir,f'fold{test_fold_idx}')
         if not os.path.exists(dir_path):
             os.makedirs(dir_path)
+        #AdaAug / Keep
         after_transforms = self.train_queue.dataset.after_transforms
         adaaug_config = {'sampling': 'prob',
-                    'k_ops': self.config['k_ops'], #as paper
-                    'delta': 0.0, 
-                    'temp': args.temperature, 
-                    'search_d': get_dataset_dimension(args.dataset),
+                    'k_ops': args.k_ops,
+                    'delta': args.delta,
+                    'temp': args.temperature,
+                    'search_d': get_dataset_dimension(args.search_dataset),
                     'target_d': get_dataset_dimension(args.dataset),
-                    'gf_model_name': args.model_name,
-                    'aug_target': args.aug_target}
+                    'gf_model_name': args.gf_model_name}
         keepaug_config = {'keep_aug':args.keep_aug,'mode':args.keep_mode,'thres':args.keep_thres,'length':args.keep_len,'thres_adapt':args.thres_adapt,
-            'grid_region':args.keep_grid, 'possible_segment': args.keep_seg, 'info_upper': args.keep_bound, 'sfreq':self.sfreq, 'adapt_target':args.adapt_target,
-            'keep_leads':args.keep_lead,'keep_prob':args.keep_prob,'keep_back':args.keep_back,'lead_sel':args.lead_sel}
+            'grid_region':args.keep_grid, 'possible_segment': args.keep_seg, 'info_upper': args.keep_bound, 'sfreq':self.sfreq,
+            'adapt_target':args.adapt_target,'keep_leads':args.keep_lead,'keep_prob':args.keep_prob,'keep_back':args.keep_back,'lead_sel':args.lead_sel}
         trans_config = {'sfreq':self.sfreq}
         if args.keep_mode=='adapt':
             keepaug_config['mode'] = 'auto'
@@ -420,9 +352,6 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 multilabel=multilabel,
                 augselect=args.augselect,
                 class_adaptive=self.class_noaug,
-                ind_mix=ind_mix,
-                search_temp=args.sear_temp,
-                sub_mix=sub_mix,
                 noaug_add=self.noaug_add,
                 max_noaug_add=args.noaug_max,
                 max_noaug_reduce=args.reduce_mag,
@@ -441,8 +370,6 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 multilabel=multilabel,
                 augselect=args.augselect,
                 class_adaptive=self.class_noaug,
-                search_temp=args.sear_temp,
-                sub_mix=sub_mix,
                 noaug_add=self.noaug_add,
                 max_noaug_add=args.noaug_max,
                 max_noaug_reduce=args.reduce_mag,
@@ -459,18 +386,18 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         self.diff_reweight =diff_reweight
         self.result_valid_dic, self.result_test_dic = {}, {}
         self.best_val_acc = -1
-        self.best_gf,self.best_h = None,None
+        self.best_task = None
         self.base_path = self.config['BASE_PATH']
         self.mapselect = self.config['mapselect']
         self.pre_train_acc = 0.0
         self.result_table_dic = {}
+        self.policy_apply = not args.randaug
         self.class_dist = None
     def step(self):#use step replace _train
+        #args = self.config['args']
         args = argparse.Namespace(**copy.deepcopy(self.config)) #for grid search
         if self._iteration==0:
             wandb.config.update(self.config)
-            if args.model_visual:
-                wandb.watch(self.h_model,log_freq=100, log='all')
         if self.multilabel:
             if self.mapselect:
                 ptype = 'map'
@@ -479,43 +406,34 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         else:
             ptype = 'acc'
         print(f'Starting Ray ID {self.trial_id} Iteration: {self._iteration}')
-        #args = self.config['args']
-        lr = self.scheduler.get_last_lr()[0]
-        step_dic={'epoch':self._iteration}
-        diff_dic = {'difficult_aug':self.diff_augment,'same_train':args.same_train,'reweight':self.diff_reweight,'lambda_aug':args.lambda_aug,
-                'lambda_sim':args.lambda_sim,'class_adaptive':args.class_adapt,'lambda_noaug':args.lambda_noaug,'train_perfrom':self.pre_train_acc,
-                'loss_type':args.loss_type, 'adv_criterion': self.adv_criterion, 'teacher_model':self.ema_model, 'sim_criterion':self.sim_criterion,
-                'noaug_reg':args.noaug_reg,
-                'extra_criterions':self.extra_losses,'sim_reweight':args.sim_rew,'warmup_epoch': args.pwarmup,'mix_type':args.mix_type,'visualize':args.visualize}
-        
-        # searching
-        train_acc, train_obj, train_dic, table_dic = search_train(args,self.train_queue, self.search_queue, self.tr_search_queue, self.gf_model, self.adaaug,
-            self.criterion, self.gf_optimizer,self.scheduler, args.grad_clip, self.h_optimizer, self._iteration, args.search_freq, 
-            search_round=args.search_round,search_repeat=self.search_repeat,multilabel=self.multilabel,n_class=self.n_class,map_select=self.mapselect, **diff_dic)
-        # validation
-        valid_acc, valid_obj,valid_dic,valid_table = search_infer(self.valid_queue, self.gf_model, self.criterion, 
-            multilabel=self.multilabel,n_class=self.n_class,mode='valid',map_select=self.mapselect)
-        # search data evaluate if need
-        if args.output_source=='allsearch':
-            search_acc, search_obj,search_dic,search_table = search_infer(self.search_queue, self.gf_model, self.criterion, 
-            multilabel=self.multilabel,n_class=self.n_class,mode='search',map_select=self.mapselect)
-            print('Evaluate search data:')
-            print(search_dic)
+        Curr_epoch = self.trained_epoch + self._iteration
+        step_dic={'epoch':Curr_epoch}
+        diff_dic = {'difficult_aug':self.diff_augment,'reweight':self.diff_reweight,'lambda_aug':args.lambda_aug, 'class_adaptive':args.class_adapt
+                ,'visualize':args.visualize,'teach_rew':self.teach_model,'policy_apply':self.policy_apply,'noaug_reg':args.noaug_reg,
+                'extra_criterions':self.extra_losses}
+        if Curr_epoch>self.config['epochs']:
+            all_epochs = self.config['epochs']-1
+            print(f'Trained epochs {Curr_epoch} Iteration: {self._iteration} already reach {all_epochs}, Skip step')
+            call_back_dic = {'train_acc': 0, 'valid_acc': 0, 'test_acc': 0}
+            return call_back_dic
+        elif Curr_epoch==self.config['epochs']:
+            print('Evaluating Train/Valid/Test dataset')
+            training = False
         else:
-            search_dic={}
-            search_table = {}
+            training = True
+        # training or evaluate training data
+        train_acc, train_obj, train_dic, train_table = train(args,
+                self.train_queue, self.task_model, self.criterion, self.optimizer, self.scheduler, Curr_epoch, args.grad_clip, self.adaaug, 
+                multilabel=self.multilabel,n_class=self.n_class,map_select=self.mapselect,training=training,**diff_dic)
+        # validation
+        valid_acc, valid_obj, _, _, valid_dic, valid_table = infer(self.valid_queue, self.task_model, self.criterion, multilabel=self.multilabel,
+                n_class=self.n_class,mode='valid',map_select=self.mapselect)
+        search_dic={}
+        search_table = {}
         #update runtime weights
-        if args.policy_loss=='classdiff':
-            class_acc = [valid_dic[f'valid_{ptype}_c{i}'] / 100.0 for i in range(self.n_class)]
-            print(class_acc)
-            self.class_difficulty = 1 - np.array(class_acc)
-            self.sim_criterion.update_weight(self.class_difficulty)
-        if args.class_dist or 'c' in args.noaug_reg or args.noaug_add=='coadd':
-            select_output = select_output_source(args.output_source,table_dic,valid_table,search_table)
+        if 'c' in args.noaug_reg or args.noaug_add=='coadd': #cadd use output
+            select_output = select_output_source(args.output_source,train_table,valid_table,search_table)
             self.class_criterion.update_classpair(select_output)
-            if 'embed' in args.class_dist:
-                select_embed = select_embed_source(args.output_source,table_dic,valid_table,search_table)
-                self.class_criterion.update_embed(select_embed)
             if args.noaug_add=='coadd': #cadd use output
                 class_outw = torch.from_numpy(self.class_criterion.classweight_dist)
                 print(f'Noaug add method {args.noaug_add} weights: ',class_outw)
@@ -525,15 +443,13 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                     print('regulate mean to ',class_outw)
                 self.adaaug.update_alpha(class_outw)
         if self.noaug_add and not self.use_class_w: #cadd use perfrom
-            '''class_acc = train_acc / 100.0
-            if self.class_noaug: #use train perfromance as noaug reg
-                class_acc = [train_dic[f'train_{ptype}_c{i}'] / 100.0 for i in range(self.n_class)]'''
             class_acc = select_perfrom_source(args.output_source,train_dic,valid_dic,search_dic,ptype,self.n_class,self.class_noaug)
+            print(f'Noaug add method {args.noaug_add} perfrom weights: ',class_acc)
             self.adaaug.update_alpha(class_acc)
         self.pre_train_acc = train_acc / 100.0
         #test
-        test_acc, test_obj, test_dic, test_table  = search_infer(self.test_queue, self.gf_model, self.criterion, 
-            multilabel=self.multilabel,n_class=self.n_class,mode='test',map_select=self.mapselect)
+        test_acc, test_obj, test_acc5, _,test_dic, test_table  = infer(self.test_queue, self.task_model, self.criterion, multilabel=self.multilabel,
+                n_class=self.n_class,mode='test',map_select=self.mapselect)
         #fold idx fir prepare
         if self.grid_search:
             add_dir = '_'.join([f'{target}-{self.config[target]}' for target in self.config.get('grid_target',[])])
@@ -546,8 +462,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             dir_path = os.path.join(self.base_path,self.config['save'],add_dir)
         if not os.path.exists(dir_path):
             os.makedirs(dir_path)
-        gf_name = 'gf_weights.pt'
-        h_name = 'h_weights.pt'
+        model_name = 'weights.pt'
         #val select 10/31 debug
         if args.valselect and valid_acc>self.best_val_acc:
             self.best_val_acc = valid_acc
@@ -555,93 +470,69 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             self.result_test_dic = {f'result_{k}': test_dic[k] for k in test_dic.keys()}
             valid_dic[f'best_valid_{ptype}_avg'] = valid_acc
             test_dic[f'best_test_{ptype}_avg'] = test_acc
-            self.result_table_dic.update(table_dic)
+            self.result_table_dic.update(train_table)
             self.result_table_dic.update(valid_table)
             self.result_table_dic.update(test_table)
-            self.best_gf = self.gf_model
-            self.best_h = self.h_model
-            if 'debug' not in self.config['save'] and not self.config['not_save']:
-                utils.save_model(self.best_gf, os.path.join(dir_path,gf_name))
-                utils.save_model(self.best_h, os.path.join(dir_path,h_name))
+            self.best_task = self.task_model
+            if 'debug' not in self.config['save'] and not args.restore and not self.config['not_save']:
+                utils.save_ckpt(self.best_task, self.optimizer, self.scheduler, Curr_epoch,
+                    os.path.join(dir_path,model_name))
             else:
                 print('Debuging: not save at', self.config['save'])
         elif not args.valselect:
-            self.best_gf = self.gf_model
-            self.best_h = self.h_model
+            self.best_task = self.task_model
             self.result_valid_dic = {f'result_{k}': valid_dic[k] for k in valid_dic.keys()}
             self.result_test_dic = {f'result_{k}': test_dic[k] for k in test_dic.keys()}
-            self.result_table_dic.update(table_dic)
+            self.result_table_dic.update(train_table)
             self.result_table_dic.update(valid_table)
             self.result_table_dic.update(test_table)
-            if 'debug' not in self.config['save'] and not self.config['not_save']:
-                utils.save_model(self.best_gf, os.path.join(dir_path,gf_name))
-                utils.save_model(self.best_h, os.path.join(dir_path,h_name))
+            if 'debug' not in self.config['save'] and not args.restore and not self.config['not_save']:
+                utils.save_ckpt(self.best_task, self.optimizer, self.scheduler, Curr_epoch,
+                    os.path.join(dir_path,model_name))
             else:
                 print('Debuging: not save at', self.config['save'])
-        #tmp augment losses
-        if args.mix_type=='loss':
-            augment_loss_dic = {}
-            rel_min_loss = 1e6
-            class_min_loss = [1e6 for ci in range(self.n_class)]
-            for aug_idx in range(self.adaaug.n_ops):
-                aug_name = self.adaaug.ops_names[aug_idx]
-                augment_loss_dic[f'{aug_name}_all_loss'] = table_dic['aug_loss'][aug_idx]
-                if rel_min_loss>table_dic['aug_loss'][aug_idx]:
-                    rel_min_loss = table_dic['aug_loss'][aug_idx]
-                for class_idx in range(self.n_class):
-                    augment_loss_dic[f'{aug_name}_c{class_idx}_loss'] = table_dic['class_aug_loss'][class_idx,aug_idx]
-                    if class_min_loss[class_idx]>table_dic['class_aug_loss'][class_idx,aug_idx]:
-                        class_min_loss[class_idx] = table_dic['class_aug_loss'][class_idx,aug_idx]
-            augment_loss_dic['similar_all_loss'] = rel_min_loss / torch.clamp(table_dic['aug_loss'][0],min=1e-9)
-            for class_idx in range(self.n_class):
-                augment_loss_dic[f'min_c{class_idx}_loss'] = class_min_loss[class_idx] / torch.clamp(table_dic['class_aug_loss'][class_idx,0],min=1e-9)
-            step_dic.update(augment_loss_dic)
-        #wandb update
         step_dic.update(test_dic)
         step_dic.update(train_dic)
         step_dic.update(valid_dic)
         wandb.log(step_dic)
         #if last epoch
-        if self._iteration==self.config['epochs']-1:
+        if Curr_epoch==self.config['epochs']-1 or Curr_epoch==self.config['epochs']:
             step_dic.update(self.result_valid_dic)
             step_dic.update(self.result_test_dic)
             #output pred
             if args.output_pred:
-                step_dic['valid_target'] = self.result_table_dic['valid_target']
-                step_dic['valid_predict'] = self.result_table_dic['valid_predict']
-                step_dic['test_target'] = self.result_table_dic['test_target']
-                step_dic['test_predict'] = self.result_table_dic['test_predict']
+                utils.save_pred(self.result_table_dic['valid_target'],self.result_table_dic['valid_predict'],
+                        os.path.join(dir_path, 'valid_prediction.csv'))
+                utils.save_pred(self.result_table_dic['test_target'],self.result_table_dic['test_predict'],
+                        os.path.join(dir_path, 'test_prediction.csv'))
             #save&log
             wandb.log(step_dic)
             if args.output_visual:
                 tables_dic = {}
-                tables_dic['train_confusion'] = plot_conf_wandb(self.result_table_dic['train_confusion'],title='train_confusion')
-                tables_dic['valid_confusion'] = plot_conf_wandb(self.result_table_dic['valid_confusion'],title='valid_confusion')
-                tables_dic['test_confusion'] = plot_conf_wandb(self.result_table_dic['test_confusion'],title='test_confusion')
+                tables_dic['train_confusion']=plot_conf_wandb(self.result_table_dic['train_confusion'],title='train_confusion')
+                tables_dic['valid_confusion']=plot_conf_wandb(self.result_table_dic['valid_confusion'],title='valid_confusion')
+                tables_dic['test_confusion']=plot_conf_wandb(self.result_table_dic['test_confusion'],title='test_confusion')
                 #! maybe will bug
-                tables_dic['train_output'] = plot_conf_wandb(self.result_table_dic['train_output'],title='train_output')
-                tables_dic['search_output'] = plot_conf_wandb(self.result_table_dic['search_output'],title='search_output')
-                tables_dic['valid_output'] = plot_conf_wandb(self.result_table_dic['valid_output'],title='valid_output')
-                tables_dic['test_output'] = plot_conf_wandb(self.result_table_dic['test_output'],title='test_output')
-                if args.mix_type=='loss':
-                    tables_dic['aug_output'] = plot_conf_wandb(self.result_table_dic['aug_output'],title='aug_output')
+                tables_dic['train_output']=plot_conf_wandb(self.result_table_dic['train_output'],title='train_output')
+                tables_dic['valid_output']=plot_conf_wandb(self.result_table_dic['valid_output'],title='valid_output')
+                tables_dic['test_output']=plot_conf_wandb(self.result_table_dic['test_output'],title='test_output')
                 wandb.log(tables_dic)
-            self.adaaug.save_history(self.class2label)
-            figure = self.adaaug.plot_history()
+            if Curr_epoch==self.config['epochs']-1:
+                self.adaaug.save_history(self.class2label)
+                figure = self.adaaug.plot_history()
             wandb.finish()
-            
         call_back_dic = {'train_acc': train_acc, 'valid_acc': valid_acc, 'test_acc': test_acc}
         return call_back_dic
 
     def _save(self, checkpoint_dir):
         print(checkpoint_dir)
         path = os.path.join(checkpoint_dir, 'gf_check_weights.pt')
-        utils.save_model(self.best_gf, path)
+        utils.save_model(self.best_task, path)
         print(path)
         return path
 
     def _restore(self, checkpoint_path):
-        utils.load_model(self.gf_model, f'{checkpoint_path}/gf_check_weights.pt', location=0) #0 as default
+        utils.load_model(self.task_model, f'{checkpoint_path}/gf_check_weights.pt', location=0) #0 as default
 
     def reset_config(self, new_config):
         self.config = new_config
@@ -664,7 +555,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             class_weights = make_class_weights_maxrel(train_labels,n_class,search_labels)
             class_weights = torch.from_numpy(class_weights).float()
             out_criterion = make_loss(multilabel=multilabel,weight=class_weights).cuda()
-        elif mix_type=='loss' or 'sample' in loss_type: #loss mix or sample-wise relative
+        elif mix_type=='loss':
             if not multilabel:
                 out_criterion = nn.CrossEntropyLoss(reduction='none').cuda()
             else:
@@ -680,9 +571,19 @@ def main():
     #torch.cuda.set_device(args.gpu)
     utils.reproducibility(args.seed)
     #logging.info('gpu device = %d' % args.gpu)
-    logging.info("args = %s", args)
+    #logging.info("args = %s", args)
+    date_time_str = now_str
+    h_model_dir = args.h_model_path
+    h_model_dir = h_model_dir.strip('/').split('/')[-1][:16]
     #wandb
-    experiment_name = f'{Aug_type}{description}lamda{args.lambda_aug}_search{args.augselect}_{args.dataset}{args.labelgroup}_{args.model_name}_{args.balance_loss}'
+    group_name = f'{Aug_type}_train{args.augselect}_{args.dataset}{args.labelgroup}_{args.model_name}_hmodel{h_model_dir}'
+    if args.search_size>0: #reduce train
+        reduce_train = 1.0 - args.search_size
+        data_add = '_r' + str(round(reduce_train,3))
+    else:
+        data_add = ''
+    Mode = 'train'
+    experiment_name = f'{Aug_type}{args.k_ops}{description}_{Mode}{args.augselect}_{args.dataset}{args.labelgroup}{data_add}_{args.model_name}_{h_model_dir}'
     '''run_log = wandb.init(config=args, 
                   project='AdaAug',
                   group=experiment_name,
@@ -693,11 +594,33 @@ def main():
     #hparams
     hparams = dict(vars(args)) #copy args
     hparams['args'] = args
-    hparams['BASE_PATH'] = args.base_path
     if args.kfold==10:
         hparams['kfold'] = tune.grid_search([i for i in range(args.kfold)])
     else:
         hparams['kfold'] = tune.grid_search([args.kfold]) #for some fold
+    #grid search
+    #hparams['search_freq'] = tune.grid_search([5,10]) #tune.grid_search(hparams['search_freq'])
+    #hparams['search_round'] = tune.grid_search([4,8,16]) #tune.grid_search(hparams['search_round'])
+    #hparams['proj_learning_rate'] = tune.grid_search([1e-12,0.00003,0.0001,0.0003,0.001,0.003,0.01])
+    #hparams['k_ops'] = tune.grid_search([1,2])
+    #hparams['lambda_aug'] = tune.quniform(hparams['lambda_aug'][0],hparams['lambda_aug'][1],0.01)
+    #hparams['lambda_sim'] = tune.quniform(hparams['lambda_sim'][0],hparams['lambda_sim'][1],0.01)
+    #hparams['keep_thres'] = hparams['keep_thres'] #tune.grid_search(hparams['keep_thres'])
+    #keep_lens = [[n] for n in [50,100,400]]
+    #hparams['keep_len'] = tune.grid_search(keep_lens) #tune.grid_search(hparams['keep_len'])
+    #hparams['loss_type'] = tune.grid_search(['minus','minusdiff','relative','relativesample','relativediff'])
+    #hparams['sear_temp'] = tune.grid_search([1,3]) #tune.grid_search(hparams['search_round'])
+    #hparams['temperature'] = tune.grid_search([1,3])
+    #hparams['diff_aug'] = tune.grid_search([True,False])
+    #hparams['lambda_noaug'] = tune.grid_search([1,10,50])
+    hparams['noaug_add'] = tune.grid_search(['cadd','coadd','add'])
+    hparams['noaug_target'] = tune.grid_search(['s','e','se'])
+    hparams['noaug_max'] = tune.grid_search([0,0.1,0.3,0.5,0.7,0.9])
+    hparams['reduce_mag'] = tune.grid_search([0,0.2,0.4,0.6])
+    hparams['output_source'] = tune.grid_search(['train','valid'])
+    #hparams['feature_mask'] = tune.grid_search(['','select','classonly'])
+    hparams['grid_target'] = ['noaug_add','noaug_target','output_source','noaug_max','reduce_mag']
+    print(hparams)
     #wandb
     wandb_config = {
         #'config':FLAGS, 
@@ -707,11 +630,11 @@ def main():
         'dir':'./',
         'job_type':"DataAugment",
         'reinit':False,
-        'api_key':API_KEY,
-        'settings':wandb.Settings(start_method='thread')
+        'api_key':API_KEY
     }
     hparams["log_config"]= False
     hparams['wandb'] = wandb_config
+    hparams['BASE_PATH'] = args.base_path
 
     # if FLAGS.restore:
     #     train_spec["restore"] = FLAGS.restore
@@ -738,6 +661,7 @@ def main():
         num_samples=1, #grid search no need
     )
     
+    wandb.finish()
     
 
 

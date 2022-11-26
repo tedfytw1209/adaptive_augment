@@ -425,20 +425,13 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         train_acc, train_obj, train_dic, train_table = train(args,
                 self.train_queue, self.task_model, self.criterion, self.optimizer, self.scheduler, Curr_epoch, args.grad_clip, self.adaaug, 
                 multilabel=self.multilabel,n_class=self.n_class,map_select=self.mapselect,training=training,**diff_dic)
-        if self.noaug_add:
-            class_acc = train_acc / 100.0
-            if self.class_noaug:
-                class_acc = [train_dic[f'train_{ptype}_c{i}'] / 100.0 for i in range(self.n_class)]
-            
-            self.adaaug.update_alpha(class_acc)
-        self.pre_train_acc = train_acc / 100.0
         # validation
         valid_acc, valid_obj, _, _, valid_dic, valid_table = infer(self.valid_queue, self.task_model, self.criterion, multilabel=self.multilabel,
                 n_class=self.n_class,mode='valid',map_select=self.mapselect)
         search_dic={}
         search_table = {}
         #update runtime weights
-        if 'c' in args.noaug_reg or args.noaug_add=='coadd':
+        if 'c' in args.noaug_reg or args.noaug_add=='coadd': #cadd use output
             select_output = select_output_source(args.output_source,train_table,valid_table,search_table)
             self.class_criterion.update_classpair(select_output)
             if args.noaug_add=='coadd': #cadd use output
@@ -448,6 +441,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 self.adaaug.update_alpha(class_outw)
         if self.noaug_add and not self.use_class_w: #cadd use perfrom
             class_acc = select_perfrom_source(args.output_source,train_dic,valid_dic,search_dic,ptype,self.n_class,self.class_noaug)
+            print(f'Noaug add method {args.noaug_add} perfrom weights: ',class_acc)
             self.adaaug.update_alpha(class_acc)
         self.pre_train_acc = train_acc / 100.0
         #test

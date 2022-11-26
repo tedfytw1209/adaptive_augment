@@ -109,6 +109,11 @@ parser.add_argument('--noaug_add', type=str, default='', help='add regular for n
         choices=['cadd','add','coadd',''])
 parser.add_argument('--noaug_max', type=float, default=0.5, help='max noaugment regular')
 parser.add_argument('--reduce_mag', type=float, default=0, help='max reduce magnitude (default 0 is no reduce mag')
+parser.add_argument('--noaug_target', type=str, default='se', help='add regular for noaugment target difference',
+        choices=['se','s','e'])
+parser.add_argument('--output_source', type=str, default='', help='class output source',
+        choices=['train','valid','search','allsearch',''])
+#loss
 parser.add_argument('--balance_loss', type=str, default='', help="loss type for model and policy training to acheive class balance")
 #info keep
 parser.add_argument('--keep_aug', action='store_true', default=False, help='info keep augment')
@@ -195,8 +200,12 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         multilabel = args.multilabel
         diff_augment = args.diff_aug
         diff_reweight = not args.not_reweight
-        self.class_noaug, self.noaug_add = False, False
+        self.class_noaug, self.noaug_add, self.use_class_w = False, False, False
         if args.noaug_add=='cadd':
+            self.class_noaug = True
+            self.noaug_add = True
+        elif args.noaug_add=='coadd':
+            self.use_class_w = True
             self.class_noaug = True
             self.noaug_add = True
         elif args.noaug_add=='add':
@@ -266,8 +275,12 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         if args.keep_mode=='adapt':
             if args.adapt_target=='len':
                 proj_add = len(args.keep_len) + 1
+            elif args.adapt_target=='fea':
+                proj_add = len(args.keep_len) + 1
             elif args.adapt_target=='seg':
                 proj_add = len(args.keep_seg) + 1
+            elif args.adapt_target=='ch':
+                proj_add = len(args.keep_lead) + 1
             elif args.adapt_target=='way':
                 proj_add = 4 + 1
             elif args.adapt_target=='keep':
@@ -290,6 +303,11 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         self.teach_model = None
         if args.teach_rew: #teacher reweight, only use when search&train same
             self.teach_model = self.gf_model
+        #noaug regular class dist
+        if self.use_class_w:
+            self.class_criterion = ClassDistLoss(distance_func='conf',loss_choose='conf'
+            ,similar=args.class_sim,lamda=args.lambda_dist,num_classes=n_class,use_loss=False,noaug_target=args.noaug_target)
+            self.extra_losses.append(self.class_criterion)
         #AdaAug / Keep
         after_transforms = self.train_queue.dataset.after_transforms
         adaaug_config = {'sampling': 'prob',

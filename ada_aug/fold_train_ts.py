@@ -62,6 +62,7 @@ parser.add_argument('--multilabel', action='store_true', default=False, help='us
 parser.add_argument('--train_portion', type=float, default=1, help='portion of training data')
 parser.add_argument('--default_split', action='store_true', help='use dataset deault split')
 parser.add_argument('--kfold', type=int, default=0, help='use kfold cross validation')
+parser.add_argument('--not_save', action='store_true', default=False, help='not to save model')
 #policy
 parser.add_argument('--proj_learning_rate', type=float, default=1e-2, help='learning rate for h')
 parser.add_argument('--proj_weight_decay', type=float, default=1e-3, help='weight decay for h]')
@@ -304,6 +305,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         if args.teach_rew: #teacher reweight, only use when search&train same
             self.teach_model = self.gf_model
         #noaug regular class dist
+        self.extra_losses = []
         if self.use_class_w:
             self.class_criterion = ClassDistLoss(distance_func='conf',loss_choose='conf'
             ,similar=False,lamda=0,num_classes=n_class,use_loss=False,noaug_target=args.noaug_target)
@@ -407,7 +409,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         Curr_epoch = self.trained_epoch + self._iteration
         step_dic={'epoch':Curr_epoch}
         diff_dic = {'difficult_aug':self.diff_augment,'reweight':self.diff_reweight,'lambda_aug':args.lambda_aug, 'class_adaptive':args.class_adapt
-                ,'visualize':args.visualize,'teach_rew':self.teach_model,'policy_apply':self.policy_apply,'noaug_reg':args.noaug_reg}
+                ,'visualize':args.visualize,'teach_rew':self.teach_model,'policy_apply':self.policy_apply,'noaug_reg':args.noaug_reg,
+                'extra_criterions':self.extra_losses}
         if Curr_epoch>self.config['epochs']:
             all_epochs = self.config['epochs']-1
             print(f'Trained epochs {Curr_epoch} Iteration: {self._iteration} already reach {all_epochs}, Skip step')
@@ -474,7 +477,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             self.result_table_dic.update(valid_table)
             self.result_table_dic.update(test_table)
             self.best_task = self.task_model
-            if 'debug' not in self.config['save'] and not args.restore:
+            if 'debug' not in self.config['save'] and not args.restore and not self.config['not_save']:
                 utils.save_ckpt(self.best_task, self.optimizer, self.scheduler, Curr_epoch,
                     os.path.join(dir_path,model_name))
             else:
@@ -486,7 +489,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             self.result_table_dic.update(train_table)
             self.result_table_dic.update(valid_table)
             self.result_table_dic.update(test_table)
-            if 'debug' not in self.config['save'] and not args.restore:
+            if 'debug' not in self.config['save'] and not args.restore and not self.config['not_save']:
                 utils.save_ckpt(self.best_task, self.optimizer, self.scheduler, Curr_epoch,
                     os.path.join(dir_path,model_name))
             else:

@@ -277,7 +277,7 @@ def none_loss(ori_loss, aug_loss, lambda_aug):
 def ab_loss(ori_loss, aug_loss):
     return aug_loss
 def rel_loss(ori_loss, aug_loss):
-    return aug_loss / ori_loss.detach()
+    return (aug_loss / ori_loss.detach()).mean()
 
 def cuc_loss(logits,target,criterion,multilabel,**kwargs):
     if multilabel:

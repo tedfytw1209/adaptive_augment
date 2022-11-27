@@ -438,8 +438,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 class_outw = torch.from_numpy(self.class_criterion.classweight_dist)
                 print(f'Noaug add method {args.noaug_add} weights: ',class_outw)
                 #assert class_outw.mean() <= 1.0
-                if class_outw.mean() > 1.0:
-                    class_outw = class_outw / class_outw.mean()
+                if class_outw.max() > 1.0:
+                    class_outw = class_outw / class_outw.max()
                     print('regulate mean to ',class_outw)
                 self.adaaug.update_alpha(class_outw)
         if self.noaug_add and not self.use_class_w: #cadd use perfrom
@@ -613,8 +613,10 @@ def main():
     #hparams['temperature'] = tune.grid_search([1,3])
     #hparams['diff_aug'] = tune.grid_search([True,False])
     #hparams['lambda_noaug'] = tune.grid_search([1,10,50])
-    hparams['noaug_add'] = tune.grid_search(['cadd','coadd'])
-    hparams['noaug_target'] = tune.grid_search(['s','e','se'])
+    #hparams['noaug_add'] = tune.grid_search(['cadd','coadd'])
+    hparams['noaug_add'] = tune.grid_search(['coadd'])
+    #hparams['noaug_target'] = tune.grid_search(['s','e','se'])
+    hparams['noaug_target'] = tune.grid_search(['e','se'])
     hparams['noaug_max'] = tune.grid_search([0,0.5,0.9])
     hparams['reduce_mag'] = tune.grid_search([0,0.2,0.4,0.6])
     hparams['output_source'] = tune.grid_search(['train','valid'])

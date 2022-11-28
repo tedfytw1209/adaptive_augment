@@ -345,8 +345,8 @@ def loss_mix(gf_model,mixed_features,aug_weights,adv_criterion,target_trsearch,m
         aug_loss_all = cuc_loss(aug_logits,target_trsearch,adv_criterion,multilabel)
         aug_loss_all = aug_loss_all.reshape(batch, n_param)
         aug_loss = torch.stack([w.matmul(feat) for w, feat in zip(weights, aug_loss_all)], dim=0) #[(1)]
-        #print('Loss mix aug_loss: ',aug_loss.shape,aug_loss)
-        aug_loss = aug_loss.mean()
+        print('Loss mix aug_loss: ',aug_loss.shape,aug_loss)
+        #aug_loss = aug_loss.mean()
         aug_logits = aug_logits.reshape(batch, n_param,-1)
     #print('Loss mix aug_logits: ',aug_logits.shape,aug_logits)
     return aug_loss, aug_logits, aug_loss_all
@@ -674,7 +674,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 aug_search_loss += loss.detach().mean().item()
                 ori_search_loss += ori_loss.detach().mean().item()
                 loss = sim_loss_func(ori_loss,loss)
-                print('Origin similar loss:', loss.detach().item()) #!
+                print('Origin similar loss:', loss.detach().mean().item()) #!
                 #print(loss.shape,loss) #!tmp
                 if sim_reweight: #reweight part, a,b = ?
                     p_orig = origin_logits.softmax(dim=1)[torch.arange(search_bs), target_search].detach()

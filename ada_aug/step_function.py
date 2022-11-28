@@ -674,7 +674,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 aug_search_loss += loss.detach().mean().item()
                 ori_search_loss += ori_loss.detach().mean().item()
                 loss = sim_loss_func(ori_loss,loss)
-                print('Origin similar loss:', loss.detach().item())
+                print('Origin similar loss:', loss.detach().item()) #!
                 #print(loss.shape,loss) #!tmp
                 if sim_reweight: #reweight part, a,b = ?
                     p_orig = origin_logits.softmax(dim=1)[torch.arange(search_bs), target_search].detach()
@@ -711,7 +711,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 input_search_list.append(input_search.detach())
                 seq_len_list.append(seq_len.detach())
                 target_search_list.append(target_search.detach())
-                torch.cuda.empty_cache()
+                #torch.cuda.empty_cache()
             #accumulation update
             nn.utils.clip_grad_norm_(adaaug.h_model.parameters(), grad_clip)
             h_optimizer.step()

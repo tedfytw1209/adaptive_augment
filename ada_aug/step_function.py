@@ -266,7 +266,7 @@ def infer(valid_queue, model, criterion, multilabel=False, n_class=10,mode='test
 def sub_loss(ori_loss, aug_loss, lambda_aug): #will become to small
     return lambda_aug * (aug_loss - ori_loss.detach())
 def relative_loss(ori_loss, aug_loss, lambda_aug):
-    return lambda_aug * (ori_loss.detach() / aug_loss)
+    return lambda_aug * ((ori_loss.detach()+1e-6) / (aug_loss+1e-6))
 def minus_loss(ori_loss, aug_loss, lambda_aug):
     return -1 * lambda_aug * aug_loss
 def adv_loss(ori_loss, aug_loss, lambda_aug):
@@ -277,9 +277,7 @@ def none_loss(ori_loss, aug_loss, lambda_aug):
 def ab_loss(ori_loss, aug_loss):
     return aug_loss
 def rel_loss(ori_loss, aug_loss):
-    print('ori_loss: ',ori_loss) #!tmp
-    print('aug_loss: ',aug_loss) #!tmp
-    return (aug_loss / ori_loss.detach()).mean()
+    return ((aug_loss+1e-6) / (ori_loss.detach()+1e-6)).mean()
 
 def cuc_loss(logits,target,criterion,multilabel,**kwargs):
     if multilabel:
@@ -347,7 +345,6 @@ def loss_mix(gf_model,mixed_features,aug_weights,adv_criterion,target_trsearch,m
         aug_loss_all = cuc_loss(aug_logits,target_trsearch,adv_criterion,multilabel)
         aug_loss_all = aug_loss_all.reshape(batch, n_param)
         aug_loss = torch.stack([w.matmul(feat) for w, feat in zip(weights, aug_loss_all)], dim=0) #[(1)]
-        print('Loss mix aug_loss: ',aug_loss.shape,aug_loss) #!tmp
         #aug_loss = aug_loss.mean()
         aug_logits = aug_logits.reshape(batch, n_param,-1)
     #print('Loss mix aug_logits: ',aug_logits.shape,aug_logits)
@@ -684,7 +681,6 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 aug_search_loss += augsear_loss.detach().mean().item()
                 ori_search_loss += ori_loss.detach().mean().item()
                 loss = sim_loss_func(ori_loss,augsear_loss)
-                print('Origin similar loss:', loss.detach().mean().item()) #!
                 #print(loss.shape,loss) #!tmp
                 if sim_reweight: #reweight part, a,b = ?
                     p_orig = origin_logits.softmax(dim=1)[torch.arange(search_bs), target_search].detach()
@@ -695,10 +691,10 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                     else:
                         w_aug = 1
                     loss = (w_aug * loss).mean()
-                    print('Similar loss:', loss.detach().item())
+                    #print('Similar loss:', loss.detach().item())
                 else:
                     loss = loss.mean()
-                    print('Similar loss:', loss.detach().item())
+                    #print('Similar loss:', loss.detach().item())
                 loss = loss * lambda_sim + noaug_loss
                 #extra losses
                 for e_criterion in extra_criterions:
@@ -715,7 +711,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                         print('Extra class distance loss:', e_loss.detach().item())
                 #!!!10/13 bug fix, tmp *4 for plr!!!
                 loss = loss * 4 / search_round
-                if torch.any(torch.isnan(loss)) or torch.any(torch.isnan(loss)): #!tmp
+                if torch.any(torch.isnan(loss)) or torch.any(torch.isinf(loss)): #!tmp
                     print('Loss error: ',loss.detach().item())
                     print('ori_loss',ori_loss)
                     print('augsear_loss',augsear_loss)

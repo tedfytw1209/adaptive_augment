@@ -620,11 +620,11 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                     if 'w' in noaug_target:
                         tmp_loss = (lambda_noaug * noaug_samplew * noaug_criterion_w(aug_magnitude,noaug_mag_target).mean(1)).mean() #mean to assert loss is scalar
                         noaug_loss += tmp_loss
-                        #print('magnitude loss: ',tmp_loss)
+                        print('magnitude loss: ',tmp_loss.detach().item())
                     if 'p' in noaug_target:
                         tmp_loss = (lambda_noaug * noaug_samplew * noaug_criterion(aug_weight,noaug_w_target)).mean()
                         noaug_loss += tmp_loss
-                        #print('prob loss: ',tmp_loss)
+                        print('prob loss: ',tmp_loss.detach().item())
                     if torch.is_tensor(noaug_loss):
                         noaug_reg_sum += noaug_loss.detach().mean().item()
                     #print('noaug regular sum: ',noaug_reg_sum)
@@ -652,8 +652,8 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                     soft_all = softmax_m(logits_search.reshape(-1,n_class)).detach().cpu().reshape(*logits_search.shape) #(bs,keep_len,n_ops)
                     origin_embed_out = origin_embed.detach().cpu()
                     each_aug_loss = each_aug_loss.detach().cpu()
-                    print('soft all ',soft_all.shape)
-                    print('each_aug_loss ',each_aug_loss.shape)
+                    #print('soft all ',soft_all.shape)
+                    #print('each_aug_loss ',each_aug_loss.shape)
                     for i,t in enumerate(target_search.data.view(-1)):
                         sea_output_matrix[t.long()] += soft_out[i]
                         sea_embed_matrix[t.long(),:] += origin_embed_out[i] #!!! 11/14 add, use origin
@@ -674,6 +674,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 aug_search_loss += loss.detach().mean().item()
                 ori_search_loss += ori_loss.detach().mean().item()
                 loss = sim_loss_func(ori_loss,loss)
+                print('Origin similar loss:', loss.detach().item())
                 #print(loss.shape,loss) #!tmp
                 if sim_reweight: #reweight part, a,b = ?
                     p_orig = origin_logits.softmax(dim=1)[torch.arange(search_bs), target_search].detach()
@@ -684,21 +685,24 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                     else:
                         w_aug = 1
                     loss = (w_aug * loss).mean()
+                    print('Similar loss:', loss.detach().item())
                 else:
                     loss = loss.mean()
+                    print('Similar loss:', loss.detach().item())
                 loss = loss * lambda_sim + noaug_loss
                 #extra losses
                 for e_criterion in extra_criterions:
                     if e_criterion.loss_target=='output': #for class distance loss target
-                        e_loss = e_criterion(logits_search,target_search,sim_targets=origin_logits)
+                        e_loss = e_criterion(logits_search,target_search,sim_targets=origin_logits).mean()
                     elif e_criterion.loss_target=='embed': 
-                        e_loss = e_criterion(mixed_features,target_search,sim_targets=origin_embed) #using mix_fearures as loss
+                        e_loss = e_criterion(mixed_features,target_search,sim_targets=origin_embed).mean() #using mix_fearures as loss
                     else:
                         print('Unknown loss target: ',e_criterion.loss_target)
                         raise
                     if torch.is_tensor(e_loss):
                         loss += e_loss
                         ex_losses[str(e_criterion.__class__.__name__)] += e_loss.detach().item()
+                        print('Extra class distance loss:', e_loss.detach().item())
                 #!!!10/13 bug fix, tmp *4 for plr!!!
                 loss = loss * 4 / search_round
                 loss.backward()

@@ -123,7 +123,7 @@ parser.add_argument('--output_source', type=str, default='', help='class output 
         choices=['train','valid','search','allsearch',''])
 #loss
 parser.add_argument('--loss_type', type=str, default='minus', help="loss type for difficult policy training",
-        choices=['minus','minusdiff','relative','relativesample','relmixsample','relativediff','adv','embed'])
+        choices=['minus','minusdiff','minussample','relative','relativesample','relmixsample','relativediff','adv','embed'])
 parser.add_argument('--balance_loss', type=str, default='', help="loss type for model and policy training to acheive class balance")
 parser.add_argument('--policy_loss', type=str, default='', help="loss type for simular policy training")
 # info keep

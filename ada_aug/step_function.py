@@ -359,7 +359,7 @@ def loss_select(loss_type,adv_criterion):
     diff_update_w = True
     sim_loss_func = ab_loss
     add_kwargs = {}
-    if loss_type=='minus':
+    if loss_type=='minus' or loss_type=='minussample':
         diff_loss_func = minus_loss
     elif loss_type=='minusdiff':
         diff_loss_func = minus_loss
@@ -443,54 +443,8 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     #noaug_criterion_w = nn.BCELoss(reduction='none').cuda()
     noaug_criterion_w = nn.MSELoss(reduction='none').cuda()
     noaug_lossw = torch.ones(n_class).cuda() * (1.0 - train_perfrom) #first reg
-    '''use_noaug_reg = False
-    noaug_target = ''
-    if noaug_reg in ['creg','cwreg','cpwreg']:
-        print('Using NOAUG regularation ',noaug_reg)
-        use_noaug_reg = True
-        noaug_lossw = torch.from_numpy(extra_criterions[0].classweight_dist).cuda()
-        print('NOAUG regularation class weights',noaug_lossw)
-    elif noaug_reg:
-        print('Using NOAUG regularation ',noaug_reg)
-        print(noaug_lossw)
-        use_noaug_reg = True
-    if noaug_reg=='creg' or noaug_reg=='reg':
-        noaug_target = 'p'
-    elif noaug_reg=='cwreg':
-        noaug_target = 'w'
-    elif noaug_reg=='cpwreg':
-        noaug_target = 'pw'
-    '''
     use_noaug_reg, noaug_target, noaug_lossw = noaug_select(noaug_reg,extra_criterions,noaug_lossw)
     #diff loss criterion
-    '''diff_update_w = True
-    sim_loss_func = ab_loss
-    add_kwargs = {}
-    if loss_type=='minus':
-        diff_loss_func = minus_loss
-    elif loss_type=='minusdiff':
-        diff_loss_func = minus_loss
-        diff_update_w = False
-    elif loss_type=='relative':
-        diff_loss_func = relative_loss
-        sim_loss_func = rel_loss
-    elif loss_type=='relativesample':
-        diff_loss_func = relative_loss
-        sim_loss_func = rel_loss
-        add_kwargs['add_number'] = 1e-3
-    elif loss_type=='relativediff':
-        diff_loss_func = relative_loss
-        diff_update_w = False
-    elif loss_type=='adv':
-        diff_loss_func = adv_loss
-    elif loss_type=='embed':
-        diff_loss_func = adv_loss
-        diff_update_w = False
-    else:
-        print('Unknown loss type for policy training')
-        print(loss_type)
-        print(adv_criterion)
-        raise'''
     diff_loss_func, sim_loss_func, diff_update_w, add_kwargs = loss_select(loss_type,adv_criterion)
     mix_feature = False
     if mix_type=='embed':
@@ -629,9 +583,12 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                         aug_logits = aug_logits.mean(dim=(1,2))
                     elif len(aug_logits.shape)==3:
                         aug_logits = aug_logits.mean(dim=1)
+                    # !!!bug in this
                     ori_loss = cuc_loss(origin_logits,target_trsearch,adv_criterion,multilabel).mean().detach() #!to assert loss mean reduce
                     aug_diff_loss += aug_loss.detach().mean().item()
                     ori_diff_loss += ori_loss.detach().mean().item()
+                    print('ori_loss',ori_loss.shape,ori_loss) #!tmp
+                    print('aug_loss',aug_loss.shape,aug_loss) #!tmp
                     loss_prepolicy = diff_loss_func(ori_loss=ori_loss,aug_loss=aug_loss,lambda_aug=lambda_aug,**add_kwargs)
                     print('loss_prepolicy',loss_prepolicy.shape,loss_prepolicy) #!tmp
                     if reweight: #reweight part, a,b = ?

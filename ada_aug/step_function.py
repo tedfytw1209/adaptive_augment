@@ -277,6 +277,8 @@ def none_loss(ori_loss, aug_loss, lambda_aug):
 def ab_loss(ori_loss, aug_loss):
     return aug_loss
 def rel_loss(ori_loss, aug_loss):
+    print('ori_loss: ',ori_loss) #!tmp
+    print('aug_loss: ',aug_loss) #!tmp
     return (aug_loss / ori_loss.detach()).mean()
 
 def cuc_loss(logits,target,criterion,multilabel,**kwargs):
@@ -345,7 +347,7 @@ def loss_mix(gf_model,mixed_features,aug_weights,adv_criterion,target_trsearch,m
         aug_loss_all = cuc_loss(aug_logits,target_trsearch,adv_criterion,multilabel)
         aug_loss_all = aug_loss_all.reshape(batch, n_param)
         aug_loss = torch.stack([w.matmul(feat) for w, feat in zip(weights, aug_loss_all)], dim=0) #[(1)]
-        print('Loss mix aug_loss: ',aug_loss.shape,aug_loss)
+        print('Loss mix aug_loss: ',aug_loss.shape,aug_loss) #!tmp
         #aug_loss = aug_loss.mean()
         aug_logits = aug_logits.reshape(batch, n_param,-1)
     #print('Loss mix aug_logits: ',aug_logits.shape,aug_logits)
@@ -582,6 +584,14 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                         loss_policy = loss_prepolicy.mean() #mean to assert
                     #!!!10/13 bug fix!!! ,tmp*4 for same plr
                     loss_policy = loss_policy * 4 / search_round
+                    if torch.any(torch.isnan(loss_policy)) or torch.any(torch.isnan(loss_policy)): #!tmp
+                        print('loss_policy error: ',loss_policy.detach().item())
+                        print('ori_loss',ori_loss)
+                        print('aug_loss',aug_loss)
+                        print('target_trsearch',target_trsearch)
+                        print('origin_logits',origin_logits)
+                        print('aug_logits',aug_logits)
+
                     loss_policy.backward()
                     #h_optimizer.step() wait till validation set
                     difficult_loss += loss_policy.detach().item()
@@ -636,7 +646,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 else:
                     sim_model = teacher_model.module
                 #sim mix if need, calculate loss
-                loss, logits_search, each_aug_loss = mix_func(gf_model,mixed_features,aug_weights,sim_criterion,target_search,multilabel)
+                augsear_loss, logits_search, each_aug_loss = mix_func(gf_model,mixed_features,aug_weights,sim_criterion,target_search,multilabel)
                 origin_embed = sim_model.extract_features(input_search, seq_len, pool=True)
                 origin_logits = sim_model.classify(origin_embed)
                 #origin_logits = sim_model(input_search, seq_len)
@@ -671,9 +681,9 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                         sea_embed_count[t.long(),0] += 1
 
                 #similar reweight?
-                aug_search_loss += loss.detach().mean().item()
+                aug_search_loss += augsear_loss.detach().mean().item()
                 ori_search_loss += ori_loss.detach().mean().item()
-                loss = sim_loss_func(ori_loss,loss)
+                loss = sim_loss_func(ori_loss,augsear_loss)
                 print('Origin similar loss:', loss.detach().mean().item()) #!
                 #print(loss.shape,loss) #!tmp
                 if sim_reweight: #reweight part, a,b = ?
@@ -705,6 +715,15 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                         print('Extra class distance loss:', e_loss.detach().item())
                 #!!!10/13 bug fix, tmp *4 for plr!!!
                 loss = loss * 4 / search_round
+                if torch.any(torch.isnan(loss)) or torch.any(torch.isnan(loss)): #!tmp
+                    print('Loss error: ',loss.detach().item())
+                    print('ori_loss',ori_loss)
+                    print('augsear_loss',augsear_loss)
+                    print('target_search',target_search)
+                    print('origin_logits',origin_logits)
+                    print('logits_search',logits_search)
+                    print('noaug_loss',noaug_loss)
+
                 loss.backward()
                 adaptive_loss += loss.detach().item()
                 search_total += 1

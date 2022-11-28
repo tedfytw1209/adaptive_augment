@@ -267,6 +267,8 @@ def sub_loss(ori_loss, aug_loss, lambda_aug,**kwargs): #will become to small
     return lambda_aug * (aug_loss - ori_loss.detach())
 def relative_loss(ori_loss, aug_loss, lambda_aug, add_number=0):
     return lambda_aug * ((ori_loss.detach()+add_number) / (aug_loss+add_number))
+def relative_loss_s(ori_loss, aug_loss, lambda_aug, add_number=0):
+    return lambda_aug * (2 * (ori_loss.detach()+add_number) / (aug_loss+ori_loss.detach()+add_number))
 def minus_loss(ori_loss, aug_loss, lambda_aug,**kwargs):
     return -1 * lambda_aug * aug_loss
 def adv_loss(ori_loss, aug_loss, lambda_aug,**kwargs):
@@ -276,6 +278,8 @@ def none_loss(ori_loss, aug_loss, lambda_aug,**kwargs):
 
 def ab_loss(ori_loss, aug_loss,**kwargs):
     return aug_loss
+def rel_loss_s(ori_loss, aug_loss, add_number=0):
+    return (2 * (aug_loss+add_number) / (ori_loss.detach()+add_number+aug_loss.detach())).mean()
 def rel_loss(ori_loss, aug_loss, add_number=0):
     return ((aug_loss+add_number) / (ori_loss.detach()+add_number)).mean()
 
@@ -366,7 +370,10 @@ def loss_select(loss_type,adv_criterion):
     elif loss_type=='relativesample':
         diff_loss_func = relative_loss
         sim_loss_func = rel_loss
-        add_kwargs['add_number'] = 1e-3
+        add_kwargs['add_number'] = 1e-6
+    elif loss_type=='relmixsample':
+        diff_loss_func = relative_loss_s
+        sim_loss_func = rel_loss_s
     elif loss_type=='relativediff':
         diff_loss_func = relative_loss
         diff_update_w = False
@@ -381,6 +388,26 @@ def loss_select(loss_type,adv_criterion):
         print(adv_criterion)
         raise
     return diff_loss_func,sim_loss_func,diff_update_w,add_kwargs
+#noaug regular select
+def noaug_select(noaug_reg,extra_criterions,noaug_lossw):
+    use_noaug_reg = False
+    noaug_target = ''
+    if noaug_reg in ['creg','cwreg','cpwreg']:
+        print('Using NOAUG regularation ',noaug_reg)
+        use_noaug_reg = True
+        noaug_lossw = torch.from_numpy(extra_criterions[0].classweight_dist).cuda()
+        print('NOAUG regularation class weights',noaug_lossw)
+    elif noaug_reg:
+        print('Using NOAUG regularation ',noaug_reg)
+        print(noaug_lossw)
+        use_noaug_reg = True
+    if noaug_reg=='creg' or noaug_reg=='reg':
+        noaug_target = 'p'
+    elif noaug_reg=='cwreg':
+        noaug_target = 'w'
+    elif noaug_reg=='cpwreg':
+        noaug_target = 'pw'
+    return use_noaug_reg, noaug_target, noaug_lossw
 
 def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, adaaug, criterion, gf_optimizer,scheduler,
             grad_clip, h_optimizer, epoch, search_freq,search_round=1,search_repeat=1, multilabel=False,n_class=10,
@@ -412,11 +439,11 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     if sim_criterion==None:
         sim_criterion = criterion
     #noaug criterion selection
-    use_noaug_reg = False
     noaug_criterion = nn.CrossEntropyLoss(reduction='none').cuda()
     #noaug_criterion_w = nn.BCELoss(reduction='none').cuda()
     noaug_criterion_w = nn.MSELoss(reduction='none').cuda()
     noaug_lossw = torch.ones(n_class).cuda() * (1.0 - train_perfrom) #first reg
+    '''use_noaug_reg = False
     noaug_target = ''
     if noaug_reg in ['creg','cwreg','cpwreg']:
         print('Using NOAUG regularation ',noaug_reg)
@@ -433,6 +460,8 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
         noaug_target = 'w'
     elif noaug_reg=='cpwreg':
         noaug_target = 'pw'
+    '''
+    use_noaug_reg, noaug_target, noaug_lossw = noaug_select(noaug_reg,extra_criterions,noaug_lossw)
     #diff loss criterion
     '''diff_update_w = True
     sim_loss_func = ab_loss
@@ -515,6 +544,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
             aug_loss = criterion(logits, target.float())
         else:
             aug_loss = criterion(logits, target.long())
+        print('diff aug_loss',aug_loss) #!tmp
         #difficult aug
         ori_loss = 0
         batch_size = target.shape[0]

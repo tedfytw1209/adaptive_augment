@@ -263,21 +263,21 @@ def infer(valid_queue, model, criterion, multilabel=False, n_class=10,mode='test
     
     return perfrom, objs.avg, perfrom2, objs.avg, out_dic, table_dic
 
-def sub_loss(ori_loss, aug_loss, lambda_aug): #will become to small
+def sub_loss(ori_loss, aug_loss, lambda_aug,**kwargs): #will become to small
     return lambda_aug * (aug_loss - ori_loss.detach())
-def relative_loss(ori_loss, aug_loss, lambda_aug):
-    return lambda_aug * ((ori_loss.detach()+1e-6) / (aug_loss+1e-6))
-def minus_loss(ori_loss, aug_loss, lambda_aug):
+def relative_loss(ori_loss, aug_loss, lambda_aug, add_number=0):
+    return lambda_aug * ((ori_loss.detach()+add_number) / (aug_loss+add_number))
+def minus_loss(ori_loss, aug_loss, lambda_aug,**kwargs):
     return -1 * lambda_aug * aug_loss
-def adv_loss(ori_loss, aug_loss, lambda_aug):
+def adv_loss(ori_loss, aug_loss, lambda_aug,**kwargs):
     return lambda_aug * aug_loss
-def none_loss(ori_loss, aug_loss, lambda_aug):
+def none_loss(ori_loss, aug_loss, lambda_aug,**kwargs):
     return ori_loss
 
-def ab_loss(ori_loss, aug_loss):
+def ab_loss(ori_loss, aug_loss,**kwargs):
     return aug_loss
-def rel_loss(ori_loss, aug_loss):
-    return ((aug_loss+1e-6) / (ori_loss.detach()+1e-6)).mean()
+def rel_loss(ori_loss, aug_loss, add_number=0):
+    return ((aug_loss+add_number) / (ori_loss.detach()+add_number)).mean()
 
 def cuc_loss(logits,target,criterion,multilabel,**kwargs):
     if multilabel:
@@ -349,6 +349,38 @@ def loss_mix(gf_model,mixed_features,aug_weights,adv_criterion,target_trsearch,m
         aug_logits = aug_logits.reshape(batch, n_param,-1)
     #print('Loss mix aug_logits: ',aug_logits.shape,aug_logits)
     return aug_loss, aug_logits, aug_loss_all
+#loss select
+def loss_select(loss_type,adv_criterion):
+    #diff loss criterion
+    diff_update_w = True
+    sim_loss_func = ab_loss
+    add_kwargs = {}
+    if loss_type=='minus':
+        diff_loss_func = minus_loss
+    elif loss_type=='minusdiff':
+        diff_loss_func = minus_loss
+        diff_update_w = False
+    elif loss_type=='relative':
+        diff_loss_func = relative_loss
+        sim_loss_func = rel_loss
+    elif loss_type=='relativesample':
+        diff_loss_func = relative_loss
+        sim_loss_func = rel_loss
+        add_kwargs['add_number'] = 1e-3
+    elif loss_type=='relativediff':
+        diff_loss_func = relative_loss
+        diff_update_w = False
+    elif loss_type=='adv':
+        diff_loss_func = adv_loss
+    elif loss_type=='embed':
+        diff_loss_func = adv_loss
+        diff_update_w = False
+    else:
+        print('Unknown loss type for policy training')
+        print(loss_type)
+        print(adv_criterion)
+        raise
+    return diff_loss_func,sim_loss_func,diff_update_w,add_kwargs
 
 def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, adaaug, criterion, gf_optimizer,scheduler,
             grad_clip, h_optimizer, epoch, search_freq,search_round=1,search_repeat=1, multilabel=False,n_class=10,
@@ -402,16 +434,21 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     elif noaug_reg=='cpwreg':
         noaug_target = 'pw'
     #diff loss criterion
-    diff_update_w = True
+    '''diff_update_w = True
     sim_loss_func = ab_loss
+    add_kwargs = {}
     if loss_type=='minus':
         diff_loss_func = minus_loss
     elif loss_type=='minusdiff':
         diff_loss_func = minus_loss
         diff_update_w = False
-    elif loss_type=='relative' or loss_type=='relativesample':
+    elif loss_type=='relative':
         diff_loss_func = relative_loss
         sim_loss_func = rel_loss
+    elif loss_type=='relativesample':
+        diff_loss_func = relative_loss
+        sim_loss_func = rel_loss
+        add_kwargs['add_number'] = 1e-3
     elif loss_type=='relativediff':
         diff_loss_func = relative_loss
         diff_update_w = False
@@ -424,7 +461,8 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
         print('Unknown loss type for policy training')
         print(loss_type)
         print(adv_criterion)
-        raise
+        raise'''
+    diff_loss_func, sim_loss_func, diff_update_w, add_kwargs = loss_select(loss_type,adv_criterion)
     mix_feature = False
     if mix_type=='embed':
         mix_feature = True
@@ -565,7 +603,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                     ori_loss = cuc_loss(origin_logits,target_trsearch,adv_criterion,multilabel).mean().detach() #!to assert loss mean reduce
                     aug_diff_loss += aug_loss.detach().mean().item()
                     ori_diff_loss += ori_loss.detach().mean().item()
-                    loss_prepolicy = diff_loss_func(ori_loss=ori_loss,aug_loss=aug_loss,lambda_aug=lambda_aug)
+                    loss_prepolicy = diff_loss_func(ori_loss=ori_loss,aug_loss=aug_loss,lambda_aug=lambda_aug,**add_kwargs)
                     #print(loss_prepolicy.shape,loss_prepolicy) #!tmp
                     if reweight: #reweight part, a,b = ?
                         p_orig = origin_logits.softmax(dim=1)[torch.arange(batch_size), target_trsearch].detach()
@@ -680,7 +718,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 #similar reweight?
                 aug_search_loss += augsear_loss.detach().mean().item()
                 ori_search_loss += ori_loss.detach().mean().item()
-                loss = sim_loss_func(ori_loss,augsear_loss)
+                loss = sim_loss_func(ori_loss,augsear_loss,**add_kwargs)
                 #print(loss.shape,loss) #!tmp
                 if sim_reweight: #reweight part, a,b = ?
                     p_orig = origin_logits.softmax(dim=1)[torch.arange(search_bs), target_search].detach()

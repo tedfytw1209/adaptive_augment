@@ -544,7 +544,6 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
             aug_loss = criterion(logits, target.float())
         else:
             aug_loss = criterion(logits, target.long())
-        print('diff aug_loss',aug_loss) #!tmp
         #difficult aug
         ori_loss = 0
         batch_size = target.shape[0]
@@ -645,6 +644,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                         else:
                             w_aug = 1
                         loss_policy = (w_aug * loss_prepolicy).mean() #mean to assert
+                        print('w_aug',w_aug)
                     else:
                         loss_policy = loss_prepolicy.mean() #mean to assert
                     #!!!10/13 bug fix!!! ,tmp*4 for same plr

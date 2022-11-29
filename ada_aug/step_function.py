@@ -683,32 +683,33 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 ori_loss = cuc_loss(origin_logits,target_search,sim_criterion,multilabel)
                 #ori_loss = ori_loss.mean() #!to assert loss mean reduce
                 #output pred
-                if mix_type=='loss': #tmp for visualize
-                    if len(logits_search.shape)==4:
-                        logits_search_avg = logits_search.mean(dim=(1,2))
+                if not multilabel:
+                    if mix_type=='loss': #tmp for visualize
+                        if len(logits_search.shape)==4:
+                            logits_search_avg = logits_search.mean(dim=(1,2))
+                        else:
+                            logits_search_avg = logits_search.mean(dim=1)
+                        soft_out = softmax_m(logits_search_avg).detach().cpu() #(bs,n_class) for embed or output mix
+                        soft_all = softmax_m(logits_search.reshape(-1,n_class)).detach().cpu().reshape(*logits_search.shape) #(bs,keep_len,n_ops)
+                        origin_embed_out = origin_embed.detach().cpu()
+                        each_aug_loss = each_aug_loss.detach().cpu()
+                        #print('soft all ',soft_all.shape)
+                        #print('each_aug_loss ',each_aug_loss.shape)
+                        for i,t in enumerate(target_search.data.view(-1)):
+                            sea_output_matrix[t.long()] += soft_out[i]
+                            sea_embed_matrix[t.long(),:] += origin_embed_out[i] #!!! 11/14 add, use origin
+                            sea_embed_count[t.long(),0] += 1
+                            for aug_idx in range(n_ops):
+                                aug_output_matrix[t.long(),aug_idx] += soft_all[i,aug_idx]
+                                aug_loss_mat[aug_idx] += each_aug_loss[i,aug_idx]
+                                aug_class_loss[t.long(),aug_idx] += each_aug_loss[i,aug_idx]
                     else:
-                        logits_search_avg = logits_search.mean(dim=1)
-                    soft_out = softmax_m(logits_search_avg).detach().cpu() #(bs,n_class) for embed or output mix
-                    soft_all = softmax_m(logits_search.reshape(-1,n_class)).detach().cpu().reshape(*logits_search.shape) #(bs,keep_len,n_ops)
-                    origin_embed_out = origin_embed.detach().cpu()
-                    each_aug_loss = each_aug_loss.detach().cpu()
-                    #print('soft all ',soft_all.shape)
-                    #print('each_aug_loss ',each_aug_loss.shape)
-                    for i,t in enumerate(target_search.data.view(-1)):
-                        sea_output_matrix[t.long()] += soft_out[i]
-                        sea_embed_matrix[t.long(),:] += origin_embed_out[i] #!!! 11/14 add, use origin
-                        sea_embed_count[t.long(),0] += 1
-                        for aug_idx in range(n_ops):
-                            aug_output_matrix[t.long(),aug_idx] += soft_all[i,aug_idx]
-                            aug_loss_mat[aug_idx] += each_aug_loss[i,aug_idx]
-                            aug_class_loss[t.long(),aug_idx] += each_aug_loss[i,aug_idx]
-                else:
-                    soft_out = softmax_m(logits_search).detach().cpu() #(bs,n_class) for embed or output mix
-                    origin_embed_out = origin_embed.detach().cpu()
-                    for i,t in enumerate(target_search.data.view(-1)):
-                        sea_output_matrix[t.long()] += soft_out[i]
-                        sea_embed_matrix[t.long(),:] += origin_embed_out[i] #!!! 11/14 add, use origin
-                        sea_embed_count[t.long(),0] += 1
+                            soft_out = softmax_m(logits_search).detach().cpu() #(bs,n_class) for embed or output mix
+                            origin_embed_out = origin_embed.detach().cpu()
+                            for i,t in enumerate(target_search.data.view(-1)):
+                                sea_output_matrix[t.long()] += soft_out[i]
+                                sea_embed_matrix[t.long(),:] += origin_embed_out[i] #!!! 11/14 add, use origin
+                                sea_embed_count[t.long(),0] += 1
 
                 #similar reweight?
                 aug_search_loss += augsear_loss.detach().mean().item()

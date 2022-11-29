@@ -265,9 +265,13 @@ def infer(valid_queue, model, criterion, multilabel=False, n_class=10,mode='test
 
 def sub_loss(ori_loss, aug_loss, lambda_aug,**kwargs): #will become to small
     return lambda_aug * (aug_loss - ori_loss.detach())
-def relative_loss(ori_loss, aug_loss, lambda_aug, add_number=0):
+def relative_loss(ori_loss, aug_loss, lambda_aug, add_number=0,**kwargs):
     return lambda_aug * ((ori_loss.detach()+add_number) / (aug_loss+add_number))
-def relative_loss_s(ori_loss, aug_loss, lambda_aug, add_number=0):
+def relative_loss_mean(ori_loss, aug_loss, lambda_aug, add_number=0,**kwargs):
+    aug_loss = aug_loss.mean()
+    ori_loss = ori_loss.mean()
+    return lambda_aug * ((ori_loss.detach()+add_number) / (aug_loss+add_number))
+def relative_loss_s(ori_loss, aug_loss, lambda_aug, add_number=0,**kwargs):
     return lambda_aug * (2 * (ori_loss.detach()+add_number) / (aug_loss+ori_loss.detach()+add_number))
 def minus_loss(ori_loss, aug_loss, lambda_aug,**kwargs):
     return -1 * lambda_aug * aug_loss
@@ -278,10 +282,14 @@ def none_loss(ori_loss, aug_loss, lambda_aug,**kwargs):
 
 def ab_loss(ori_loss, aug_loss,**kwargs):
     return aug_loss
-def rel_loss_s(ori_loss, aug_loss, add_number=0):
+def rel_loss_s(ori_loss, aug_loss, add_number=0,**kwargs):
     return (2 * (aug_loss+add_number) / (ori_loss.detach()+add_number+aug_loss.detach())).mean()
-def rel_loss(ori_loss, aug_loss, add_number=0):
-    return ((aug_loss+add_number) / (ori_loss.detach()+add_number)).mean()
+def rel_loss(ori_loss, aug_loss, add_number=0,**kwargs):
+    return ((aug_loss+add_number) / (ori_loss.detach()+add_number))
+def rel_loss_mean(ori_loss, aug_loss, add_number=0,**kwargs):
+    aug_loss = aug_loss.mean()
+    ori_loss = ori_loss.mean()
+    return ((aug_loss+add_number) / (ori_loss.detach()+add_number))
 
 def cuc_loss(logits,target,criterion,multilabel,**kwargs):
     if multilabel:
@@ -365,8 +373,8 @@ def loss_select(loss_type,adv_criterion):
         diff_loss_func = minus_loss
         diff_update_w = False
     elif loss_type=='relative':
-        diff_loss_func = relative_loss
-        sim_loss_func = rel_loss
+        diff_loss_func = relative_loss_mean
+        sim_loss_func = rel_loss_mean
     elif loss_type=='relativesample':
         diff_loss_func = relative_loss
         sim_loss_func = rel_loss
@@ -375,7 +383,7 @@ def loss_select(loss_type,adv_criterion):
         diff_loss_func = relative_loss_s
         sim_loss_func = rel_loss_s
     elif loss_type=='relativediff':
-        diff_loss_func = relative_loss
+        diff_loss_func = relative_loss_mean
         diff_update_w = False
     elif loss_type=='adv':
         diff_loss_func = adv_loss

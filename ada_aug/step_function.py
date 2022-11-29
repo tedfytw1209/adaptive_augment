@@ -724,14 +724,14 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 #extra losses
                 for e_criterion in extra_criterions:
                     if e_criterion.loss_target=='output': #for class distance loss target
-                        e_loss = e_criterion(logits_search,target_search,sim_targets=origin_logits).mean()
+                        e_loss = e_criterion(logits_search,target_search,sim_targets=origin_logits)
                     elif e_criterion.loss_target=='embed': 
-                        e_loss = e_criterion(mixed_features,target_search,sim_targets=origin_embed).mean() #using mix_fearures as loss
+                        e_loss = e_criterion(mixed_features,target_search,sim_targets=origin_embed) #using mix_fearures as loss
                     else:
                         print('Unknown loss target: ',e_criterion.loss_target)
                         raise
                     if torch.is_tensor(e_loss):
-                        loss += e_loss
+                        loss += e_loss.mean()
                         ex_losses[str(e_criterion.__class__.__name__)] += e_loss.detach().item()
                         print('Extra class distance loss:', e_loss.detach().item())
                 #!!!10/13 bug fix, tmp *4 for plr!!!

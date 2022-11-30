@@ -49,12 +49,12 @@ class PositionalEncoding(nn.Module):
         div_term = torch.exp(torch.arange(0, d_model, 2) * 
             -(math.log(10000.0) / d_model)) #(d_model/2)
         pe[:, 0::2] = torch.sin(position*div_term)
-        pe[:, 1::20] = torch.cos(position*div_term)
+        pe[:, 1::2] = torch.cos(position*div_term)
         pe = pe.unsqueeze(0) #(1,max_len,d_model)
         self.register_buffer('pe',pe)
     
     def forward(self, x):
-        x = x + torch.tensor(self.pe[:, :x.size(1)], requires_grad=False)
+        x = x + self.pe[:, :x.size(1)].detach()
         return self.dropout(x)
 #multihead atten
 def clones(module, N):
@@ -66,7 +66,8 @@ class Encoder(nn.Module):
         self.norm = LayerNorm(layer.size)
     
     def forward(self, x, mask=None):
-        for layer in self.layers:
+        for (i,layer) in enumerate(self.layers):
+            print('encoder layer: ',i)
             x = layer(x, mask)
         return self.norm(x)
 
@@ -178,6 +179,11 @@ class MF_Transformer(nn.Module): #LSTM for time series
     '''
     def __init__(self, config):
         super().__init__()
+        self.input_channels = config['n_embed']
+        self.z_dim = config['n_hidden']
+        self.num_classes = config['n_output']
+        self.n_layers = config['n_layers']   # number of layers
+        self.bidir_factor = 1 + int(config['b_dir'])
         self.config = config
         c = copy.deepcopy
         n_input = config['n_embed'] #not good impl
@@ -226,8 +232,7 @@ class MF_Transformer(nn.Module): #LSTM for time series
         #rnn_out, (hidden, cell) = self.lstm(
         #    packed_embedded)  # bs X len X n_hidden
         #out_pad, _out_len = rnn_utils.pad_packed_sequence(rnn_out, batch_first=True)
-        x_features = x_encoded.transpose(1, 2) #change to input shape bs, ch, ts
-        features = self.concat_pool(x_features)
+        features = x_encoded.transpose(1, 2) #change to input shape bs, ch, ts
         if pool:
             features = self.pool(features) #bs, ch * (1+b_dir) * concat pool
             features = self.concat_fc(features) #bs, ch

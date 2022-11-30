@@ -73,5 +73,7 @@ def get_search_divider(model_name):
         return 32
     elif model_name == 'resnet50':
         return 128
+    elif model_name == 'mf_trans':
+        return 4
     else:
         return 8 #!!!tmp fix

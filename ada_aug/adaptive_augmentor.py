@@ -26,15 +26,29 @@ defaultkeep_config = {'keep_aug':False,'mode':'auto','thres':0.6,'length':100}
 def perturb_param(param, delta):
     if delta <= 0:
         return param
-        
     amt = random.uniform(0, delta)
-    
     if random.random() < 0.5:
         #return torch.tensor(max(0, param.clone().detach()-amt))
         return torch.clip(param.clone().detach()-amt,min=0.0,max=1.0)
     else:
         #return torch.tensor(min(1, param.clone().detach()+amt))
         return torch.clip(param.clone().detach()+amt,min=0.0,max=1.0)
+
+def perturb_param_wide(param, delta):
+    if delta <= 0:
+        down_amt = random.uniform(0, float(torch.max(param.cpu().detach())))
+        return torch.clip(param.clone().detach()-down_amt,min=0.0,max=1.0)
+    up_amt = random.uniform(0, delta)
+    down_amt = random.uniform(0, float(torch.max(param.cpu().detach()))) #make possible from 0 to params
+    if random.random() < 0.5:
+        #return torch.tensor(max(0, param.clone().detach()-amt))
+        out = torch.clip(param.clone().detach()-down_amt,min=0.0,max=1.0)
+    else:
+        #return torch.tensor(min(1, param.clone().detach()+amt))
+        out = torch.clip(param.clone().detach()+up_amt,min=0.0,max=1.0)
+    print(up_amt,down_amt)
+    print(out)
+    return out
 
 def cuc_meanstd(values,idxs):
     mean_v = values[idxs].mean(0).detach().cpu().tolist()
@@ -275,6 +289,11 @@ class AdaAug_TS(AdaAug):
         self.sub_mix = sub_mix
         self.search_temp = search_temp
         self.preprocessors=preprocessors
+        self.wide_delta = self.config['wide_delta']
+        if self.wide_delta:
+            self.delta_func = perturb_param_wide
+        else:
+            self.delta_func = perturb_param
 
     def predict_aug_params(self, X, seq_len, mode,y=None,policy_apply=True):
         self.gf_model.eval()
@@ -400,7 +419,7 @@ class AdaAug_TS(AdaAug):
         else:
             idx_list,magnitude_i = idx_matrix,magnitudes
         for idx in idx_list:
-            m_pi = perturb_param(magnitude_i[idx], self.delta).detach().cpu().numpy()
+            m_pi = self.delta_func(magnitude_i[idx], self.delta).detach().cpu().numpy()
             image = apply_augment(image, self.ops_names[idx], m_pi,seq_len=seq_len,preprocessor=self.preprocessors[0],aug_dict=self.aug_dict,**self.transfrom_dic)
         return self.after_transforms(image)
     def get_training_aug_images(self, images, magnitudes, weights, seq_len=None,visualize=False):
@@ -601,6 +620,11 @@ class AdaAugkeep_TS(AdaAug):
         self.sub_mix = sub_mix
         self.search_temp = search_temp
         self.preprocessors=preprocessors
+        self.wide_delta = self.config['wide_delta']
+        if self.wide_delta:
+            self.delta_func = perturb_param_wide
+        else:
+            self.delta_func = perturb_param
 
     def predict_aug_params(self, X, seq_len, mode,y=None,policy_apply=True):
         self.gf_model.eval()
@@ -765,7 +789,7 @@ class AdaAugkeep_TS(AdaAug):
         else:
             idx_list,magnitude_i = idx_matrix,magnitudes
         for idx in idx_list:
-            m_pi = perturb_param(magnitude_i[idx], self.delta).detach().cpu().numpy()
+            m_pi = self.delta_func(magnitude_i[idx], self.delta).detach().cpu().numpy()
             image = apply_augment(image, self.ops_names[idx], m_pi,seq_len=seq_len,preprocessor=self.preprocessors[0],aug_dict=self.aug_dict,**self.transfrom_dic)
         return self.after_transforms(image)
     def get_training_aug_images(self, images, magnitudes, weights, keeplen_ws, keep_thres, seq_len=None,visualize=False):

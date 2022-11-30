@@ -429,8 +429,8 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     confusion_matrix = torch.zeros(n_class,n_class)
     tr_output_matrix = torch.zeros(n_class,n_class).float()
     sea_output_matrix = torch.zeros(n_class,n_class).float()
-    tr_embed_matrix = torch.zeros(n_class,256).float()
-    sea_embed_matrix = torch.zeros(n_class,256).float()
+    tr_embed_matrix = torch.zeros(n_class,gf_model.z_dim).float()
+    sea_embed_matrix = torch.zeros(n_class,gf_model.z_dim).float()
     tr_embed_count = torch.zeros(n_class,1)
     sea_embed_count = torch.zeros(n_class,1)
     softmax_m = nn.Softmax(dim=1)
@@ -532,6 +532,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
         gf_optimizer.step()
         scheduler.step() #8/03 add
         gf_optimizer.zero_grad()
+        torch.cuda.empty_cache()
         #ema teacher
         if teacher_model:
             teacher_model.update_parameters(gf_model)

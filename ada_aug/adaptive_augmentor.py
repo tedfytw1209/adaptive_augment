@@ -289,7 +289,7 @@ class AdaAug_TS(AdaAug):
         self.sub_mix = sub_mix
         self.search_temp = search_temp
         self.preprocessors=preprocessors
-        self.wide_delta = self.config['wide_delta']
+        self.wide_delta = self.config.get('wide_delta',False)
         if self.wide_delta:
             self.delta_func = perturb_param_wide
         else:
@@ -620,7 +620,7 @@ class AdaAugkeep_TS(AdaAug):
         self.sub_mix = sub_mix
         self.search_temp = search_temp
         self.preprocessors=preprocessors
-        self.wide_delta = self.config['wide_delta']
+        self.wide_delta = self.config.get('wide_delta',False)
         if self.wide_delta:
             self.delta_func = perturb_param_wide
         else:

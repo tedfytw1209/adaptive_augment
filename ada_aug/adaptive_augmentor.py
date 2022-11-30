@@ -46,8 +46,8 @@ def perturb_param_wide(param, delta):
     else:
         #return torch.tensor(min(1, param.clone().detach()+amt))
         out = torch.clip(param.clone().detach()+up_amt,min=0.0,max=1.0)
-    print(up_amt,down_amt)
-    print(out)
+    #print(up_amt,';',down_amt)
+    #print(param,';',out)
     return out
 
 def cuc_meanstd(values,idxs):

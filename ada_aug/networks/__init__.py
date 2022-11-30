@@ -11,6 +11,7 @@ from .LSTM import LSTM_ecg,LSTM_modal,LSTM_ptb
 from .LSTM_attention import LSTM_attention
 from .Sleep_stager import SleepStagerChambon2018
 from .resnet1d import resnet1d_wang
+from .MF_transformer import MF_Transformer
 
 def get_model(model_name='wresnet40_2', num_class=10, n_channel=3, use_cuda=True, data_parallel=False):
     name = model_name
@@ -34,9 +35,9 @@ def get_model(model_name='wresnet40_2', num_class=10, n_channel=3, use_cuda=True
             model = model.cuda()
     return model
 
-def get_model_tseries(model_name='lstm', num_class=10, n_channel=3, use_cuda=True, data_parallel=False, dataset=''):
+def get_model_tseries(model_name='lstm', num_class=10, n_channel=3, use_cuda=True, data_parallel=False, dataset='', max_len=5000):
     name = model_name
-    config = {'n_output':num_class,'n_embed':n_channel,'rnn_drop': 0.2,'fc_drop': 0.5}
+    config = {'n_output':num_class,'n_embed':n_channel,'rnn_drop': 0.2,'fc_drop': 0.5,'max_len':max_len}
     if model_name == 'lstm':
         n_hidden = 128
         model_config = {'n_hidden': n_hidden,
@@ -62,6 +63,18 @@ def get_model_tseries(model_name='lstm', num_class=10, n_channel=3, use_cuda=Tru
                   'rnn_drop': 0.25,
                   'fc_drop': 0.5}
         net = LSTM_ptb
+    elif model_name == 'ml_trans':
+        n_hidden = 128
+        model_config = {
+                  'n_hidden': n_hidden,
+                  'n_layers': 5,
+                  'n_head': 8, #tmp params
+                  'n_dff': n_hidden*4, #tmp params
+                  'b_dir': False,
+                  'concat_pool': True,
+                  'rnn_drop': 0.1,
+                  'fc_drop': 0.5}
+        net = MF_Transformer
     elif model_name == 'lstm_atten':
         n_hidden = 512
         model_config = {

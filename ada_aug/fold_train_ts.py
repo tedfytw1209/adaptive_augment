@@ -194,6 +194,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         #  dataset settings for search
         n_channel = get_num_channel(args.dataset)
         n_class = get_num_class(args.dataset,args.labelgroup)
+        max_len = get_dataset_dimension(args.dataset)
         sdiv = get_search_divider(args.model_name)
         class2label = get_label_name(args.dataset, args.dataroot,args.labelgroup)
         self.sfreq = Freq_dict[args.dataset]
@@ -232,7 +233,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         #  task model settings
         self.task_model = get_model_tseries(model_name=args.model_name,
                             num_class=n_class,n_channel=n_channel,
-                            use_cuda=True, data_parallel=False,dataset=args.dataset)
+                            use_cuda=True, data_parallel=False,dataset=args.dataset,max_len=max_len)
         #follow ptbxl batchmark!!!
         self.optimizer = torch.optim.AdamW(self.task_model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
         self.scheduler = torch.optim.lr_scheduler.OneCycleLR(self.optimizer, max_lr=args.learning_rate,

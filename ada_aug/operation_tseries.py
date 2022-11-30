@@ -1212,11 +1212,18 @@ def leads_threshold_select(slc_ch_each,n_keep_lead,lead_quant,default_leads):
     #print('leads_threshold_select leads slc: ',slc_ch_each) #!tmp
     #print(f'n_leads: {n_keep_lead}, lead select: {lead_select}') #!tmp
     return lead_select
+def keep_nomix(t_s,inforegion_list,x1,x2,reg_i,lead_select):
+    t_s[x1: x2, lead_select.to(t_s.device)] = inforegion_list[reg_i][:,lead_select]
+    return t_s
+
+def keep_mix(t_s,inforegion_list,x1,x2,reg_i,lead_select,mix_alpha=1):
+    t_s[x1: x2, lead_select.to(t_s.device)] = inforegion_list[reg_i][:,lead_select]
+    return t_s
 
 class KeepAugment(object): #need fix
     def __init__(self, mode, length,thres=0.6,transfrom=None,default_select=None, early=False, low = False,adapt_target='len',
         possible_segment=[1],keep_leads=[12],grid_region=False, reverse=False,info_upper = 0.0, visualize=False,save_dir='./',
-        sfreq=100,pw_len=0.2,tw_len=0.4,keep_prob=1,keep_back='',lead_sel='thres',**_kwargs):
+        sfreq=100,pw_len=0.2,tw_len=0.4,keep_prob=1,keep_back='',lead_sel='thres',keep_mixup=False,**_kwargs):
         assert mode in ['auto','b','p','t','rand'] #auto: all, b: heart beat(-0.2,0.4), p: p-wave(-0.2,0), t: t-wave(0,0.4)
         self.mode = mode
         if self.mode=='p':
@@ -1289,6 +1296,7 @@ class KeepAugment(object): #need fix
         print('Keep back method', self.keep_dict)
         self.keep_back = keep_back
         self.keep_prob = keep_prob
+        self.keep_mixup = keep_mixup
         #'torch.nn.functional.avg_pool1d' use this for segment
         ##self.m_pool = torch.nn.AvgPool1d(kernel_size=self.length, stride=1, padding=0) #for winodow sum
         print(f'Apply InfoKeep Augment: mode={self.mode}, threshold={self.thres}, transfrom={self.trans}')
@@ -1645,7 +1653,7 @@ def stop_gradient_keep(trans_image, magnitude, keep_thre, region_list):
 class AdaKeepAugment(KeepAugment): #
     def __init__(self, mode, length,thres=0.6,transfrom=None,default_select=None, early=False, low = False,
         possible_segment=[1],keep_leads=[12],grid_region=False, reverse=False,info_upper = 0.0, thres_adapt=True, adapt_target='len',save_dir='./',
-        sfreq=100,pw_len=0.2,tw_len=0.4,keep_prob=1,keep_back='',lead_sel='thres',**_kwargs):
+        sfreq=100,pw_len=0.2,tw_len=0.4,keep_prob=1,keep_back='',lead_sel='thres',keep_mixup=False,**_kwargs):
         assert mode in ['auto','b','p','t','rand'] #auto: all, b: heart beat(-0.2,0.4), p: p-wave(-0.2,0), t: t-wave(0,0.4)
         self.mode = mode
         if self.mode=='p':
@@ -1709,6 +1717,7 @@ class AdaKeepAugment(KeepAugment): #
             print('Using rpeak correction')
             self.rpeak_correct = True
         self.keep_back = keep_back
+        self.keep_mixup = keep_mixup
         #'torch.nn.functional.avg_pool1d' use this for segment
         print(f'Apply InfoKeep Augment: mode={self.mode},target={self.adapt_target}, threshold={self.thres}, transfrom={self.trans}')
     #kwargs for apply_func, batch_inputs

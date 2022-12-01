@@ -409,12 +409,15 @@ def noaug_select(noaug_reg,extra_criterions,noaug_lossw):
         print('Using NOAUG regularation ',noaug_reg)
         print(noaug_lossw)
         use_noaug_reg = True
+    
     if noaug_reg=='creg' or noaug_reg=='reg':
         noaug_target = 'p'
     elif noaug_reg=='cwreg':
         noaug_target = 'w'
     elif noaug_reg=='cpwreg':
         noaug_target = 'pw'
+    elif noaug_reg=='cdummy':
+        noaug_target = 'p'
     return use_noaug_reg, noaug_target, noaug_lossw
 
 def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, adaaug, criterion, gf_optimizer,scheduler,
@@ -645,7 +648,11 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 aug_weight = aug_weights[0] # (bs, n_ops), 0 is NOAUG
                 aug_magnitude = aug_weights[1]
                 noaug_mag_target = torch.zeros(aug_magnitude.shape).cuda().float()
-                noaug_w_target = torch.zeros(aug_weight.shape[0]).cuda().long()
+                if noaug_reg=='cdummy':
+                    print('Use taget to fake noaug target')
+                    noaug_w_target = target_search.detach().long()
+                else:
+                    noaug_w_target = torch.zeros(aug_weight.shape[0]).cuda().long()
                 #print(noaug_mag_target)
                 #print(noaug_w_target)
                 if use_noaug_reg: #need test

@@ -112,7 +112,7 @@ parser.add_argument('--class_dist', type=str, default='', help='class distance l
 parser.add_argument('--lambda_dist', type=float, default=1.0, help="class distance weight")
 parser.add_argument('--class_sim', action='store_true', default=False, help='class distance use similar or not')
 parser.add_argument('--noaug_reg', type=str, default='', help='add regular for noaugment ',
-        choices=['reg','creg','wreg','cwreg','pwreg','cpwreg',''])
+        choices=['reg','creg','wreg','cwreg','pwreg','cpwreg','cdummy',''])
 parser.add_argument('--noaug_add', type=str, default='', help='add regular for noaugment ',
         choices=['cadd','add','coadd',''])
 parser.add_argument('--noaug_max', type=float, default=0.5, help='max noaugment regular')

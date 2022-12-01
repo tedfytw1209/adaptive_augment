@@ -18,6 +18,8 @@ from sklearn.utils.class_weight import compute_sample_weight
 
 sns.set()
 
+
+
 def select_perfrom_source(output_source,train_table,valid_table,search_table,ptype,n_class,class_noaug=False):
     if output_source=='':
         print('No specify output source, use train')
@@ -122,6 +124,21 @@ def mAP_cw(targs, preds):
         if each_sum>0:
             ap[k] = average_precision_score(targets,scores)
     return 100 * ap
+
+def mixup_data(x, y, alpha=1.0, use_cuda=True):
+    '''Returns mixed inputs, pairs of targets, and lambda'''
+    if alpha > 0:
+        lam = np.random.beta(alpha, alpha)
+    else:
+        lam = 1
+    batch_size = x.size()[0]
+    if use_cuda:
+        index = torch.randperm(batch_size).cuda()
+    else:
+        index = torch.randperm(batch_size)
+    mixed_x = lam * x + (1 - lam) * x[index, :]
+    y_a, y_b = y, y[index]
+    return mixed_x, y_a, y_b, lam
 
 def make_weights_for_balanced_classes(labels, nclasses,alpha=1.0):                        
     #np ways

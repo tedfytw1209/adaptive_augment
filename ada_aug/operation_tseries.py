@@ -1213,11 +1213,14 @@ def leads_threshold_select(slc_ch_each,n_keep_lead,lead_quant,default_leads):
     #print(f'n_leads: {n_keep_lead}, lead select: {lead_select}') #!tmp
     return lead_select
 def keep_nomix(t_s,inforegion_list,x1,x2,reg_i,lead_select):
-    t_s[x1: x2, lead_select.to(t_s.device)] = inforegion_list[reg_i][:,lead_select]
+    t_s[x1: x2, lead_select.to(t_s.device)] = inforegion_list[reg_i][:,lead_select.to(t_s.device)].to(t_s.device)
     return t_s
 
 def keep_mix(t_s,inforegion_list,x1,x2,reg_i,lead_select,mix_alpha=1):
-    t_s[x1: x2, lead_select.to(t_s.device)] = inforegion_list[reg_i][:,lead_select]
+    lam = np.random.beta(mix_alpha, mix_alpha)
+    #mixed_x = lam * x + (1 - lam) * x[index, :]
+    t_s[x1: x2, lead_select.to(t_s.device)] = lam * inforegion_list[reg_i][:,lead_select.to(t_s.device)].to(t_s.device) \
+         + (1-lam) * t_s[x1: x2, lead_select.to(t_s.device)]
     return t_s
 
 class KeepAugment(object): #need fix
@@ -1297,9 +1300,14 @@ class KeepAugment(object): #need fix
         self.keep_back = keep_back
         self.keep_prob = keep_prob
         self.keep_mixup = keep_mixup
+        self.keep_func_param = {}
+        if self.keep_mixup:
+            self.keep_func = keep_mix
+        else:
+            self.keep_func = keep_nomix
         #'torch.nn.functional.avg_pool1d' use this for segment
         ##self.m_pool = torch.nn.AvgPool1d(kernel_size=self.length, stride=1, padding=0) #for winodow sum
-        print(f'Apply InfoKeep Augment: mode={self.mode}, threshold={self.thres}, transfrom={self.trans}')
+        print(f'Apply InfoKeep Augment: mode={self.mode}, threshold={self.thres}, transfrom={self.trans}, mixup={self.keep_mixup}')
     #func
     def get_augment(self,apply_func=None,selective='paste'):
         if apply_func!=None:
@@ -1396,11 +1404,6 @@ class KeepAugment(object): #need fix
             stride=1, padding=info_len//2,count_include_pad=False).view(b,-1)[:,:w]
         windowed_w = windowed_slc.shape[1]
         windowed_len = int(windowed_w / seg_number)
-        '''print('t_series_ ',t_series_.shape)
-        print('slc_ ',slc_.shape)
-        print('slc_ch ',slc_ch.shape)
-        print('windowed_slc ',windowed_slc.shape)
-        print('seq_len ',seq_len.shape)'''
         #11/09 for quant with different lens not consider!!!
         seg_accum, windowed_accum = self.get_seg(seg_number,seg_len,w,windowed_w,windowed_len)
         #print(slc_)
@@ -1464,7 +1467,8 @@ class KeepAugment(object): #need fix
             if apply_keep[i] < self.keep_prob and use_keep: #maybe not fast
                 for reg_i in range(len(inforegion_list)):
                     x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
-                    t_s[x1: x2, lead_select.to(t_s.device)] = inforegion_list[reg_i][:,lead_select]
+                    #t_s[x1: x2, lead_select.to(t_s.device)] = inforegion_list[reg_i][:,lead_select]
+                    self.keep_func(t_s,inforegion_list,x1,x2,reg_i,lead_select,**self.keep_func_param)
             else:
                 print(f'randam{apply_keep[i]}>{self.keep_prob}')
                 print(f'ops idx{idx} use keep {use_keep}')
@@ -1567,7 +1571,8 @@ class KeepAugment(object): #need fix
                 if use_keep:
                     for reg_i in range(len(inforegion_list)):
                         x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
-                        t_s_tmp[x1: x2, lead_select.to(t_s_tmp.device)] = inforegion_list[reg_i][:,lead_select].to(t_s_tmp.device)
+                        #t_s_tmp[x1: x2, lead_select.to(t_s_tmp.device)] = inforegion_list[reg_i][:,lead_select].to(t_s_tmp.device)
+                        self.keep_func(t_s_tmp,inforegion_list,x1,x2,reg_i,lead_select,**self.keep_func_param)
                 else:
                     print(f'ops idx{idx} use keep {use_keep}')
                 aug_t_s_list.append(t_s_tmp)
@@ -1718,8 +1723,14 @@ class AdaKeepAugment(KeepAugment): #
             self.rpeak_correct = True
         self.keep_back = keep_back
         self.keep_mixup = keep_mixup
+        self.keep_func_param = {}
+        if self.keep_mixup:
+            self.keep_func = keep_mix
+        else:
+            self.keep_func = keep_nomix
         #'torch.nn.functional.avg_pool1d' use this for segment
-        print(f'Apply InfoKeep Augment: mode={self.mode},target={self.adapt_target}, threshold={self.thres}, transfrom={self.trans}')
+        print(f'Apply InfoKeep Augment: mode={self.mode},target={self.adapt_target}, threshold={self.thres}, \
+            transfrom={self.trans}, mixup={self.keep_mixup}')
     #kwargs for apply_func, batch_inputs
     def __call__(self, t_series, model=None,selective='paste', apply_func=None,len_idx=None, keep_thres=None, seq_len=None, **kwargs):
         b,w,c = t_series.shape
@@ -1830,7 +1841,8 @@ class AdaKeepAugment(KeepAugment): #
             if use_keep and adapt_keep:
                 for reg_i in range(len(inforegion_list)):
                     x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
-                    t_s[x1: x2, lead_select.to(t_s.device)] = inforegion_list[reg_i][:,lead_select]
+                    #t_s[x1: x2, lead_select.to(t_s.device)] = inforegion_list[reg_i][:,lead_select]
+                    self.keep_func(t_s,inforegion_list,x1,x2,reg_i,lead_select,**self.keep_func_param)
             else:
                 print(f'ops idx{idx} use keep {use_keep}')
             aug_t_s_list.append(t_s)
@@ -1959,7 +1971,8 @@ class AdaKeepAugment(KeepAugment): #
                     if use_keep and adapt_keep:
                         for reg_i in range(len(inforegion_list)):
                             x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
-                            t_s_tmp[x1: x2, lead_select.to(t_s_tmp.device)] = inforegion_list[reg_i][:,lead_select].to(t_s_tmp.device)
+                            #t_s_tmp[x1: x2, lead_select.to(t_s_tmp.device)] = inforegion_list[reg_i][:,lead_select].to(t_s_tmp.device)
+                            self.keep_func(t_s_tmp,inforegion_list,x1,x2,reg_i,lead_select,**self.keep_func_param)
                     else:
                         print(f'ops idx{idx} use keep {use_keep}')
                     t_s_tmp = stop_gradient_keep(t_s_tmp.cuda(), magnitudes[i][k], keep_thres[i],region_list) #add keep thres
@@ -2074,7 +2087,8 @@ class AdaKeepAugment(KeepAugment): #
                     if use_keep:
                         for reg_i in range(len(inforegion_list)):
                             x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
-                            t_s_tmp[x1: x2, lead_select.to(t_s_tmp.device)] = inforegion_list[reg_i][:,lead_select].to(t_s_tmp.device)
+                            #t_s_tmp[x1: x2, lead_select.to(t_s_tmp.device)] = inforegion_list[reg_i][:,lead_select].to(t_s_tmp.device)
+                            self.keep_func(t_s_tmp,inforegion_list,x1,x2,reg_i,lead_select,**self.keep_func_param)
                     else:
                         print(f'ops idx{idx} use keep {use_keep}')
                     t_s_tmp = stop_gradient_keep(t_s_tmp.cuda(), magnitudes[i][k], keep_thres[i],region_list) #add keep thres

@@ -139,6 +139,7 @@ parser.add_argument('--teach_rew', action='store_true', default=False, help='tea
 parser.add_argument('--visualize', action='store_true', default=False, help='visualize')
 parser.add_argument('--output_visual', action='store_true', default=False, help='visualize output and confusion matrix')
 parser.add_argument('--output_pred', action='store_true', default=False, help='output predict result and ture target')
+parser.add_argument('--output_policy', action='store_true', default=False, help='output policy result of each class')
 
 args = parser.parse_args()
 debug = True if args.save == "debug" else False
@@ -328,6 +329,10 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         dir_path = os.path.join(self.config['BASE_PATH'],self.config['save'],add_dir,f'fold{test_fold_idx}')
         if not os.path.exists(dir_path):
             os.makedirs(dir_path)
+        if args.restore:
+            policy_path = os.path.join(self.config['BASE_PATH'],args.restore_path,f'fold{test_fold_idx}')
+        else:
+            policy_path = dir_path
         #AdaAug / Keep
         after_transforms = self.train_queue.dataset.after_transforms
         adaaug_config = {'sampling': 'prob',
@@ -348,7 +353,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 n_class=n_class,
                 gf_model=self.gf_model,
                 h_model=self.h_model,
-                save_dir=dir_path,
+                save_dir=policy_path,
                 #visualize=args.visualize,
                 config=adaaug_config,
                 keepaug_config=keepaug_config,
@@ -366,7 +371,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 n_class=n_class,
                 gf_model=self.gf_model,
                 h_model=self.h_model,
-                save_dir=dir_path,
+                save_dir=policy_path,
                 #visualize=args.visualize,
                 config=adaaug_config,
                 keepaug_config=keepaug_config,
@@ -508,6 +513,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                         os.path.join(dir_path, 'valid_prediction.csv'))
                 utils.save_pred(self.result_table_dic['test_target'],self.result_table_dic['test_predict'],
                         os.path.join(dir_path, 'test_prediction.csv'))
+                
             #save&log
             wandb.log(step_dic)
             if args.output_visual:

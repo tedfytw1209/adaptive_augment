@@ -288,24 +288,24 @@ class PolicyHistory(object):
 
         frames = []
         for i, file in enumerate(mag_file_list):
-            df = pd.read_csv(file).dropna()
-            df['class'] = file.split('/')[-1][:-4].split('_')[0]
-            frames.append(df.tail(1))
+            df_mag = pd.read_csv(file).dropna()
+            df_mag['class'] = file.split('/')[-1][:-4].split('_')[0]
+            frames.append(df_mag.tail(1))
 
-        df = pd.concat(frames)
-        df.set_index('class').plot(ax=axes, kind='bar', stacked=True, legend=False, rot=90, fontsize=8)
+        df_mag = pd.concat(frames)
+        df_mag.set_index('class').plot(ax=axes, kind='bar', stacked=True, legend=False, rot=90, fontsize=8)
         axes.set_ylabel("magnitude")
         plt.savefig(f'{PATH}/policy/magnitude_by_class.png')
         
         f, axes = plt.subplots(1, 1, figsize=(7,5))
         frames = []
         for i, file in enumerate(weights_file_list):
-            df = pd.read_csv(file).dropna()
-            df['class'] = file.split('/')[-1][:-4].split('_')[0].split('(')[1][:-1]
-            frames.append(df.tail(1))
+            df_w = pd.read_csv(file).dropna()
+            df_w['class'] = file.split('/')[-1][:-4].split('_')[0].split('(')[1][:-1]
+            frames.append(df_w.tail(1))
 
-        df = pd.concat(frames)   
-        df.set_index('class').plot(ax=axes, kind='bar', stacked=True, legend=False, rot=90, fontsize=8)
+        df_w = pd.concat(frames)   
+        df_w.set_index('class').plot(ax=axes, kind='bar', stacked=True, legend=False, rot=90, fontsize=8)
         axes.set_ylabel("probability")
         axes.set_xlabel("")
         plt.savefig(f'{PATH}/policy/probability_by_class.png')
@@ -422,22 +422,22 @@ class PolicyHistoryKeep(object):
         f, axes = plt.subplots(1, 1, figsize=(7,5))
         frames = []
         for i, file in enumerate(mag_file_list):
-            df = pd.read_csv(file).dropna()
-            df['class'] = file.split('/')[-1][:-4].split('_')[0]
-            frames.append(df.tail(1))
-        df = pd.concat(frames)
-        df.set_index('class').plot(ax=axes, kind='bar', stacked=True, legend=False, rot=90, fontsize=8)
+            df_mag = pd.read_csv(file).dropna()
+            df_mag['class'] = file.split('/')[-1][:-4].split('_')[0]
+            frames.append(df_mag.tail(1))
+        df_mag = pd.concat(frames)
+        df_mag.set_index('class').plot(ax=axes, kind='bar', stacked=True, legend=False, rot=90, fontsize=8)
         axes.set_ylabel("magnitude")
         plt.savefig(f'{PATH}/policy/magnitude_by_class.png')
         #probability
         f, axes = plt.subplots(1, 1, figsize=(7,5))
         frames = []
         for i, file in enumerate(weights_file_list):
-            df = pd.read_csv(file).dropna()
-            df['class'] = file.split('/')[-1][:-4].split('_')[0].split('(')[1][:-1]
-            frames.append(df.tail(1))
-        df = pd.concat(frames)   
-        df.set_index('class').plot(ax=axes, kind='bar', stacked=True, legend=False, rot=90, fontsize=8)
+            df_w = pd.read_csv(file).dropna()
+            df_w['class'] = file.split('/')[-1][:-4].split('_')[0].split('(')[1][:-1]
+            frames.append(df_w.tail(1))
+        df_w = pd.concat(frames)   
+        df_w.set_index('class').plot(ax=axes, kind='bar', stacked=True, legend=False, rot=90, fontsize=8)
         axes.set_ylabel("probability")
         axes.set_xlabel("")
         plt.savefig(f'{PATH}/policy/probability_by_class.png')

@@ -337,22 +337,25 @@ class AdaAug_TS(AdaAug):
         zero_tensor = torch.zeros(1,self.n_ops)
         for k in range(self.n_class):
             if self.multilabel:
-                idxs = (targets[:,k] == 1).nonzero().squeeze()
+                idxs = (targets[:,k] == 1).nonzero().view(-1) #.squeeze()
             else:
-                idxs = (targets == k).nonzero().squeeze()
+                idxs = (targets == k).nonzero().view(-1) #.squeeze()
             mean_lambda = magnitudes[idxs].mean(0).detach().cpu()
             mean_p = weights[idxs].mean(0).detach().cpu()
             std_lambda = magnitudes[idxs].std(0).detach().cpu()
             std_p = weights[idxs].std(0).detach().cpu()
             self.history.add(k, mean_lambda.tolist(), mean_p.tolist(), std_lambda.tolist(), std_p.tolist())
+            print(idxs)
+            print(mean_lambda)
+            print(mean_p)
             if torch.isnan(mean_lambda).sum() > 0: #nan in result
                 mag_list.append(zero_tensor.clone().view(1,-1))
                 weight_list.append(zero_tensor.clone().view(1,-1))
             else:
                 mag_list.append(mean_lambda.view(1,-1))
                 weight_list.append(mean_p.view(1,-1))
-        print(mag_list)
-        print(weight_list)
+        #print(mag_list)
+        #print(weight_list)
         mag_list = torch.cat(mag_list) #(n_class,n_ops)
         weight_list = torch.cat(weight_list)
         return (mag_list,weight_list)

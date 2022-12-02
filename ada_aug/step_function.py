@@ -109,10 +109,9 @@ def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_
             logging.info('train: step=%03d loss=%e top1acc=%f top5acc=%f', global_step, objs.avg, top1.avg, top5.avg)
 
         # log the policy
-        if step == 0:
-            policy = adaaug.add_history(input, seq_len, target,y=policy_y)
-            tr_class_augm += policy[0]
-            tr_class_augw += policy[1]
+        policy = adaaug.add_history(input, seq_len, target,y=policy_y)
+        tr_class_augm += policy[0]
+        tr_class_augw += policy[1]
         # Accuracy / AUROC
         if not multilabel:
             _, predicted = torch.max(logits.data, 1)
@@ -148,6 +147,10 @@ def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_
     table_dic['train_target'] = targets_np
     table_dic['train_predict'] = preds_np
     #tmp only look noaug %
+    tr_class_augm = tr_class_augm / torch.clamp(tr_output_matrix.sum(dim=1,keepdim=True),min=1e-9)
+    tr_class_augw = tr_class_augw / torch.clamp(tr_output_matrix.sum(dim=1,keepdim=True),min=1e-9)
+    print(tr_class_augm)
+    print(tr_class_augw)
     noaug_precent = tr_class_augw[:,0].view(-1) #only noaug %
     for i,e_c in enumerate(noaug_precent):
         table_dic[f'train_c{i}_id'] = e_c

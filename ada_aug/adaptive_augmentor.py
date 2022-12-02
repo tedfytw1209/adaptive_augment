@@ -345,9 +345,9 @@ class AdaAug_TS(AdaAug):
             std_lambda = magnitudes[idxs].std(0).detach().cpu()
             std_p = weights[idxs].std(0).detach().cpu()
             self.history.add(k, mean_lambda.tolist(), mean_p.tolist(), std_lambda.tolist(), std_p.tolist())
-            print(idxs)
-            print(mean_lambda)
-            print(mean_p)
+            #print(idxs)
+            #print(mean_lambda)
+            #print(mean_p)
             if torch.isnan(mean_lambda).sum() > 0: #nan in result
                 mag_list.append(zero_tensor.clone().view(1,-1))
                 weight_list.append(zero_tensor.clone().view(1,-1))

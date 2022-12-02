@@ -609,10 +609,10 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                     ori_loss = cuc_loss(origin_logits,target_trsearch,adv_criterion,multilabel).mean().detach() #!to assert loss mean reduce
                     aug_diff_loss += aug_loss.detach().mean().item()
                     ori_diff_loss += ori_loss.detach().mean().item()
-                    print('ori_loss',ori_loss.shape,ori_loss) #!tmp
-                    print('aug_loss',aug_loss.shape,aug_loss) #!tmp
+                    #print('ori_loss',ori_loss.shape,ori_loss) #!tmp
+                    #print('aug_loss',aug_loss.shape,aug_loss) #!tmp
                     loss_prepolicy = diff_loss_func(ori_loss=ori_loss,aug_loss=aug_loss,lambda_aug=lambda_aug,**add_kwargs)
-                    print('loss_prepolicy',loss_prepolicy.shape,loss_prepolicy) #!tmp
+                    #print('loss_prepolicy',loss_prepolicy.shape,loss_prepolicy) #!tmp
                     if reweight: #reweight part, a,b = ?
                         p_orig = origin_logits.softmax(dim=1)[torch.arange(batch_size), target_trsearch].detach()
                         p_aug = aug_logits.softmax(dim=1)[torch.arange(batch_size), target_trsearch].clone().detach()
@@ -623,7 +623,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                         else:
                             w_aug = 1
                         loss_policy = (w_aug * loss_prepolicy).mean() #mean to assert
-                        print('w_aug',w_aug)
+                        #print('w_aug',w_aug)
                     else:
                         loss_policy = loss_prepolicy.mean() #mean to assert
                     #!!!10/13 bug fix!!! ,tmp*4 for same plr

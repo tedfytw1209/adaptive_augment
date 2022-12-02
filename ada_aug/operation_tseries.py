@@ -1221,6 +1221,8 @@ def keep_mix(t_s,inforegion_list,x1,x2,reg_i,lead_select,mix_alpha=1):
     #mixed_x = lam * x + (1 - lam) * x[index, :]
     t_s[x1: x2, lead_select.to(t_s.device)] = lam * inforegion_list[reg_i][:,lead_select.to(t_s.device)].to(t_s.device) \
          + (1-lam) * t_s[x1: x2, lead_select.to(t_s.device)]
+    print('mixup lam: ',lam)
+    print(t_s[x1:x2])
     return t_s
 
 class KeepAugment(object): #need fix

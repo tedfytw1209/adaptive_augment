@@ -310,7 +310,7 @@ class PolicyHistory(object):
         axes.set_xlabel("")
         plt.savefig(f'{PATH}/policy/probability_by_class.png')
         
-        return f
+        return f, (df_mag, df_w)
 
 class PolicyHistoryKeep(object):
 
@@ -445,11 +445,11 @@ class PolicyHistoryKeep(object):
         f, axes = plt.subplots(1, 1, figsize=(7,5))
         frames = []
         for i, file in enumerate(keeplens_file_list):
-            df = pd.read_csv(file).dropna()
-            df['class'] = file.split('/')[-1][:-4].split('_')[0].split('(')[1][:-1]
-            frames.append(df.tail(1))
-        df = pd.concat(frames)   
-        df.set_index('class').plot(ax=axes, kind='bar', stacked=True, legend=False, rot=90, fontsize=8)
+            df_klen = pd.read_csv(file).dropna()
+            df_klen['class'] = file.split('/')[-1][:-4].split('_')[0].split('(')[1][:-1]
+            frames.append(df_klen.tail(1))
+        df_klen = pd.concat(frames)   
+        df_klen.set_index('class').plot(ax=axes, kind='bar', stacked=True, legend=False, rot=90, fontsize=8)
         axes.set_ylabel("keeplen")
         axes.set_xlabel("")
         plt.savefig(f'{PATH}/policy/keeplen_by_class.png')
@@ -457,14 +457,14 @@ class PolicyHistoryKeep(object):
         f, axes = plt.subplots(1, 1, figsize=(7,5))
         frames = []
         for i, file in enumerate(keepthres_file_list):
-            df = pd.read_csv(file).dropna()
-            df['class'] = file.split('/')[-1][:-4].split('_')[0]
-            frames.append(df.tail(1))
-        df = pd.concat(frames)
-        df.set_index('class').plot(ax=axes, kind='bar', stacked=True, legend=False, rot=90, fontsize=8)
+            df_thre = pd.read_csv(file).dropna()
+            df_thre['class'] = file.split('/')[-1][:-4].split('_')[0]
+            frames.append(df_thre.tail(1))
+        df_thre = pd.concat(frames)
+        df_thre.set_index('class').plot(ax=axes, kind='bar', stacked=True, legend=False, rot=90, fontsize=8)
         axes.set_ylabel("keepthres")
         plt.savefig(f'{PATH}/policy/keepthres_by_class.png')
-        return f
+        return f , (df_mag,df_w,df_klen,df_thre)
 
 class AvgrageMeter(object):
 

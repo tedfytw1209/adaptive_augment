@@ -526,9 +526,10 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 tables_dic['valid_output']=plot_conf_wandb(self.result_table_dic['valid_output'],title='valid_output')
                 tables_dic['test_output']=plot_conf_wandb(self.result_table_dic['test_output'],title='test_output')
                 wandb.log(tables_dic)
-            if Curr_epoch==self.config['epochs']-1:
-                self.adaaug.save_history(self.class2label)
-                figure = self.adaaug.plot_history()
+            #if Curr_epoch==self.config['epochs']-1:
+            self.adaaug.save_history(self.class2label)
+            figure, policy = self.adaaug.plot_history()
+            print(policy)
             wandb.finish()
         call_back_dic = {'train_acc': train_acc, 'valid_acc': valid_acc, 'test_acc': test_acc}
         return call_back_dic

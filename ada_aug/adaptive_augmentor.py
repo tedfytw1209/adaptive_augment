@@ -333,6 +333,7 @@ class AdaAug_TS(AdaAug):
 
     def add_history(self, images, seq_len, targets,y=None):
         magnitudes, weights = self.predict_aug_params(images, seq_len, 'exploit',y=y)
+        mag_list, weight_list = [],[] #list for each class
         for k in range(self.n_class):
             if self.multilabel:
                 idxs = (targets[:,k] == 1).nonzero().squeeze()
@@ -343,6 +344,11 @@ class AdaAug_TS(AdaAug):
             std_lambda = magnitudes[idxs].std(0).detach().cpu().tolist()
             std_p = weights[idxs].std(0).detach().cpu().tolist()
             self.history.add(k, mean_lambda, mean_p, std_lambda, std_p)
+            mag_list.append(mean_lambda.view(1,-1))
+            weight_list.append(mean_p.view(1,-1))
+        mag_list = torch.cat(mag_list) #(n_class,n_ops)
+        weight_list = torch.cat(weight_list)
+        return (mag_list,weight_list)
 
     def get_aug_valid_img(self, image, magnitudes,i=None,k=None,ops_name=None, seq_len=None):
         trans_image = apply_augment(image, ops_name, magnitudes[i][k].detach().cpu().numpy(),seq_len=seq_len,preprocessor=self.preprocessors[0],aug_dict=self.aug_dict,**self.transfrom_dic)
@@ -681,6 +687,8 @@ class AdaAugkeep_TS(AdaAug):
             mean_len, std_len = cuc_meanstd(keeplen_ws,idxs)
             mean_thre, std_thre = cuc_meanstd(keep_thres,idxs)
             self.history.add(k, mean_lambda, mean_p, mean_len, mean_thre, std_lambda, std_p, std_len, std_thre)
+        
+
 
     def get_aug_valid_img(self, image, magnitudes,keep_thres,i=None,k=None,ops_name=None, seq_len=None):
         #print('mag shape: ',magnitudes.shape)

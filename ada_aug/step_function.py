@@ -26,6 +26,8 @@ def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
     top5 = utils.AvgrageMeter()
+    tr_class_augw = torch.zeros(n_class,adaaug.n_ops).float()
+    tr_class_augm = torch.zeros(n_class,adaaug.n_ops).float()
     confusion_matrix = torch.zeros(n_class,n_class)
     tr_output_matrix = torch.zeros(n_class,n_class).float()
     softmax_m = nn.Softmax(dim=1)
@@ -108,8 +110,9 @@ def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_
 
         # log the policy
         if step == 0:
-            adaaug.add_history(input, seq_len, target,y=policy_y)
-        
+            policy = adaaug.add_history(input, seq_len, target,y=policy_y)
+            tr_class_augm += policy[0]
+            tr_class_augw += policy[1]
         # Accuracy / AUROC
         if not multilabel:
             _, predicted = torch.max(logits.data, 1)
@@ -144,6 +147,10 @@ def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_
     preds_np = torch.cat(preds).numpy()
     table_dic['train_target'] = targets_np
     table_dic['train_predict'] = preds_np
+    #tmp only look noaug %
+    noaug_precent = tr_class_augw[:,0].view(-1) #only noaug %
+    for i,e_c in enumerate(noaug_precent):
+        table_dic[f'train_c{i}_id'] = e_c
     #class-wise & Total
     if not multilabel:
         cw_acc = 100 * confusion_matrix.diag()/(confusion_matrix.sum(1)+1e-9)
@@ -782,7 +789,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 policy_y_list = torch.cat(policy_y_list,dim=0)
             else:
                 policy_y_list = None
-            adaaug.add_history(input_search_list, seq_len_list, target_search_list,y=policy_y_list)
+            policy = adaaug.add_history(input_search_list, seq_len_list, target_search_list,y=policy_y_list)
         exploration_time = time.time() - timer
         torch.cuda.empty_cache()
         #log

@@ -334,7 +334,7 @@ class AdaAug_TS(AdaAug):
     def add_history(self, images, seq_len, targets,y=None):
         magnitudes, weights = self.predict_aug_params(images, seq_len, 'exploit',y=y)
         mag_list, weight_list = [],[] #list for each class
-        zero_tensor = torch.zeros(self.n_class,self.n_ops)
+        zero_tensor = torch.zeros(1,self.n_ops)
         for k in range(self.n_class):
             if self.multilabel:
                 idxs = (targets[:,k] == 1).nonzero().squeeze()
@@ -346,8 +346,8 @@ class AdaAug_TS(AdaAug):
             std_p = weights[idxs].std(0).detach().cpu()
             self.history.add(k, mean_lambda.tolist(), mean_p.tolist(), std_lambda.tolist(), std_p.tolist())
             if torch.isnan(mean_lambda).sum() > 0: #nan in result
-                mag_list.append(zero_tensor.view(1,-1))
-                weight_list.append(zero_tensor.view(1,-1))
+                mag_list.append(zero_tensor.clone().view(1,-1))
+                weight_list.append(zero_tensor.clone().view(1,-1))
             else:
                 mag_list.append(mean_lambda.view(1,-1))
                 weight_list.append(mean_p.view(1,-1))

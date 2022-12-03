@@ -455,6 +455,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
 
     print(loss_type)
     print(adv_criterion)
+    print(f'Lambda Aug {lambda_aug}, Similar {lambda_sim}, NoAug {lambda_noaug}')
     if adv_criterion==None:
         adv_criterion = criterion
     if sim_criterion==None:

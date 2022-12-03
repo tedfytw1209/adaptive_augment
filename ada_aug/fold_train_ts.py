@@ -615,10 +615,17 @@ def main():
         hparams['kfold'] = tune.grid_search([i for i in range(args.kfold)])
     else:
         hparams['kfold'] = tune.grid_search([args.kfold]) #for some fold
+    #project divide
+    if args.multilabel:
+        proj_name = 'AdaAug_ml'
+    elif args.model_name=='lstm_prb':
+        proj_name = 'AdaAug_LSTM-Other'
+    else:
+        proj_name = 'AdaAug'
     #wandb
     wandb_config = {
         #'config':FLAGS, 
-        'project':'AdaAug',
+        'project':proj_name,
         'group':f'{now_str}_' + experiment_name,
         #'name':experiment_name,
         'dir':'./',

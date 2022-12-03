@@ -458,10 +458,11 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     aug_output_matrix = torch.zeros(n_class,n_ops,n_class).float()
     aug_loss_mat = torch.zeros(n_ops).float()
     aug_class_loss = torch.zeros(n_class,n_ops).float()
-
+    class_weight = class_weight.cuda()
     print(loss_type)
     print(adv_criterion)
     print(f'Lambda Aug {lambda_aug}, Similar {lambda_sim}, NoAug {lambda_noaug}')
+    print('Class weight: ',class_weight)
     if adv_criterion==None:
         adv_criterion = criterion
     if sim_criterion==None:
@@ -619,7 +620,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                     #print('aug_loss',aug_loss.shape,aug_loss) #!tmp
                     loss_prepolicy = diff_loss_func(ori_loss=ori_loss,aug_loss=aug_loss,lambda_aug=lambda_aug,**add_kwargs)
                     #print('loss_prepolicy',loss_prepolicy.shape,loss_prepolicy) #!tmp
-                    if torch.istensor(class_weight): #class_weight: (n_class), w_sample: (bs)
+                    if torch.is_tensor(class_weight): #class_weight: (n_class), w_sample: (bs)
                         w_sample = class_weight[target_trsearch].detach()
                         print('w_sample: ',w_sample.shape) #!
                         tmp = w_sample * loss_prepolicy
@@ -746,12 +747,12 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 ori_search_loss += ori_loss.detach().mean().item()
                 loss = sim_loss_func(ori_loss,augsear_loss,**add_kwargs)
                 #print(loss.shape,loss) #!tmp
-                if torch.istensor(class_weight): #class_weight: (n_class), w_sample: (bs)
-                        w_sample = class_weight[target_search].detach()
-                        print('w_sample: ',w_sample.shape)
-                        tmp = w_sample * loss
-                        print('sim loss: ',tmp)
-                        loss = tmp.mean() 
+                if torch.is_tensor(class_weight): #class_weight: (n_class), w_sample: (bs)
+                    w_sample = class_weight[target_search].detach()
+                    print('w_sample: ',w_sample.shape)
+                    tmp = w_sample * loss
+                    print('sim loss: ',tmp)
+                    loss = tmp.mean() 
                 elif sim_reweight: #reweight part, a,b = ?
                     p_orig = origin_logits.softmax(dim=1)[torch.arange(search_bs), target_search].detach()
                     p_aug = logits_search.softmax(dim=1)[torch.arange(search_bs), target_search].clone().detach()

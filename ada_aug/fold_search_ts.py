@@ -121,6 +121,7 @@ parser.add_argument('--noaug_target', type=str, default='se', help='add regular 
         choices=['se','s','e'])
 parser.add_argument('--output_source', type=str, default='', help='class output source',
         choices=['train','valid','search','allsearch',''])
+parser.add_argument('--class_target', type=int, default=-1, help='single class weight target')
 #loss
 parser.add_argument('--loss_type', type=str, default='minus', help="loss type for difficult policy training",
         choices=['minus','minusdiff','minussample','relative','relativesample','relmixsample','relativediff','adv','embed'])
@@ -262,7 +263,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         self.class_weight = None
         if args.class_target > 0:
             assert args.class_target < n_class
-            self.class_weight = nn.functional.one_hot(args.class_target,num_classes=n_class).view(n_class)
+            class_target_tensor = torch.tensor([args.class_target]).long()
+            self.class_weight = nn.functional.one_hot(class_target_tensor,num_classes=n_class).view(n_class).float() * n_class
             print('Single class weight for experiment: ',self.class_weight)
         #  model settings
         self.gf_model = get_model_tseries(model_name=args.model_name, num_class=n_class,n_channel=n_channel,

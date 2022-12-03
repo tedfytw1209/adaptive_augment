@@ -258,6 +258,12 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             test_size=args.test_size,multilabel=args.multilabel,default_split=args.default_split,valid_search=args.valid_search,
             fold_assign=train_val_test_folds,labelgroup=args.labelgroup,bal_ssampler=args.search_sampler,bal_trsampler=args.train_sampler,
             sampler_alpha=args.alpha)
+        #single class weight
+        self.class_weight = None
+        if args.class_target > 0:
+            assert args.class_target < n_class
+            self.class_weight = nn.functional.one_hot(args.class_target,num_classes=n_class).view(n_class)
+            print('Single class weight for experiment: ',self.class_weight)
         #  model settings
         self.gf_model = get_model_tseries(model_name=args.model_name, num_class=n_class,n_channel=n_channel,
             use_cuda=True, data_parallel=False,dataset=args.dataset,max_len=max_len)
@@ -487,7 +493,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         diff_dic = {'difficult_aug':self.diff_augment,'same_train':args.same_train,'reweight':self.diff_reweight,'lambda_aug':args.lambda_aug,
                 'lambda_sim':args.lambda_sim,'class_adaptive':args.class_adapt,'lambda_noaug':args.lambda_noaug,'train_perfrom':self.pre_train_acc,
                 'loss_type':args.loss_type, 'adv_criterion': self.adv_criterion, 'teacher_model':self.ema_model, 'sim_criterion':self.sim_criterion,
-                'noaug_reg':args.noaug_reg,
+                'noaug_reg':args.noaug_reg,'class_weight': self.class_weight,
                 'extra_criterions':self.extra_losses,'sim_reweight':args.sim_rew,'warmup_epoch': args.pwarmup,'mix_type':args.mix_type,'visualize':args.visualize}
         
         # searching

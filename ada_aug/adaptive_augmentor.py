@@ -319,7 +319,7 @@ class AdaAug_TS(AdaAug):
             weights = torch.ones(bs,self.n_ops) / self.n_ops
         if self.add_method=='fixadd': #add fix amount noaug
             weights[:,0] = self.noaug_max
-            weights[:,1:] = (1.0 - self.noaug_max) / torch.sum(weights[:,1:],dim=1, keepdim=True).detach()
+            weights[:,1:] = (1.0 - self.noaug_max) * weights[:,1:] / torch.sum(weights[:,1:],dim=1, keepdim=True).detach()
         elif self.noaug_add: #add noaug reweights
             if self.class_adaptive: #alpha: (1,n_class), y: (batch_szie,n_class)=>(batch_size,1) one hotted
                 batch_alpha = torch.sum(self.alpha * y,dim=-1,keepdim=True) / torch.sum(y,dim=-1,keepdim=True)
@@ -327,8 +327,7 @@ class AdaAug_TS(AdaAug):
                 batch_alpha = self.alpha.view(-1)
             weights = batch_alpha * weights + (1.0-batch_alpha) * \
                 (self.noaug_tensor.cuda() + weights * (1.0-self.noaug_max))
-        print('weight sum: ',weights.sum(1))
-        print('weight: ',weights)
+        #print('weight: ',weights)
         if self.max_noaug_reduce > 0:
             if self.class_adaptive: #multi_tensor: (1,n_class), y: (batch_szie,n_class)=>(batch_size,1) one hotted
                 magnitude_multi = (torch.sum(self.multi_tensor.cuda() * y,dim=-1,keepdim=True) / torch.sum(y,dim=-1,keepdim=True))

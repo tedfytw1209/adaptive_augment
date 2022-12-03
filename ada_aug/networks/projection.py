@@ -144,9 +144,9 @@ class Projection_TSeries(nn.Module):
         elif self.feature_mask=='classonly':
             y_tmp = self.label_embed(y)
             agg_x = y_tmp
-            #print('class only y: ',agg_x)
         elif self.label_embed!=None:
             y_tmp = self.label_embed(y)
+            #print('y embed: ',agg_x)
             agg_x = torch.cat([x,y_tmp], dim=1) #feature dim
             #print(x.shape, y_tmp.shape)
         else:

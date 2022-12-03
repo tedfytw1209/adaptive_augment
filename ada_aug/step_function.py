@@ -440,8 +440,8 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
             grad_clip, h_optimizer, epoch, search_freq,search_round=1,search_repeat=1, multilabel=False,n_class=10,
             difficult_aug=False,same_train=False,reweight=True,sim_reweight=False,mix_type='embed', warmup_epoch = 0
             ,lambda_sim = 1.0,lambda_aug = 1.0,loss_type='minus',lambda_noaug = 0,train_perfrom = 0.0,noaug_reg='',
-            class_adaptive=False,adv_criterion=None,sim_criterion=None,extra_criterions=[],teacher_model=None,map_select=False,
-            visualize=False):
+            class_adaptive=False,adv_criterion=None,sim_criterion=None,class_weight=None,extra_criterions=[],
+            teacher_model=None,map_select=False,visualize=False):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
     top5 = utils.AvgrageMeter()
@@ -468,7 +468,6 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
         sim_criterion = criterion
     #noaug criterion selection
     noaug_criterion = nn.CrossEntropyLoss(reduction='none').cuda()
-    #noaug_criterion_w = nn.BCELoss(reduction='none').cuda()
     noaug_criterion_w = nn.MSELoss(reduction='none').cuda()
     noaug_lossw = torch.ones(n_class).cuda() * (1.0 - train_perfrom) #first reg
     use_noaug_reg, noaug_target, noaug_lossw = noaug_select(noaug_reg,extra_criterions,noaug_lossw)
@@ -620,7 +619,13 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                     #print('aug_loss',aug_loss.shape,aug_loss) #!tmp
                     loss_prepolicy = diff_loss_func(ori_loss=ori_loss,aug_loss=aug_loss,lambda_aug=lambda_aug,**add_kwargs)
                     #print('loss_prepolicy',loss_prepolicy.shape,loss_prepolicy) #!tmp
-                    if reweight: #reweight part, a,b = ?
+                    if torch.istensor(class_weight): #class_weight: (n_class), w_sample: (bs)
+                        w_sample = class_weight[target_trsearch].detach()
+                        print('w_sample: ',w_sample.shape) #!
+                        tmp = w_sample * loss_prepolicy
+                        print('aug loss: ',tmp) #!
+                        loss_policy = tmp.mean() 
+                    elif reweight: #reweight part, a,b = ?
                         p_orig = origin_logits.softmax(dim=1)[torch.arange(batch_size), target_trsearch].detach()
                         p_aug = aug_logits.softmax(dim=1)[torch.arange(batch_size), target_trsearch].clone().detach()
                         w_aug = torch.sqrt(p_orig * torch.clamp(p_orig - p_aug, min=0)) #a=0.5,b=0.5
@@ -741,7 +746,13 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 ori_search_loss += ori_loss.detach().mean().item()
                 loss = sim_loss_func(ori_loss,augsear_loss,**add_kwargs)
                 #print(loss.shape,loss) #!tmp
-                if sim_reweight: #reweight part, a,b = ?
+                if torch.istensor(class_weight): #class_weight: (n_class), w_sample: (bs)
+                        w_sample = class_weight[target_search].detach()
+                        print('w_sample: ',w_sample.shape)
+                        tmp = w_sample * loss
+                        print('sim loss: ',tmp)
+                        loss = tmp.mean() 
+                elif sim_reweight: #reweight part, a,b = ?
                     p_orig = origin_logits.softmax(dim=1)[torch.arange(search_bs), target_search].detach()
                     p_aug = logits_search.softmax(dim=1)[torch.arange(search_bs), target_search].clone().detach()
                     w_aug = torch.sqrt((1.0 - p_orig)) #a=0.5,b=0.5

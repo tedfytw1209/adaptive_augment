@@ -381,9 +381,9 @@ class ClassDistLoss(torch.nn.Module):
         self.update_distance(class_output_mat)
         self.update_weight(class_output_mat)
         self.class_output_mat = class_output_mat
-        print('### updating class distance pair ###')
-        print(self.class_output_mat)
-        print(self.classpair_dist)
+        #print('### updating class distance pair ###')
+        #print(self.class_output_mat)
+        #print(self.classpair_dist)
         #print(self.classweight_dist)
         #min distance
         class_pairs = np.zeros((n_class,self.k))

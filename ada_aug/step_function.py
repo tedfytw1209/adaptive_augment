@@ -30,6 +30,7 @@ def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_
     tr_class_augm = torch.zeros(n_class,adaaug.n_ops).float()
     confusion_matrix = torch.zeros(n_class,n_class)
     tr_output_matrix = torch.zeros(n_class,n_class).float()
+    tr_count = torch.zeros(n_class).float()
     softmax_m = nn.Softmax(dim=1)
     preds = []
     targets = []
@@ -110,8 +111,8 @@ def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_
 
         # log the policy
         policy = adaaug.add_history(input, seq_len, target,y=policy_y)
-        tr_class_augm += policy[0]
-        tr_class_augw += policy[1]
+        tr_class_augm += policy[0] #sum of policy
+        tr_class_augw += policy[1] #sum of policy
         # Accuracy / AUROC
         if not multilabel:
             _, predicted = torch.max(logits.data, 1)
@@ -121,6 +122,7 @@ def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_
                 confusion_matrix[t.long(), p.long()] += 1
             for i,t in enumerate(target.data.view(-1)):
                 tr_output_matrix[t.long(),:] += soft_out[i]
+                tr_count[t.long()] += 1
         else:
             predicted = torch.sigmoid(logits.data)
         preds.append(predicted.detach().cpu())
@@ -140,15 +142,19 @@ def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_
         exit()
     #table dic
     table_dic = {}
-    table_dic['train_output'] = (tr_output_matrix / torch.clamp(tr_output_matrix.sum(dim=1,keepdim=True),min=1e-9))
+    tr_add_up = torch.clamp(tr_output_matrix.sum(dim=1,keepdim=True),min=1e-9)
+    tr_count = torch.clamp(tr_count,min=1e-9).view(-1,1)
+    table_dic['train_output'] = (tr_output_matrix / tr_add_up)
     table_dic['train_confusion'] = confusion_matrix
     targets_np = torch.cat(targets).numpy()
     preds_np = torch.cat(preds).numpy()
     table_dic['train_target'] = targets_np
     table_dic['train_predict'] = preds_np
     #tmp only look noaug %
-    tr_class_augm = tr_class_augm / torch.clamp(tr_output_matrix.sum(dim=1,keepdim=True),min=1e-9)
-    tr_class_augw = tr_class_augw / torch.clamp(tr_output_matrix.sum(dim=1,keepdim=True),min=1e-9)
+    #print('sum tr output matrix: ',tr_add_up)
+    print('sum tr count matrix: ',tr_count)
+    tr_class_augm = tr_class_augm / tr_count #every output add up is one
+    tr_class_augw = tr_class_augw / tr_count
     print(tr_class_augm)
     print(tr_class_augw)
     noaug_precent = tr_class_augw[:,0].view(-1) #only noaug %

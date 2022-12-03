@@ -108,7 +108,7 @@ parser.add_argument('--feature_mask', type=str, default='', help='add regular fo
 parser.add_argument('--noaug_reg', type=str, default='', help='add regular for noaugment ',
         choices=['creg','wreg','cwreg','pwreg','cpwreg',''])
 parser.add_argument('--noaug_add', type=str, default='', help='add regular for noaugment ',
-        choices=['cadd','add','coadd',''])
+        choices=['cadd','add','coadd','fixadd',''])
 parser.add_argument('--noaug_max', type=float, default=0.5, help='max noaugment regular')
 parser.add_argument('--reduce_mag', type=float, default=0, help='max reduce magnitude (default 0 is no reduce mag')
 parser.add_argument('--noaug_target', type=str, default='se', help='add regular for noaugment target difference',
@@ -214,6 +214,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             self.class_noaug = True
             self.noaug_add = True
         elif args.noaug_add=='add':
+            self.noaug_add = True
+        elif args.noaug_add=='fixadd':
             self.noaug_add = True
         test_fold_idx = self.config['kfold']
         train_val_test_folds = [[],[],[]] #train,valid,test
@@ -330,10 +332,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         dir_path = os.path.join(self.config['BASE_PATH'],self.config['save'],add_dir,f'fold{test_fold_idx}')
         if not os.path.exists(dir_path):
             os.makedirs(dir_path)
-        if args.restore:
-            policy_path = os.path.join(self.config['BASE_PATH'],args.restore_path,f'fold{test_fold_idx}')
-        else:
-            policy_path = dir_path
+        policy_path = dir_path
         #AdaAug / Keep
         after_transforms = self.train_queue.dataset.after_transforms
         adaaug_config = {'sampling': 'prob',
@@ -363,6 +362,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 augselect=args.augselect,
                 class_adaptive=self.class_noaug,
                 noaug_add=self.noaug_add,
+                add_method=args.noaug_add,
                 max_noaug_add=args.noaug_max,
                 max_noaug_reduce=args.reduce_mag,
                 transfrom_dic=trans_config,
@@ -381,6 +381,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 augselect=args.augselect,
                 class_adaptive=self.class_noaug,
                 noaug_add=self.noaug_add,
+                add_method=args.noaug_add,
                 max_noaug_add=args.noaug_max,
                 max_noaug_reduce=args.reduce_mag,
                 transfrom_dic=trans_config,
@@ -457,6 +458,13 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             print(f'Noaug add method {args.noaug_add} perfrom weights: ',class_acc)
             self.adaaug.update_alpha(class_acc)
         self.pre_train_acc = train_acc / 100.0
+        #restore train just for real policy used !!! with problem
+        if args.restore and args.output_policy:
+            train_acc, train_obj, train_dic, train_table = train(args,
+                self.train_queue, self.task_model, self.criterion, self.optimizer, self.scheduler, Curr_epoch, args.grad_clip, self.adaaug, 
+                multilabel=self.multilabel,n_class=self.n_class,map_select=self.mapselect,training=training,**diff_dic)
+            valid_acc, valid_obj, _, _, valid_dic, valid_table = infer(self.valid_queue, self.task_model, self.criterion, multilabel=self.multilabel,
+                    n_class=self.n_class,mode='valid',map_select=self.mapselect)
         #test
         test_acc, test_obj, test_acc5, _,test_dic, test_table  = infer(self.test_queue, self.task_model, self.criterion, multilabel=self.multilabel,
                 n_class=self.n_class,mode='test',map_select=self.mapselect)
@@ -533,10 +541,9 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 tables_dic['valid_output']=plot_conf_wandb(self.result_table_dic['valid_output'],title='valid_output')
                 tables_dic['test_output']=plot_conf_wandb(self.result_table_dic['test_output'],title='test_output')
                 wandb.log(tables_dic)
-            if Curr_epoch==self.config['epochs']-1:
-                self.adaaug.save_history(self.class2label)
-                figure, policy = self.adaaug.plot_history()
-                print(policy)
+            #if Curr_epoch==self.config['epochs']-1:
+            self.adaaug.save_history(self.class2label)
+            figure, policy = self.adaaug.plot_history()
             wandb.finish()
         call_back_dic = {'train_acc': train_acc, 'valid_acc': valid_acc, 'test_acc': test_acc}
         return call_back_dic

@@ -257,7 +257,8 @@ class AdaAug(nn.Module):
 class AdaAug_TS(AdaAug):
     def __init__(self, after_transforms, n_class, gf_model, h_model, save_dir=None, visualize=False,
                     config=default_config,keepaug_config=default_config, multilabel=False, augselect='',class_adaptive=False,
-                    sub_mix=1.0,search_temp=1.0,noaug_add=False,transfrom_dic={},preprocessors=[],max_noaug_add=0.5,max_noaug_reduce=0):
+                    sub_mix=1.0,search_temp=1.0,noaug_add=False,add_method='',transfrom_dic={},preprocessors=[],
+                    max_noaug_add=0.5,max_noaug_reduce=0):
         super(AdaAug_TS, self).__init__(after_transforms, n_class, gf_model, h_model, save_dir, config)
         #other already define in AdaAug
         self.ops_names,self.aug_dict = select_augments(augselect)
@@ -278,6 +279,7 @@ class AdaAug_TS(AdaAug):
         self.class_adaptive = class_adaptive
         self.visualize = visualize
         self.noaug_add = noaug_add
+        self.add_method = add_method
         self.alpha = torch.tensor([0.5]).view(1,-1).cuda() #higher low noaug regulate
         self.noaug_max = max_noaug_add
         self.max_noaug_reduce = max_noaug_reduce 
@@ -315,13 +317,18 @@ class AdaAug_TS(AdaAug):
             #print('Using random augments when warm up')
             magnitudes = torch.ones(bs,self.n_ops) * 0.5 #!!!tmp change to mimic randaug
             weights = torch.ones(bs,self.n_ops) / self.n_ops
-        if self.noaug_add: #add noaug reweights
+        if self.add_method=='fixadd': #add fix amount noaug
+            weights[:,0] = self.noaug_max
+            weights[:,1:] = (1.0 - self.noaug_max) / torch.sum(weights[:,1:],dim=1, keepdim=True).detach()
+        elif self.noaug_add: #add noaug reweights
             if self.class_adaptive: #alpha: (1,n_class), y: (batch_szie,n_class)=>(batch_size,1) one hotted
                 batch_alpha = torch.sum(self.alpha * y,dim=-1,keepdim=True) / torch.sum(y,dim=-1,keepdim=True)
             else:
                 batch_alpha = self.alpha.view(-1)
             weights = batch_alpha * weights + (1.0-batch_alpha) * \
                 (self.noaug_tensor.cuda() + weights * (1.0-self.noaug_max))
+        print('weight sum: ',weights.sum(1))
+        print('weight: ',weights)
         if self.max_noaug_reduce > 0:
             if self.class_adaptive: #multi_tensor: (1,n_class), y: (batch_szie,n_class)=>(batch_size,1) one hotted
                 magnitude_multi = (torch.sum(self.multi_tensor.cuda() * y,dim=-1,keepdim=True) / torch.sum(y,dim=-1,keepdim=True))
@@ -340,6 +347,8 @@ class AdaAug_TS(AdaAug):
                 idxs = (targets[:,k] == 1).nonzero().view(-1) #.squeeze()
             else:
                 idxs = (targets == k).nonzero().view(-1) #.squeeze()
+            sum_lambda = magnitudes[idxs].sum(0).detach().cpu()
+            sum_p = weights[idxs].sum(0).detach().cpu()
             mean_lambda = magnitudes[idxs].mean(0).detach().cpu()
             mean_p = weights[idxs].mean(0).detach().cpu()
             std_lambda = magnitudes[idxs].std(0).detach().cpu()
@@ -352,8 +361,8 @@ class AdaAug_TS(AdaAug):
                 mag_list.append(zero_tensor.clone().view(1,-1))
                 weight_list.append(zero_tensor.clone().view(1,-1))
             else:
-                mag_list.append(mean_lambda.view(1,-1))
-                weight_list.append(mean_p.view(1,-1))
+                mag_list.append(sum_lambda.view(1,-1))
+                weight_list.append(sum_p.view(1,-1))
         #print(mag_list)
         #print(weight_list)
         mag_list = torch.cat(mag_list) #(n_class,n_ops)
@@ -566,7 +575,8 @@ class AdaAug_TS(AdaAug):
 class AdaAugkeep_TS(AdaAug):
     def __init__(self, after_transforms, n_class, gf_model, h_model, save_dir=None, visualize=False,
                     config=default_config,keepaug_config=default_config, multilabel=False, augselect='',class_adaptive=False,ind_mix=False,
-                    sub_mix=1.0,search_temp=1.0,noaug_add=False,transfrom_dic={},preprocessors=[],max_noaug_add=0.5,max_noaug_reduce=0):
+                    sub_mix=1.0,search_temp=1.0,noaug_add=False,add_method='',transfrom_dic={},preprocessors=[],
+                    max_noaug_add=0.5,max_noaug_reduce=0):
         super(AdaAugkeep_TS, self).__init__(after_transforms, n_class, gf_model, h_model, save_dir, config)
         #other already define in AdaAug
         self.ops_names,self.aug_dict = select_augments(augselect)
@@ -625,6 +635,7 @@ class AdaAugkeep_TS(AdaAug):
         self.class_adaptive = class_adaptive
         self.visualize = visualize
         self.noaug_add = noaug_add
+        self.add_method = add_method
         self.alpha = torch.tensor([0.5]).view(1,-1).cuda()
         self.noaug_max = max_noaug_add
         self.max_noaug_reduce = max_noaug_reduce

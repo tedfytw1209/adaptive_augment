@@ -261,7 +261,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             sampler_alpha=args.alpha)
         #single class weight
         self.class_weight = None
-        if args.class_target > 0:
+        if args.class_target >= 0:
             assert args.class_target < n_class
             class_target_tensor = torch.tensor([args.class_target]).long()
             self.class_weight = nn.functional.one_hot(class_target_tensor,num_classes=n_class).view(n_class).float() * n_class

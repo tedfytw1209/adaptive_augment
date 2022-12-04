@@ -108,7 +108,7 @@ parser.add_argument('--feature_mask', type=str, default='', help='add regular fo
 parser.add_argument('--noaug_reg', type=str, default='', help='add regular for noaugment ',
         choices=['creg','wreg','cwreg','pwreg','cpwreg',''])
 parser.add_argument('--noaug_add', type=str, default='', help='add regular for noaugment ',
-        choices=['cadd','add','coadd','fixadd',''])
+        choices=['cadd','add','coadd','fixadd','constadd',''])
 parser.add_argument('--noaug_max', type=float, default=0.5, help='max noaugment regular')
 parser.add_argument('--reduce_mag', type=float, default=0, help='max reduce magnitude (default 0 is no reduce mag')
 parser.add_argument('--noaug_target', type=str, default='se', help='add regular for noaugment target difference',
@@ -205,18 +205,20 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         multilabel = args.multilabel
         diff_augment = args.diff_aug
         diff_reweight = not args.not_reweight
-        self.class_noaug, self.noaug_add, self.use_class_w = False, False, False
-        if args.noaug_add=='cadd':
-            self.class_noaug = True
+        self.class_noaug, self.noaug_add, self.use_class_w, self.adapt_add = False, False, False, False
+        if args.noaug_add:
             self.noaug_add = True
-        elif args.noaug_add=='coadd':
-            self.use_class_w = True
-            self.class_noaug = True
-            self.noaug_add = True
-        elif args.noaug_add=='add':
-            self.noaug_add = True
-        elif args.noaug_add=='fixadd':
-            self.noaug_add = True
+            if args.noaug_add=='cadd':
+                self.class_noaug = True
+                self.adapt_add = True
+            elif args.noaug_add=='coadd':
+                self.use_class_w = True
+                self.class_noaug = True
+                self.adapt_add = True
+            elif args.noaug_add=='add':
+                self.adapt_add = True
+            #other add no need to adapt change
+            
         test_fold_idx = self.config['kfold']
         train_val_test_folds = [[],[],[]] #train,valid,test
         for i in range(10):
@@ -453,7 +455,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                     class_outw = class_outw / class_outw.max()
                     print('regulate mean to ',class_outw)
                 self.adaaug.update_alpha(class_outw)
-        if self.noaug_add and not self.use_class_w: #cadd use perfrom
+        if self.adapt_add and not self.use_class_w: #cadd use perfrom
             class_acc = select_perfrom_source(args.output_source,train_dic,valid_dic,search_dic,ptype,self.n_class,self.class_noaug)
             print(f'Noaug add method {args.noaug_add} perfrom weights: ',class_acc)
             self.adaaug.update_alpha(class_acc)

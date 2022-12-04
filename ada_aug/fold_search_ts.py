@@ -28,6 +28,7 @@ from class_balanced_loss import ClassBalLoss,ClassDiffLoss,ClassDistLoss,make_cl
 import wandb
 from utils import plot_conf_wandb, select_output_source, select_embed_source, select_perfrom_source
 import copy
+
 import ray
 import ray.tune as tune
 from ray.tune.integration.wandb import WandbTrainableMixin
@@ -264,7 +265,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         if args.class_target >= 0:
             assert args.class_target < n_class
             class_target_tensor = torch.tensor([args.class_target]).long()
-            self.class_weight = nn.functional.one_hot(class_target_tensor,num_classes=n_class).view(n_class).float() * n_class
+            self.class_weight = nn.functional.one_hot(class_target_tensor,num_classes=n_class).view(n_class).float() # * n_class
             print('Single class weight for experiment: ',self.class_weight)
         #  model settings
         self.gf_model = get_model_tseries(model_name=args.model_name, num_class=n_class,n_channel=n_channel,
@@ -725,7 +726,7 @@ def main():
         'job_type':"DataAugment",
         'reinit':False,
         'api_key':API_KEY,
-        'settings':wandb.Settings(start_method='thread')
+        #'settings':wandb.Settings(start_method='thread')
     }
     hparams["log_config"]= False
     hparams['wandb'] = wandb_config

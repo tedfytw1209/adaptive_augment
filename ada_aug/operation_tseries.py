@@ -1312,7 +1312,7 @@ class KeepAugment(object): #need fix
         self.multilabel = multilabel
         #'torch.nn.functional.avg_pool1d' use this for segment
         ##self.m_pool = torch.nn.AvgPool1d(kernel_size=self.length, stride=1, padding=0) #for winodow sum
-        print(f'Apply InfoKeep Augment: mode={self.mode}, threshold={self.thres}, transfrom={self.trans}, mixup={self.keep_mixup}')
+        print(f'Apply InfoKeep Augment: mode={self.mode}, threshold={self.thres}, transfrom={self.trans}, mixup={self.keep_mixup}, saliency target {self.saliency_target}')
     #func
     def get_augment(self,apply_func=None,selective='paste'):
         if apply_func!=None:
@@ -1590,24 +1590,24 @@ class KeepAugment(object): #need fix
         return torch.stack(aug_t_s_list, dim=0) #(b*ops,seq,ch)
 
     def get_saliency_score(self,preds,target):
-        if self.saliency_target=='pred':
+        if self.saliency_target=='max':
+            score, _ = torch.max(preds, 1) #predict class
+        elif self.saliency_target=='pred':
             if not self.multilabel:
                 score, _ = torch.max(preds, 1) #predict class
             else:
                 sig_score = torch.sigmoid(score)
                 mask = sig_score.ge(0.5)
-                score = torch.masked_select(sig_score, mask)
+                score = torch.masked_select(preds, mask)
                 print('sig_score: ', sig_score) #!tmp
                 print('mask: ',mask) #!tmp
                 print('score: ',score) #!tmp
         elif self.saliency_target=='target':
-            if not self.multilabel:
-                target = torch.argmax(target, dim=1)
-                print('target: ',target) #!tmp
-                score = preds[target.long()]
-            else:
-                score = preds * target.float() #same shape multiply
-        print('saliency score: ',score) #!tmp
+            score = preds * target.float() #same shape multiply
+        else:
+            print('No this saliency target')
+            exit()
+        #print('score: ',score.shape,score)
         return score
     def get_importance(self, model, x,target=None, **_kwargs):
         for param in model.parameters():
@@ -1630,6 +1630,8 @@ class KeepAugment(object): #need fix
         slc_ch = torch.mean(torch.abs(x.grad), dim=1) #mean of len, 10/29
         slc_ = normal_slc(slc_)
         slc_ch = normal_slc(slc_ch)
+        print('slc: ',slc_) #!
+        print('slc_ch: ',slc_ch) #!
         if hasattr(model, 'lstm'):
             activate_bn_track_running_stats(model)
         return slc_,slc_ch

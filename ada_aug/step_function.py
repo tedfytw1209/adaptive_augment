@@ -70,6 +70,7 @@ def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_
         #if mixup
         if mixup:
             aug_loss = mixup_lam * cuc_loss(logits,target_a,criterion,multilabel) + (1.0-mixup_lam) * cuc_loss(logits,target_b,criterion,multilabel)
+            print('mixup: ',mixup_lam)
         else:
             aug_loss = cuc_loss(logits,target,criterion,multilabel)
         #difficult aug

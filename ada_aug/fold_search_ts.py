@@ -136,7 +136,7 @@ parser.add_argument('--keep_aug', action='store_true', default=False, help='info
 parser.add_argument('--keep_prob', type=float, default=1, help='info keep probabilty')
 parser.add_argument('--keep_mix', action='store_true', default=False, help='mixup type of keep')
 parser.add_argument('--keep_mode', type=str, default='auto', help='info keep mode',choices=['auto','adapt','b','p','t','rand'])
-parser.add_argument('--saliency', type=str, default='pred', help='saliency map score target',choices=['pred','target'])
+parser.add_argument('--saliency', type=str, default='pred', help='saliency map score target',choices=['pred','target','max'])
 parser.add_argument('--aug_target', type=str, default='', help='info keep adapt target',choices=['kops',''])
 parser.add_argument('--adapt_target', type=str, default='len', help='info keep adapt target / keep auto cut/paste or len/ch keep',
         choices=['fea','len','seg','way','keep','ch','cut','paste','recut','repaste'])

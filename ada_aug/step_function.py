@@ -398,6 +398,7 @@ def loss_select(loss_type,adv_criterion):
     elif loss_type=='relmixsample':
         diff_loss_func = relative_loss_s
         sim_loss_func = rel_loss_s
+        add_kwargs['add_number'] = 1e-6
     elif loss_type=='relativediff':
         diff_loss_func = relative_loss_mean
         diff_update_w = False

@@ -72,7 +72,7 @@ def stop_gradient_keep(trans_image, magnitude, keep_thre):
     images = images.detach() + adds
     return images
 
-def Normal_augment(t_series, model=None,selective='paste', apply_func=None, seq_len=None, **kwargs):
+def Normal_augment(t_series, model=None,selective='paste', apply_func=None, seq_len=None, target=None, **kwargs):
     trans_t_series=[]
     for i, (t_s,each_seq_len) in enumerate(zip(t_series,seq_len)):
         t_s = t_s.detach().cpu()
@@ -82,7 +82,7 @@ def Normal_augment(t_series, model=None,selective='paste', apply_func=None, seq_
     return aug_t_s, None
 
 def Normal_search(t_series, model=None,selective='paste', apply_func=None,
-        ops_names=None, seq_len=None,mask_idx=None, **kwargs):
+        ops_names=None, seq_len=None,mask_idx=None, target=None, **kwargs):
     trans_t_series=[]
     for i, (t_s,each_seq_len) in enumerate(zip(t_series,seq_len)):
         t_s = t_s.detach().cpu()
@@ -270,7 +270,7 @@ class AdaAug_TS(AdaAug):
         self.config = config
         self.use_keepaug = keepaug_config['keep_aug']
         if self.use_keepaug:
-            self.Augment_wrapper = KeepAugment(save_dir=save_dir,**keepaug_config)
+            self.Augment_wrapper = KeepAugment(save_dir=save_dir,multilabel=multilabel,**keepaug_config)
             self.Search_wrapper = self.Augment_wrapper.Augment_search
         else:
             self.Augment_wrapper = Normal_augment
@@ -373,7 +373,7 @@ class AdaAug_TS(AdaAug):
         trans_image = self.after_transforms(trans_image)
         trans_image = stop_gradient(trans_image.cuda(), magnitudes[i][k])
         return trans_image
-    def get_aug_valid_imgs(self, images, magnitudes, seq_len=None,mask_idx=None):
+    def get_aug_valid_imgs(self, images, magnitudes, seq_len=None,mask_idx=None,target=None):
         """Return the mixed latent feature
         Args:
             images ([Tensor]): [description]
@@ -394,7 +394,7 @@ class AdaAug_TS(AdaAug):
                 trans_image_list.append(trans_image)
                 #trans_seqlen_list.append(e_len)'''
         aug_imgs = self.Search_wrapper(images, model=self.gf_model,apply_func=self.get_aug_valid_img,
-            magnitudes=magnitudes,ops_names=self.ops_names,selective='paste',seq_len=seq_len,mask_idx=mask_idx)
+            magnitudes=magnitudes,ops_names=self.ops_names,selective='paste',seq_len=seq_len,mask_idx=mask_idx,target=target)
         #return torch.stack(trans_image_list, dim=0) #, torch.stack(trans_seqlen_list, dim=0) #(b*k_ops, seq, ch)
         return aug_imgs.cuda()
 
@@ -446,7 +446,7 @@ class AdaAug_TS(AdaAug):
             m_pi = self.delta_func(magnitude_i[idx], self.delta).detach().cpu().numpy()
             image = apply_augment(image, self.ops_names[idx], m_pi,seq_len=seq_len,preprocessor=self.preprocessors[0],aug_dict=self.aug_dict,**self.transfrom_dic)
         return self.after_transforms(image)
-    def get_training_aug_images(self, images, magnitudes, weights, seq_len=None,visualize=False):
+    def get_training_aug_images(self, images, magnitudes, weights, seq_len=None,visualize=False,target=None):
         # visualization
         if self.k_ops > 0:
             trans_images = []
@@ -461,7 +461,7 @@ class AdaAug_TS(AdaAug):
                     pil_image = apply_augment(pil_image, self.ops_names[idx], m_pi)
                 trans_images.append(self.after_transforms(pil_image))'''
             aug_imgs,reg_idx = self.Augment_wrapper(images, model=self.gf_model,apply_func=self.get_training_aug_image,
-                    magnitudes=magnitudes,idx_matrix=idx_matrix,selective='paste',seq_len=seq_len)
+                    magnitudes=magnitudes,idx_matrix=idx_matrix,selective='paste',seq_len=seq_len,target=target)
         else:
             trans_images = []
             for i, image in enumerate(images):
@@ -483,7 +483,7 @@ class AdaAug_TS(AdaAug):
             resize_imgs = images
         #resize_imgs = F.interpolate(images, size=self.search_d) if self.resize else images
         magnitudes, weights = self.predict_aug_params(resize_imgs, seq_len, 'exploit',y=y,policy_apply=policy_apply)
-        aug_imgs = self.get_training_aug_images(images, magnitudes, weights,seq_len=seq_len)
+        aug_imgs = self.get_training_aug_images(images, magnitudes, weights,seq_len=seq_len,target=y) #!!! bug when not use class_embed
         if self.visualize:
             print('Visualize for Debug')
             self.print_imgs(imgs=images,title='id')
@@ -501,7 +501,7 @@ class AdaAug_TS(AdaAug):
         target = y.detach().cpu()
         #resize_imgs = F.interpolate(images, size=self.search_d) if self.resize else images
         magnitudes, weights = self.predict_aug_params(resize_imgs, seq_len, 'exploit',y=policy_y)
-        aug_imgs, info_region, ops_idx = self.get_training_aug_images(images, magnitudes, weights,seq_len=seq_len,visualize=True)
+        aug_imgs, info_region, ops_idx = self.get_training_aug_images(images, magnitudes, weights,seq_len=seq_len,visualize=True,target=policy_y)
         if self.use_keepaug:
             slc_out,slc_ch = self.Augment_wrapper.visualize_slc(images, model=self.gf_model)
         print('Visualize for Debug')
@@ -509,11 +509,11 @@ class AdaAug_TS(AdaAug):
         self.print_imgs(imgs=images,label=target,title='id',slc=slc_out,info_reg=info_region,ops_idx=ops_idx)
         self.print_imgs(imgs=aug_imgs,label=target,title='aug',slc=slc_out,info_reg=info_region,ops_idx=ops_idx)
         #identify check
-        for idx,(img,aug_img) in enumerate(zip(images,aug_imgs)):
+        '''for idx,(img,aug_img) in enumerate(zip(images,aug_imgs)):
             if ops_idx[idx][0]==0: #identity
                 img_arr = img.cpu().detach()
                 augimg_arr = aug_img.cpu().detach()
-                print('sum of after augment diffence: ',torch.sum(torch.abs(img_arr-augimg_arr)))
+                print('sum of after augment diffence: ',torch.sum(torch.abs(img_arr-augimg_arr)))'''
         
     def forward(self, images, seq_len, mode, mix_feature=True,y=None,update_w=True,policy_apply=True):
         if mode == 'explore':
@@ -629,7 +629,7 @@ class AdaAugkeep_TS(AdaAug):
         self.use_keepaug = keepaug_config['keep_aug']
         self.keepaug_config = keepaug_config
         if self.use_keepaug:
-            self.Augment_wrapper = AdaKeepAugment(save_dir=save_dir,**keepaug_config)
+            self.Augment_wrapper = AdaKeepAugment(save_dir=save_dir,multilabel=multilabel,**keepaug_config)
             self.Search_wrapper = self.Augment_wrapper.Augment_search
             if ind_mix:
                 self.Search_wrapper = self.Augment_wrapper.Augment_search_ind

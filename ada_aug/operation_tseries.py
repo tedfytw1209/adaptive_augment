@@ -1228,7 +1228,8 @@ def keep_mix(t_s,inforegion_list,x1,x2,reg_i,lead_select,mix_alpha=1):
 class KeepAugment(object): #need fix
     def __init__(self, mode, length,thres=0.6,transfrom=None,default_select=None, early=False, low = False,adapt_target='len',
         possible_segment=[1],keep_leads=[12],grid_region=False, reverse=False,info_upper = 0.0, visualize=False,save_dir='./',
-        sfreq=100,pw_len=0.2,tw_len=0.4,keep_prob=1,keep_back='',lead_sel='thres',keep_mixup=False,**_kwargs):
+        sfreq=100,pw_len=0.2,tw_len=0.4,keep_prob=1,keep_back='',lead_sel='thres',keep_mixup=False,saliency_target='pred',
+        multilabel=False,**_kwargs):
         assert mode in ['auto','b','p','t','rand'] #auto: all, b: heart beat(-0.2,0.4), p: p-wave(-0.2,0), t: t-wave(0,0.4)
         self.mode = mode
         if self.mode=='p':
@@ -1307,6 +1308,8 @@ class KeepAugment(object): #need fix
             self.keep_func = keep_mix
         else:
             self.keep_func = keep_nomix
+        self.saliency_target = saliency_target
+        self.multilabel = multilabel
         #'torch.nn.functional.avg_pool1d' use this for segment
         ##self.m_pool = torch.nn.AvgPool1d(kernel_size=self.length, stride=1, padding=0) #for winodow sum
         print(f'Apply InfoKeep Augment: mode={self.mode}, threshold={self.thres}, transfrom={self.trans}, mixup={self.keep_mixup}')
@@ -1340,11 +1343,11 @@ class KeepAugment(object): #need fix
         compare_func = self.compare_func_list[com_idx] #[lt, ge]
         bound_func = self.compare_func_list[(com_idx+1)%2] #[lt, ge]
         return info_aug, compare_func, upper_bound, bound_func
-    def get_slc(self,t_series,model):
+    def get_slc(self,t_series,model,target=None):
         t_series_ = t_series.clone().detach()
         if self.mode=='auto':
             t_series_.requires_grad = True
-            slc_,slc_ch = self.get_importance(model,t_series_)
+            slc_,slc_ch = self.get_importance(model,t_series_,target=target)
         elif self.mode=='rand':
             slc_,slc_ch = self.get_rand(t_series)
         else:
@@ -1377,10 +1380,10 @@ class KeepAugment(object): #need fix
         return slc_, slc_ch
 
     #kwargs for apply_func, batch_inputs
-    def __call__(self, t_series, model=None,selective='paste', apply_func=None, seq_len=None,visualize=False, **kwargs):
+    def __call__(self, t_series, model=None,selective='paste', apply_func=None, seq_len=None,target=None,visualize=False, **kwargs):
         b,w,c = t_series.shape
         augment, selective = self.get_augment(apply_func,selective)
-        slc_,slc_ch, t_series_ = self.get_slc(t_series,model) #slc_:(bs,seqlen), slc_ch:(bs,chs)
+        slc_,slc_ch, t_series_ = self.get_slc(t_series,model,target=target) #slc_:(bs,seqlen), slc_ch:(bs,chs)
         info_aug, compare_func, info_bound, bound_func = self.get_selective(selective)
         #windowed_slc = self.m_pool(slc_.view(b,1,w)).view(b,-1)
         apply_keep = torch.rand(b) #prob for apply keep
@@ -1484,10 +1487,11 @@ class KeepAugment(object): #need fix
         info_region_record = torch.from_numpy(info_region_record).long()
         return out, info_region_record
 
-    def Augment_search(self, t_series, model=None,selective='paste', apply_func=None,ops_names=None, seq_len=None,mask_idx=None, **kwargs):
+    def Augment_search(self, t_series, model=None,selective='paste', apply_func=None,ops_names=None, seq_len=None,mask_idx=None,
+            target=None, **kwargs):
         b,w,c = t_series.shape
         augment, selective = self.get_augment(apply_func,selective)
-        slc_,slc_ch, t_series_ = self.get_slc(t_series,model)
+        slc_,slc_ch, t_series_ = self.get_slc(t_series,model,target=target)
         info_aug, compare_func, info_bound, bound_func = self.get_selective(selective)
         #windowed_slc = self.m_pool(slc_.view(b,1,w)).view(b,-1)
         #select a segment number
@@ -1585,7 +1589,27 @@ class KeepAugment(object): #need fix
                 param.requires_grad = True
         return torch.stack(aug_t_s_list, dim=0) #(b*ops,seq,ch)
 
-    def get_importance(self, model, x, **_kwargs):
+    def get_saliency_score(self,preds,target):
+        if self.saliency_target=='pred':
+            if not self.multilabel:
+                score, _ = torch.max(preds, 1) #predict class
+            else:
+                sig_score = torch.sigmoid(score)
+                mask = sig_score.ge(0.5)
+                score = torch.masked_select(sig_score, mask)
+                print('sig_score: ', sig_score) #!tmp
+                print('mask: ',mask) #!tmp
+                print('score: ',score) #!tmp
+        elif self.saliency_target=='target':
+            if not self.multilabel:
+                target = torch.argmax(target, dim=1)
+                print('target: ',target) #!tmp
+                score = preds[target.long()]
+            else:
+                score = preds * target.float() #same shape multiply
+        print('saliency score: ',score) #!tmp
+        return score
+    def get_importance(self, model, x,target=None, **_kwargs):
         for param in model.parameters():
             param.requires_grad = False
         if hasattr(model, 'lstm'):
@@ -1599,7 +1623,8 @@ class KeepAugment(object): #need fix
         else:
             preds = model(x)
 
-        score, _ = torch.max(preds, 1) #predict class
+        #score, _ = torch.max(preds, 1) #predict class
+        score = self.get_saliency_score(preds,target)
         score.mean().backward() #among batch mean
         slc_, _ = torch.max(torch.abs(x.grad), dim=2) #max of channel
         slc_ch = torch.mean(torch.abs(x.grad), dim=1) #mean of len, 10/29
@@ -1608,7 +1633,7 @@ class KeepAugment(object): #need fix
         if hasattr(model, 'lstm'):
             activate_bn_track_running_stats(model)
         return slc_,slc_ch
-    def get_heartbeat(self,x):
+    def get_heartbeat(self,x, **_kwargs):
         b, seq_len , channel = x.shape
         imp_map_list = []
         for x_each in x:
@@ -1630,7 +1655,7 @@ class KeepAugment(object): #need fix
         heart_slc = normal_slc(heart_slc)
         dummy_ch = normal_slc(dummy_ch)
         return heart_slc,dummy_ch #(b,seq)
-    def get_rand(self,x):
+    def get_rand(self,x, **_kwargs):
         b, seq_len , channel = x.shape
         imp_map_list = []
         for x_each in x:
@@ -1734,10 +1759,10 @@ class AdaKeepAugment(KeepAugment): #
         print(f'Apply InfoKeep Augment: mode={self.mode},target={self.adapt_target}, threshold={self.thres}, \
             transfrom={self.trans}, mixup={self.keep_mixup}')
     #kwargs for apply_func, batch_inputs
-    def __call__(self, t_series, model=None,selective='paste', apply_func=None,len_idx=None, keep_thres=None, seq_len=None, **kwargs):
+    def __call__(self, t_series, model=None,selective='paste', apply_func=None,len_idx=None, keep_thres=None, seq_len=None, target=None, **kwargs):
         b,w,c = t_series.shape
         augment, selective = self.get_augment(apply_func,selective)
-        slc_,slc_ch, t_series_ = self.get_slc(t_series,model)
+        slc_,slc_ch, t_series_ = self.get_slc(t_series,model,target)
         #windowed_slc = self.m_pool(slc_.view(b,1,w)).view(b,-1)
         #select a segment number
         n_keep_lead = np.random.choice(self.keep_leads)
@@ -1887,7 +1912,7 @@ class AdaKeepAugment(KeepAugment): #
             raise
         return keepway_params, keeplen_params, keepseg_params, keepleads_params
     def Augment_search(self, t_series, model=None,selective='paste', apply_func=None,ops_names=None, keep_thres=None, seq_len=None,
-            mask_idx=None, **kwargs):
+            mask_idx=None, target=None, **kwargs):
         b,w,c = t_series.shape
         augment, selective = self.get_augment(apply_func,selective)
         slc_,slc_ch, t_series_ = self.get_slc(t_series,model)
@@ -1989,10 +2014,10 @@ class AdaKeepAugment(KeepAugment): #
     #independent search, ops_names is this turn params and fix_idx is this turn fixs
     ###!!!Not a good implement!!!###
     def Augment_search_ind(self, t_series, model=None,selective='paste', apply_func=None,ops_names=None,fix_idx=None, keep_thres=None,seq_len=None
-        ,mask_idx=None, **kwargs):
+        ,mask_idx=None,target=None, **kwargs):
         b,w,c = t_series.shape
         augment, selective = self.get_augment(apply_func,selective)
-        slc_,slc_ch, t_series_ = self.get_slc(t_series,model)
+        slc_,slc_ch, t_series_ = self.get_slc(t_series,model,target=target)
         magnitudes = kwargs['magnitudes']
         t_series_ = t_series_.detach().cpu()
         aug_t_s_list = []

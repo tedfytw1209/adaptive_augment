@@ -120,6 +120,7 @@ parser.add_argument('--balance_loss', type=str, default='', help="loss type for 
 #info keep
 parser.add_argument('--keep_aug', action='store_true', default=False, help='info keep augment')
 parser.add_argument('--keep_mode', type=str, default='auto', help='info keep mode',choices=['auto','adapt','b','p','t','rand'])
+parser.add_argument('--saliency', type=str, default='pred', help='saliency map score target',choices=['pred','target'])
 parser.add_argument('--keep_prob', type=float, default=1, help='info keep probabilty')
 parser.add_argument('--keep_mix', action='store_true', default=False, help='mixup type of keep')
 parser.add_argument('--adapt_target', type=str, default='len', help='info keep mode',
@@ -348,7 +349,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         keepaug_config = {'keep_aug':args.keep_aug,'mode':args.keep_mode,'thres':args.keep_thres,'length':args.keep_len,'thres_adapt':args.thres_adapt,
             'grid_region':args.keep_grid, 'possible_segment': args.keep_seg, 'info_upper': args.keep_bound, 'sfreq':self.sfreq,
             'adapt_target':args.adapt_target,'keep_leads':args.keep_lead,'keep_prob':args.keep_prob,'keep_back':args.keep_back,'lead_sel':args.lead_sel,
-            'keep_mixup':args.keep_mix}
+            'keep_mixup':args.keep_mix,'saliency_target':args.saliency}
         trans_config = {'sfreq':self.sfreq}
         if args.keep_mode=='adapt':
             keepaug_config['mode'] = 'auto'

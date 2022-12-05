@@ -19,6 +19,7 @@ from config import get_warmup_config
 from warmup_scheduler import GradualWarmupScheduler
 import wandb
 from gradient_match import hyper_step
+from utils import mixup_data
 
 def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_clip, adaaug, multilabel=False,n_class=10,
         difficult_aug=False,reweight=True,lambda_aug = 1.0,class_adaptive=False,map_select=False,visualize=False,training=True,
@@ -53,16 +54,24 @@ def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_
             else:
                 policy_y = target.cuda().float()
         aug_images = adaaug(input, seq_len, mode='exploit',y=policy_y,policy_apply=policy_apply)
+        #mixup if need
+        if mixup:
+            aug_images, target_a, target_b, mixup_lam = mixup_data(aug_images,target,mixup_alpha)
         if training:
             model.train()
         else:
             model.eval()
         optimizer.zero_grad()
         logits = model(aug_images, seq_len)
-        if multilabel:
+        '''if multilabel:
             aug_loss = criterion(logits, target.float())
         else:
-            aug_loss = criterion(logits, target.long())
+            aug_loss = criterion(logits, target.long())'''
+        #if mixup
+        if mixup:
+            aug_loss = mixup_lam * cuc_loss(logits,target_a,criterion,multilabel) + (1.0-mixup_lam) * cuc_loss(logits,target_b,criterion,multilabel)
+        else:
+            aug_loss = cuc_loss(logits,target,criterion,multilabel)
         #difficult aug
         batch_size = target.shape[0]
         ori_loss = 0
@@ -518,15 +527,19 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
         else:
             aug_images = input
         aug_images = aug_images.cuda()
+        #mixup if need
+        if mixup:
+            aug_images, target_a, target_b, mixup_lam = mixup_data(aug_images,target,mixup_alpha)
         gf_model.train()
         gf_optimizer.zero_grad()
         #logits = gf_model(aug_images, seq_len)
         train_embed = gf_model.extract_features(aug_images, seq_len, pool=True)
         logits = gf_model.classify(train_embed)
-        if multilabel:
-            aug_loss = criterion(logits, target.float())
+        #if mixup
+        if mixup:
+            aug_loss = mixup_lam * cuc_loss(logits,target_a,criterion,multilabel) + (1.0-mixup_lam) * cuc_loss(logits,target_b,criterion,multilabel)
         else:
-            aug_loss = criterion(logits, target.long())
+            aug_loss = cuc_loss(logits,target,criterion,multilabel)
         #difficult aug
         ori_loss = 0
         batch_size = target.shape[0]

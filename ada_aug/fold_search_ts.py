@@ -123,7 +123,7 @@ parser.add_argument('--noaug_target', type=str, default='se', help='add regular 
 parser.add_argument('--output_source', type=str, default='', help='class output source',
         choices=['train','valid','search','allsearch',''])
 parser.add_argument('--class_target', type=int, default=-1, help='single class weight target')
-#mixup
+#additional augment, maybe can improve
 parser.add_argument('--mixup', action='store_true', help='mixup benchmark')
 parser.add_argument('--mixup_alpha', type=float, default=1.0, help='mixup parameter')
 #loss

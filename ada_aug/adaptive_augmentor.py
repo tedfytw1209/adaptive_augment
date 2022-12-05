@@ -508,6 +508,12 @@ class AdaAug_TS(AdaAug):
         print(slc_ch)
         self.print_imgs(imgs=images,label=target,title='id',slc=slc_out,info_reg=info_region,ops_idx=ops_idx)
         self.print_imgs(imgs=aug_imgs,label=target,title='aug',slc=slc_out,info_reg=info_region,ops_idx=ops_idx)
+        #identify check
+        for idx,(img,aug_img) in enumerate(zip(images,aug_imgs)):
+            if ops_idx[idx][0]==0: #identity
+                img_arr = img.cpu().detach()
+                augimg_arr = aug_img.cpu().detach()
+                print('sum of after augment diffence: ',torch.sum(torch.abs(img_arr-augimg_arr)))
         
     def forward(self, images, seq_len, mode, mix_feature=True,y=None,update_w=True,policy_apply=True):
         if mode == 'explore':

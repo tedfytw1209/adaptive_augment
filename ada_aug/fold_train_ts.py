@@ -115,6 +115,9 @@ parser.add_argument('--noaug_target', type=str, default='se', help='add regular 
         choices=['se','s','e'])
 parser.add_argument('--output_source', type=str, default='', help='class output source',
         choices=['train','valid','search','allsearch',''])
+#mixup
+parser.add_argument('--mixup', action='store_true', help='mixup benchmark')
+parser.add_argument('--mixup_alpha', type=float, default=1.0, help='mixup parameter')
 #loss
 parser.add_argument('--balance_loss', type=str, default='', help="loss type for model and policy training to acheive class balance")
 #info keep
@@ -424,7 +427,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         step_dic={'epoch':Curr_epoch}
         diff_dic = {'difficult_aug':self.diff_augment,'reweight':self.diff_reweight,'lambda_aug':args.lambda_aug, 'class_adaptive':args.class_adapt
                 ,'visualize':args.visualize,'teach_rew':self.teach_model,'policy_apply':self.policy_apply,'noaug_reg':args.noaug_reg,
-                'extra_criterions':self.extra_losses}
+                'extra_criterions':self.extra_losses,'mixup': args.mixup,'mixup_alpha': args.mixup_alpha}
         if Curr_epoch>self.config['epochs']:
             all_epochs = self.config['epochs']-1
             print(f'Trained epochs {Curr_epoch} Iteration: {self._iteration} already reach {all_epochs}, Skip step')

@@ -421,7 +421,7 @@ class AdaAug_TS(AdaAug):
             mag_subset = magnitudes
             n_ops_sub = self.n_ops
             ops_mask_idx = None
-        a_imgs = self.get_aug_valid_imgs(images, magnitudes,seq_len=seq_len, mask_idx=ops_mask_idx)
+        a_imgs = self.get_aug_valid_imgs(images, magnitudes,seq_len=seq_len, mask_idx=ops_mask_idx,target=y)
         #a_imgs = self.Augment_wrapper(images, model=self.gf_model,apply_func=self.get_aug_valid_imgs,magnitudes=magnitudes,selective='paste')
         #a_features = self.gf_model.extract_features(a_imgs, a_seq_len)
         self.gf_model.eval() #11/09 add

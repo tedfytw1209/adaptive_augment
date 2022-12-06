@@ -219,6 +219,8 @@ def infer(valid_queue, model, criterion, multilabel=False, n_class=10,mode='test
     softmax_m = nn.Softmax(dim=1)
     preds = []
     targets = []
+    preds_score = []
+    targets_score = []
     total = 0
     with torch.no_grad():
         for input,seq_len, target in valid_queue:
@@ -242,10 +244,17 @@ def infer(valid_queue, model, criterion, multilabel=False, n_class=10,mode='test
                     confusion_matrix[t.long(), p.long()] += 1
                 for i,t in enumerate(target.data.view(-1)):
                     output_matrix[t.long(),:] += soft_out[i]
-                _, predicted = torch.max(logits.data, 1)
                 total += target.size(0)
+                print('preds: ',predicted) #!tmp
+                print('preds score: ',soft_out[predicted.cpu().detach().long()]) #tmp
+                print('targets: ',target) #!tmp
+                print('targets score: ',soft_out[target.cpu().detach().long()]) #tmp
+                preds_score.append(soft_out[predicted.cpu().detach().long()]) #(bs,n_class)[(bs)]=>(bs)
+                targets_score.append(soft_out[target.cpu().detach().long()])
             else:
                 predicted = torch.sigmoid(logits.data)
+                preds_score.append(predicted) #multilabel don't need
+                targets_score.append(predicted) #multilabel don't need
             preds.append(predicted.cpu().detach())
             targets.append(target.cpu().detach())
     #table dic
@@ -255,8 +264,12 @@ def infer(valid_queue, model, criterion, multilabel=False, n_class=10,mode='test
     #class-wise
     targets_np = torch.cat(targets).numpy()
     preds_np = torch.cat(preds).numpy()
+    targets_score_np = torch.cat(targets_score).numpy()
+    preds_score_np = torch.cat(preds_score).numpy()
     table_dic[f'{mode}_target'] = targets_np
     table_dic[f'{mode}_predict'] = preds_np
+    table_dic[f'{mode}_target_score'] = targets_score_np
+    table_dic[f'{mode}_predict_score'] = preds_score_np
     if not multilabel:
         cw_acc = 100 * confusion_matrix.diag()/(confusion_matrix.sum(1)+1e-9)
         logging.info('class-wise Acc: ' + str(cw_acc))
@@ -964,6 +977,8 @@ def search_infer(valid_queue, gf_model, criterion, multilabel=False, n_class=10,
     softmax_m = nn.Softmax(dim=1)
     preds = []
     targets = []
+    preds_score = []
+    targets_score = []
     total = 0
     with torch.no_grad():
         for input, seq_len, target in valid_queue:
@@ -994,11 +1009,32 @@ def search_infer(valid_queue, gf_model, criterion, multilabel=False, n_class=10,
                     embed_count[t.long(),0] += 1
                 _, predicted = torch.max(logits.data, 1)
                 total += target.size(0)
+                print('preds: ',predicted) #!tmp
+                print('preds score: ',soft_out[predicted.cpu().detach().long()]) #tmp
+                print('targets: ',target) #!tmp
+                print('targets score: ',soft_out[target.cpu().detach().long()]) #tmp
+                preds_score.append(soft_out[predicted.cpu().detach().long()]) #(bs,n_class)[(bs)]=>(bs)
+                targets_score.append(soft_out[target.cpu().detach().long()])
             else:
                 predicted = torch.sigmoid(logits.data)
+                preds_score.append(predicted) #multilabel don't need
+                targets_score.append(predicted) #multilabel don't need
             preds.append(predicted.cpu().detach())
             targets.append(target.cpu().detach())
+    #table dic
+    table_dic = {}
+    table_dic[f'{mode}_output'] = (output_matrix / torch.clamp(output_matrix.sum(dim=1,keepdim=True),1e-9))
+    table_dic[f'{mode}_embed'] = embed_matrix / torch.clamp(embed_count.float(),min=1e-9)
+    table_dic[f'{mode}_confusion'] = confusion_matrix
     #class-wise
+    targets_np = torch.cat(targets).numpy()
+    preds_np = torch.cat(preds).numpy()
+    targets_score_np = torch.cat(targets_score).numpy()
+    preds_score_np = torch.cat(preds_score).numpy()
+    table_dic[f'{mode}_target'] = targets_np
+    table_dic[f'{mode}_predict'] = preds_np
+    table_dic[f'{mode}_target_score'] = targets_score_np
+    table_dic[f'{mode}_predict_score'] = preds_score_np
     if not multilabel:
         cw_acc = 100 * confusion_matrix.diag()/(confusion_matrix.sum(1)+1e-9)
         logging.info(f'{mode} class-wise Acc: ' + str(cw_acc))
@@ -1008,8 +1044,6 @@ def search_infer(valid_queue, gf_model, criterion, multilabel=False, n_class=10,
         perfrom_cw = cw_acc
         ptype = 'acc'
     else:
-        targets_np = torch.cat(targets).numpy()
-        preds_np = torch.cat(preds).numpy()
         perfrom_cw = utils.AUROC_cw(targets_np,preds_np)
         perfrom_cw2 = utils.mAP_cw(targets_np,preds_np)
         perfrom = perfrom_cw.mean()
@@ -1019,11 +1053,7 @@ def search_infer(valid_queue, gf_model, criterion, multilabel=False, n_class=10,
         logging.info('Epoch %s: loss=%e macroAP=%f',mode, objs.avg, perfrom2)
         logging.info('class-wise AP: ' + '['+', '.join(['%.1f'%e for e in perfrom_cw2])+']')
         ptype = 'auroc'
-    #table dic
-    table_dic = {}
-    table_dic[f'{mode}_output'] = (output_matrix / torch.clamp(output_matrix.sum(dim=1,keepdim=True),1e-9))
-    table_dic[f'{mode}_embed'] = embed_matrix / torch.clamp(embed_count.float(),min=1e-9)
-    table_dic[f'{mode}_confusion'] = confusion_matrix
+    
     #wandb dic
     out_dic = {}
     out_dic[f'{mode}_loss'] = objs.avg

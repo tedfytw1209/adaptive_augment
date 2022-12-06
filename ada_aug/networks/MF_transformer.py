@@ -5,6 +5,7 @@ import torch.nn.functional as F
 import torch.nn.utils.rnn as rnn_utils
 import math
 import copy
+from ecgdetectors import Detectors
 
 class AdaptiveConcatPoolRNN(nn.Module):
     def __init__(self, bidirectional):
@@ -320,3 +321,21 @@ class LSTM_ptb(nn.Module): #LSTM for PTBXL
     def forward(self, x, seq_lens=None):
         x = self.extract_features(x, seq_lens)
         return self.classify(x)
+
+class Segmentation(nn.Module): #segment data for Transfromer
+    def __init__(self, seg_ways='fix', rr_method='pan',pw_len=0.4,tw_len=0.6,hz=100):
+        #rr_method: fix, rpeak
+        self.seg_ways = seg_ways
+        self.rr_method = rr_method
+        self.pw_len = pw_len
+        self.tw_len = tw_len
+        self.hz = hz
+        self.detect_lead = 1 #normal use lead II
+        if self.seg_ways=='rpeak':
+            self.detectors = Detectors(self.hz) #need input ecg: (seq_len)
+            #detector
+            if rr_method=='pan':
+                self.detect_func = self.detectors.pan_tompkins_detector
+
+    
+    def forward(self,)

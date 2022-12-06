@@ -537,9 +537,9 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                         os.path.join(dir_path, 'valid_prediction.csv'))
                 utils.save_pred(self.result_table_dic['test_target'],self.result_table_dic['test_predict'],
                         os.path.join(dir_path, 'test_prediction.csv'))
-                utils.save_pred(self.result_table_dic['valid_target'],self.result_table_dic['valid_predict_score'],
+                utils.save_pred(self.result_table_dic['valid_predict'],self.result_table_dic['valid_predict_score'],
                         os.path.join(dir_path, 'valid_prediction_score.csv'))
-                utils.save_pred(self.result_table_dic['test_target'],self.result_table_dic['test_predict_score'],
+                utils.save_pred(self.result_table_dic['test_predict'],self.result_table_dic['test_predict_score'],
                         os.path.join(dir_path, 'test_prediction_score.csv'))
                 utils.save_pred(self.result_table_dic['valid_target'],self.result_table_dic['valid_target_score'],
                         os.path.join(dir_path, 'valid_target_score.csv'))

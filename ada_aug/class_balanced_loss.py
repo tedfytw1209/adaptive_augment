@@ -287,7 +287,7 @@ def wass_loss(logits,targets,target_pair,class_output,sim_target=None,embed=Fals
 def confidence_loss(logits,targets,target_pair,class_output,sim_target=None):
     n_class = class_output.shape[0]
     soft_logits = logits.softmax(dim=1) #(batch, n_class)
-    pairs_label = target_pair[targets.detach().cpu()].to(soft_logits.device) #(batch, k)
+    pairs_label = target_pair[targets.detach().cpu()].to(soft_logits.device) #(batch, k) #!!!may have bug
     mask = torch.zeros(*logits.size()).to(soft_logits.device) #(batch, n_class)
     mask.scatter_(1, pairs_label, 1)
     loss = 0

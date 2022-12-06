@@ -239,18 +239,21 @@ def infer(valid_queue, model, criterion, multilabel=False, n_class=10,mode='test
                 prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
                 top1.update(prec1.detach().item(), n)
                 top5.update(prec5.detach().item(), n)
-                soft_out = softmax_m(logits).detach().cpu()
+                soft_out = softmax_m(logits).detach().cpu()#(bs,n_class)
                 for t, p in zip(target.data.view(-1), predicted.view(-1)):
                     confusion_matrix[t.long(), p.long()] += 1
                 for i,t in enumerate(target.data.view(-1)):
                     output_matrix[t.long(),:] += soft_out[i]
                 total += target.size(0)
+                each_pscore = torch.gather(soft_out,1,predicted.cpu().detach().long().view(-1,1))
+                each_tscore = torch.gather(soft_out,1,target.cpu().detach().long().view(-1,1))
+                print('softmax logit: ',soft_out.shape)
                 print('preds: ',predicted) #!tmp
-                print('preds score: ',soft_out[predicted.cpu().detach().long()]) #tmp
+                print('preds score: ',each_pscore.shape) #tmp
                 print('targets: ',target) #!tmp
-                print('targets score: ',soft_out[target.cpu().detach().long()]) #tmp
-                preds_score.append(soft_out[predicted.cpu().detach().long()]) #(bs,n_class)[(bs)]=>(bs)
-                targets_score.append(soft_out[target.cpu().detach().long()])
+                print('targets score: ',each_tscore.shape) #tmp
+                preds_score.append(each_pscore) #(bs,n_class)[(bs)]=>(bs)
+                targets_score.append(each_tscore)
             else:
                 predicted = torch.sigmoid(logits.data)
                 preds_score.append(predicted) #multilabel don't need
@@ -1009,12 +1012,10 @@ def search_infer(valid_queue, gf_model, criterion, multilabel=False, n_class=10,
                     embed_count[t.long(),0] += 1
                 _, predicted = torch.max(logits.data, 1)
                 total += target.size(0)
-                print('preds: ',predicted) #!tmp
-                print('preds score: ',soft_out[predicted.cpu().detach().long()]) #tmp
-                print('targets: ',target) #!tmp
-                print('targets score: ',soft_out[target.cpu().detach().long()]) #tmp
-                preds_score.append(soft_out[predicted.cpu().detach().long()]) #(bs,n_class)[(bs)]=>(bs)
-                targets_score.append(soft_out[target.cpu().detach().long()])
+                each_pscore = torch.gather(soft_out,1,predicted.cpu().detach().long().view(-1,1))
+                each_tscore = torch.gather(soft_out,1,target.cpu().detach().long().view(-1,1))
+                preds_score.append(each_pscore) #(bs,n_class)[(bs)]=>(bs)
+                targets_score.append(each_tscore)
             else:
                 predicted = torch.sigmoid(logits.data)
                 preds_score.append(predicted) #multilabel don't need

@@ -175,6 +175,11 @@ if args.keep_aug:
         keep_ch_str='ch'+keep_ch_str
     keep_seg_str = ''.join([str(i) for i in args.keep_seg])
     description+=f'keep{args.keep_mode}{keep_seg_str}{keep_ch_str}'
+if args.restore:
+    restore_str = args.restore_path.strip('/').split('/')[-1]
+    restore_l = restore_str.split('_')[0].split('-')
+    restore_str = restore_l[0]+'-'+restore_l[1]
+    description = restore_str+description
 now_str = time.strftime("%Y%m%d-%H%M%S")
 args.save = '{}-{}-{}{}'.format(now_str, args.save,Aug_type,description+args.augselect+args.balance_loss)
 if debug:

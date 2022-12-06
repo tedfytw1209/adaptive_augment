@@ -338,4 +338,5 @@ class Segmentation(nn.Module): #segment data for Transfromer
                 self.detect_func = self.detectors.pan_tompkins_detector
 
     
-    def forward(self,)
+    def forward(self,x, seq_lens=None):
+        pass

@@ -84,6 +84,7 @@ parser.add_argument('--wide_delta', action='store_true', default=False, help="wi
 parser.add_argument('--temperature', type=float, default=1.0, help="temperature")
 parser.add_argument('--n_proj_layer', type=int, default=0, help="number of additional hidden layer in augmentation policy projection")
 parser.add_argument('--n_proj_hidden', type=int, default=128, help="number of hidden units in augmentation policy projection layers")
+parser.add_argument('--aug_mix', action='store_true', default=False, help='mixup augment and origin data')
 #restore
 parser.add_argument('--restore_path', type=str, default='./', help='restore model path')
 parser.add_argument('--restore', action='store_true', default=False, help='restore model default False')
@@ -429,7 +430,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         step_dic={'epoch':Curr_epoch}
         diff_dic = {'difficult_aug':self.diff_augment,'reweight':self.diff_reweight,'lambda_aug':args.lambda_aug, 'class_adaptive':args.class_adapt
                 ,'visualize':args.visualize,'teach_rew':self.teach_model,'policy_apply':self.policy_apply,'noaug_reg':args.noaug_reg,
-                'extra_criterions':self.extra_losses,'mixup': args.mixup,'mixup_alpha': args.mixup_alpha}
+                'extra_criterions':self.extra_losses,'mixup': args.mixup,'mixup_alpha': args.mixup_alpha,'aug_mix': args.aug_mix}
         if Curr_epoch>self.config['epochs']:
             all_epochs = self.config['epochs']-1
             print(f'Trained epochs {Curr_epoch} Iteration: {self._iteration} already reach {all_epochs}, Skip step')

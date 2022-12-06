@@ -294,27 +294,44 @@ def infer(valid_queue, model, criterion, multilabel=False, n_class=10,mode='test
 
 def sub_loss(ori_loss, aug_loss, lambda_aug,**kwargs): #will become to small
     return lambda_aug * (aug_loss - ori_loss.detach())
-def relative_loss(ori_loss, aug_loss, lambda_aug, add_number=0,**kwargs):
-    return lambda_aug * ((ori_loss.detach()+add_number) / (aug_loss+add_number))
+def relative_loss(ori_loss, aug_loss, lambda_aug, add_number=0,multilabel=False,**kwargs):
+    out = lambda_aug * ((ori_loss.detach()+add_number) / (aug_loss+add_number))
+    if multilabel:
+        out = out.mean(1)
+    return out
 def relative_loss_mean(ori_loss, aug_loss, lambda_aug, add_number=0,**kwargs):
     aug_loss = aug_loss.mean()
     ori_loss = ori_loss.mean()
     return lambda_aug * ((ori_loss.detach()+add_number) / (aug_loss+add_number))
-def relative_loss_s(ori_loss, aug_loss, lambda_aug, add_number=0,**kwargs):
-    return lambda_aug * (2 * (ori_loss.detach()+add_number) / (aug_loss+ori_loss.detach()+add_number))
-def minus_loss(ori_loss, aug_loss, lambda_aug,**kwargs):
-    return -1 * lambda_aug * aug_loss
+def relative_loss_s(ori_loss, aug_loss, lambda_aug, add_number=0,multilabel=False,**kwargs):
+    out = lambda_aug * (2 * (ori_loss.detach()+add_number) / (aug_loss+ori_loss.detach()+add_number))
+    if multilabel:
+        out = out.mean(1)
+    return out
+def minus_loss(ori_loss, aug_loss, lambda_aug,multilabel=False,**kwargs):
+    out = -1 * lambda_aug * aug_loss
+    if multilabel:
+        out = out.mean(1)
+    return out
 def adv_loss(ori_loss, aug_loss, lambda_aug,**kwargs):
     return lambda_aug * aug_loss
 def none_loss(ori_loss, aug_loss, lambda_aug,**kwargs):
     return ori_loss
 
-def ab_loss(ori_loss, aug_loss,**kwargs):
+def ab_loss(ori_loss, aug_loss,multilabel=False,**kwargs):
+    if multilabel:
+        aug_loss = aug_loss.mean(1)
     return aug_loss
-def rel_loss_s(ori_loss, aug_loss, add_number=0,**kwargs):
-    return (2 * (aug_loss+add_number) / (ori_loss.detach()+add_number+aug_loss.detach())).mean()
-def rel_loss(ori_loss, aug_loss, add_number=0,**kwargs):
-    return ((aug_loss+add_number) / (ori_loss.detach()+add_number))
+def rel_loss_s(ori_loss, aug_loss, add_number=0,multilabel=False,**kwargs):
+    out = (2 * (aug_loss+add_number) / (ori_loss.detach()+add_number+aug_loss.detach()))
+    if multilabel:
+        out = out.mean(1)
+    return out
+def rel_loss(ori_loss, aug_loss, add_number=0,multilabel=False,**kwargs):
+    out = ((aug_loss+add_number) / (ori_loss.detach()+add_number))
+    if multilabel:
+        out = out.mean(1)
+    return out
 def rel_loss_mean(ori_loss, aug_loss, add_number=0,**kwargs):
     aug_loss = aug_loss.mean()
     ori_loss = ori_loss.mean()
@@ -391,11 +408,11 @@ def loss_mix(gf_model,mixed_features,aug_weights,adv_criterion,target_trsearch,m
     #print('Loss mix aug_logits: ',aug_logits.shape,aug_logits)
     return aug_loss, aug_logits, aug_loss_all
 #loss select
-def loss_select(loss_type,adv_criterion):
+def loss_select(loss_type,adv_criterion,multilabel=False):
     #diff loss criterion
     diff_update_w = True
     sim_loss_func = ab_loss
-    add_kwargs = {}
+    add_kwargs = {'multilabel':multilabel}
     if loss_type=='minus' or loss_type=='minussample':
         diff_loss_func = minus_loss
     elif loss_type=='minusdiff':
@@ -487,7 +504,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     noaug_lossw = torch.ones(n_class).cuda() * (1.0 - train_perfrom) #first reg
     use_noaug_reg, noaug_target, noaug_lossw = noaug_select(noaug_reg,extra_criterions,noaug_lossw)
     #diff loss criterion
-    diff_loss_func, sim_loss_func, diff_update_w, add_kwargs = loss_select(loss_type,adv_criterion)
+    diff_loss_func, sim_loss_func, diff_update_w, add_kwargs = loss_select(loss_type,adv_criterion,multilabel)
     mix_feature = False
     if mix_type=='embed':
         mix_feature = True
@@ -643,8 +660,12 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                     #print('loss_prepolicy',loss_prepolicy.shape,loss_prepolicy) #!tmp
                     if torch.is_tensor(class_weight): #class_weight: (n_class), w_sample: (bs)
                         class_weight = class_weight.cuda()
-                        w_sample = class_weight[target_trsearch].detach()
+                        if not multilabel:
+                            w_sample = class_weight[target_trsearch].detach()
+                        else: #class_weight:(1,n_class), target_search:(bs,n_class)=>(bs,n_class) !!!may have some bug!!!
+                            w_sample = (class_weight.view(1,n_class) * target_trsearch).sum(1)
                         print('w_sample: ',w_sample.shape) #!
+                        print('prepolicy loss: ',loss_prepolicy.shape) #!
                         tmp = w_sample * loss_prepolicy
                         print('aug loss: ',tmp) #!
                         loss_policy = tmp.mean() 
@@ -771,7 +792,10 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 #print(loss.shape,loss) #!tmp
                 if torch.is_tensor(class_weight): #class_weight: (n_class), w_sample: (bs)
                     class_weight = class_weight.cuda()
-                    w_sample = class_weight[target_search].detach()
+                    if not multilabel:
+                        w_sample = class_weight[target_search].detach()
+                    else: #class_weight:(1,n_class), target_search:(bs,n_class)
+                        w_sample = (class_weight.view(1,n_class) * target_search).sum(1)
                     print('w_sample: ',w_sample.shape)
                     tmp = w_sample * loss
                     print('sim loss: ',tmp)

@@ -83,6 +83,7 @@ parser.add_argument('--search_freq', type=float, default=1, help='exploration fr
 parser.add_argument('--search_round', type=int, default=1, help='exploration frequency') #search_round
 parser.add_argument('--n_proj_layer', type=int, default=0, help="number of hidden layer in augmentation policy projection")
 parser.add_argument('--n_proj_hidden', type=int, default=128, help="number of hidden units in augmentation policy projection layers")
+parser.add_argument('--aug_mix', action='store_true', default=False, help='mixup augment and origin data')
 # select & search
 parser.add_argument('--valid_search', action='store_true', default=False, help='using valid set as search')
 parser.add_argument('--mapselect', action='store_true', default=False, help='use map select for multilabel')
@@ -124,6 +125,9 @@ parser.add_argument('--noaug_target', type=str, default='se', help='add regular 
 parser.add_argument('--output_source', type=str, default='', help='class output source',
         choices=['train','valid','search','allsearch',''])
 parser.add_argument('--class_target', type=int, default=-1, help='single class weight target')
+#additional augment, maybe can improve
+parser.add_argument('--mixup', action='store_true', help='mixup benchmark')
+parser.add_argument('--mixup_alpha', type=float, default=1.0, help='mixup parameter')
 #loss
 parser.add_argument('--loss_type', type=str, default='minus', help="loss type for difficult policy training",
         choices=['minus','minusdiff','minussample','relative','relativesample','relmixsample','relativediff','adv','embed'])
@@ -134,6 +138,7 @@ parser.add_argument('--keep_aug', action='store_true', default=False, help='info
 parser.add_argument('--keep_prob', type=float, default=1, help='info keep probabilty')
 parser.add_argument('--keep_mix', action='store_true', default=False, help='mixup type of keep')
 parser.add_argument('--keep_mode', type=str, default='auto', help='info keep mode',choices=['auto','adapt','b','p','t','rand'])
+parser.add_argument('--saliency', type=str, default='max', help='saliency map score target',choices=['pred','target','max'])
 parser.add_argument('--aug_target', type=str, default='', help='info keep adapt target',choices=['kops',''])
 parser.add_argument('--adapt_target', type=str, default='len', help='info keep adapt target / keep auto cut/paste or len/ch keep',
         choices=['fea','len','seg','way','keep','ch','cut','paste','recut','repaste'])
@@ -209,6 +214,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
     def setup(self, *_args): #use new setup replace _setup
         #self.trainer = TSeriesModelTrainer(self.config)
         #os.environ['WANDB_START_METHOD'] = 'thread' #tmp disable
+        #args = self.config['args']
         args = argparse.Namespace(**copy.deepcopy(self.config)) #for grid search
         utils.reproducibility(args.seed) #for reproduce
         #  dataset settings for search
@@ -416,7 +422,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                     'aug_target': args.aug_target}
         keepaug_config = {'keep_aug':args.keep_aug,'mode':args.keep_mode,'thres':args.keep_thres,'length':args.keep_len,'thres_adapt':args.thres_adapt,
             'grid_region':args.keep_grid, 'possible_segment': args.keep_seg, 'info_upper': args.keep_bound, 'sfreq':self.sfreq, 'adapt_target':args.adapt_target,
-            'keep_leads':args.keep_lead,'keep_prob':args.keep_prob,'keep_back':args.keep_back,'lead_sel':args.lead_sel,'keep_mixup':args.keep_mix}
+            'keep_leads':args.keep_lead,'keep_prob':args.keep_prob,'keep_back':args.keep_back,'lead_sel':args.lead_sel,'keep_mixup':args.keep_mix,
+            'saliency_target':args.saliency}
         trans_config = {'sfreq':self.sfreq}
         if args.keep_mode=='adapt':
             keepaug_config['mode'] = 'auto'
@@ -490,13 +497,13 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         else:
             ptype = 'acc'
         print(f'Starting Ray ID {self.trial_id} Iteration: {self._iteration}')
-        
+        #args = self.config['args']
         lr = self.scheduler.get_last_lr()[0]
         step_dic={'epoch':self._iteration}
         diff_dic = {'difficult_aug':self.diff_augment,'same_train':args.same_train,'reweight':self.diff_reweight,'lambda_aug':args.lambda_aug,
                 'lambda_sim':args.lambda_sim,'class_adaptive':args.class_adapt,'lambda_noaug':args.lambda_noaug,'train_perfrom':self.pre_train_acc,
                 'loss_type':args.loss_type, 'adv_criterion': self.adv_criterion, 'teacher_model':self.ema_model, 'sim_criterion':self.sim_criterion,
-                'noaug_reg':args.noaug_reg,'class_weight': self.class_weight,
+                'noaug_reg':args.noaug_reg,'class_weight': self.class_weight,'mixup': args.mixup,'mixup_alpha': args.mixup_alpha,'aug_mix': args.aug_mix,
                 'extra_criterions':self.extra_losses,'sim_reweight':args.sim_rew,'warmup_epoch': args.pwarmup,'mix_type':args.mix_type,'visualize':args.visualize}
         
         # searching

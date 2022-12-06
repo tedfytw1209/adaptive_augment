@@ -1630,8 +1630,6 @@ class KeepAugment(object): #need fix
         slc_ch = torch.mean(torch.abs(x.grad), dim=1) #mean of len, 10/29
         slc_ = normal_slc(slc_)
         slc_ch = normal_slc(slc_ch)
-        print('slc: ',slc_) #!
-        print('slc_ch: ',slc_ch) #!
         if hasattr(model, 'lstm'):
             activate_bn_track_running_stats(model)
         return slc_,slc_ch

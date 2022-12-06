@@ -247,11 +247,6 @@ def infer(valid_queue, model, criterion, multilabel=False, n_class=10,mode='test
                 total += target.size(0)
                 each_pscore = torch.gather(soft_out,1,predicted.cpu().detach().long().view(-1,1))
                 each_tscore = torch.gather(soft_out,1,target.cpu().detach().long().view(-1,1))
-                print('softmax logit: ',soft_out.shape)
-                print('preds: ',predicted) #!tmp
-                print('preds score: ',each_pscore.shape) #tmp
-                print('targets: ',target) #!tmp
-                print('targets score: ',each_tscore.shape) #tmp
                 preds_score.append(each_pscore) #(bs,n_class)[(bs)]=>(bs)
                 targets_score.append(each_tscore)
             else:

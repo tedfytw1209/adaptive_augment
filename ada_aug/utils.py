@@ -195,8 +195,7 @@ def save_ckpt(model, optimizer, scheduler, epoch, model_path):
                 'optimizer': optimizer.state_dict(), 
                 'scheduler': scheduler.state_dict()}, model_path)
 
-def save_pred(target, pred, model_path):
-    col_names = ['target','predict']
+def save_pred(target, pred, model_path, col_names = ['target','predict']):
     if len(target.shape)>1 and target.shape[1]>1: #multilabel
         col_names = ['target_'+str(i) for i in range(target.shape[1])] + ['predict_'+str(i) for i in range(target.shape[1])]
     else:

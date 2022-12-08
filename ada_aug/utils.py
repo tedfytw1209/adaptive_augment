@@ -555,6 +555,7 @@ def create_exp_dir(path, scripts_to_save=None):
 
 
 def reproducibility(seed):
+    os.environ['PYTHONHASHSEED'] = str(seed)
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -562,4 +563,5 @@ def reproducibility(seed):
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.enabled = False
     torch.autograd.set_detect_anomaly(True)

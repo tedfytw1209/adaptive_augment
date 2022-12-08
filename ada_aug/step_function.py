@@ -172,9 +172,9 @@ def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_
         table_dic[f'train_c{i}_id'] = e_c
     #class-wise & Total
     if not multilabel:
-        cw_acc = 100 * confusion_matrix.diag()/(confusion_matrix.sum(1)+1e-9)
+        cw_acc = 100 * confusion_matrix.diag()/torch.clamp(confusion_matrix.sum(1),min=1e-9)
         logging.info('class-wise Acc: ' + str(cw_acc))
-        nol_acc = 100 * confusion_matrix.diag().sum() / (confusion_matrix.sum()+1e-9)
+        nol_acc = 100 * confusion_matrix.diag().sum() / torch.clamp(confusion_matrix.sum(),min=1e-9)
         logging.info('Overall Acc: %f',nol_acc)
         perfrom = top1.avg
         perfrom_cw = cw_acc
@@ -266,9 +266,9 @@ def infer(valid_queue, model, criterion, multilabel=False, n_class=10,mode='test
     table_dic[f'{mode}_target_score'] = targets_score_np
     table_dic[f'{mode}_predict_score'] = preds_score_np
     if not multilabel:
-        cw_acc = 100 * confusion_matrix.diag()/(confusion_matrix.sum(1)+1e-9)
+        cw_acc = 100 * confusion_matrix.diag()/torch.clamp(confusion_matrix.sum(1),min=1e-9)
         logging.info('class-wise Acc: ' + str(cw_acc))
-        nol_acc = 100 * confusion_matrix.diag().sum() / (confusion_matrix.sum()+1e-9)
+        nol_acc = 100 * confusion_matrix.diag().sum() / torch.clamp(confusion_matrix.sum(),min=1e-9)
         logging.info('Overall Acc: %f',nol_acc)
         perfrom = top1.avg
         perfrom_cw = cw_acc
@@ -658,12 +658,9 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                         aug_logits = aug_logits.mean(dim=(1,2))
                     elif len(aug_logits.shape)==3:
                         aug_logits = aug_logits.mean(dim=1)
-                    # !!!bug in this
                     ori_loss = cuc_loss(origin_logits,target_trsearch,adv_criterion,multilabel).mean().detach() #!to assert loss mean reduce
                     aug_diff_loss += aug_loss.detach().mean().item()
                     ori_diff_loss += ori_loss.detach().mean().item()
-                    #print('ori_loss',ori_loss.shape,ori_loss) #!tmp
-                    #print('aug_loss',aug_loss.shape,aug_loss) #!tmp
                     loss_prepolicy = diff_loss_func(ori_loss=ori_loss,aug_loss=aug_loss,lambda_aug=lambda_aug,**add_kwargs)
                     #print('loss_prepolicy',loss_prepolicy.shape,loss_prepolicy) #!tmp
                     if torch.is_tensor(class_weight): #class_weight: (n_class), w_sample: (bs)
@@ -672,10 +669,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                             w_sample = class_weight[target_trsearch].detach()
                         else: #class_weight:(1,n_class), target_search:(bs,n_class)=>(bs,n_class) !!!may have some bug!!!
                             w_sample = (class_weight.view(1,n_class) * target_trsearch).sum(1)
-                        print('w_sample: ',w_sample.shape) #!
-                        print('prepolicy loss: ',loss_prepolicy.shape) #!
                         tmp = w_sample * loss_prepolicy
-                        print('aug loss: ',tmp) #!
                         loss_policy = tmp.mean() 
                     elif reweight: #reweight part, a,b = ?
                         p_orig = origin_logits.softmax(dim=1)[torch.arange(batch_size), target_trsearch].detach()
@@ -727,17 +721,9 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                     noaug_w_target = target_search.detach().long()
                 else:
                     noaug_w_target = torch.zeros(aug_weight.shape[0]).cuda().long()
-                #print(noaug_mag_target)
-                #print(noaug_w_target)
                 if use_noaug_reg: #need test
                     #noaug_loss = lambda_noaug * (1.0 - train_perfrom) * noaug_criterion(aug_weight,noaug_target) #10/26 change
                     noaug_samplew = noaug_lossw[target_search.detach()]
-                    #print('class noaug weight: ',noaug_lossw)
-                    #print('target search: ',target_search)
-                    #print('sample wise noaug weight: ',noaug_samplew)
-                    #print('noaug sample weight: ',noaug_samplew)
-                    #print(noaug_criterion_w(aug_magnitude,noaug_mag_target).mean(1))
-                    #print(noaug_criterion(aug_weight,noaug_w_target))
                     noaug_loss = 0
                     if 'w' in noaug_target:
                         tmp_loss = (lambda_noaug * noaug_samplew * noaug_criterion_w(aug_magnitude,noaug_mag_target).mean(1)).mean() #mean to assert loss is scalar
@@ -761,7 +747,6 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 augsear_loss, logits_search, each_aug_loss = mix_func(gf_model,mixed_features,aug_weights,sim_criterion,target_search,multilabel)
                 origin_embed = sim_model.extract_features(input_search, seq_len, pool=True)
                 origin_logits = sim_model.classify(origin_embed)
-                #origin_logits = sim_model(input_search, seq_len)
                 ori_loss = cuc_loss(origin_logits,target_search,sim_criterion,multilabel)
                 #ori_loss = ori_loss.mean() #!to assert loss mean reduce
                 #output pred
@@ -889,9 +874,9 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
         exit()
     #class-wise & Total
     if not multilabel:
-        cw_acc = 100 * confusion_matrix.diag()/(confusion_matrix.sum(1)+1e-9)
+        cw_acc = 100 * confusion_matrix.diag()/torch.clamp(confusion_matrix.sum(1),min=1e-9)
         logging.info('class-wise Acc: ' + str(cw_acc))
-        nol_acc = 100 * confusion_matrix.diag().sum() / (confusion_matrix.sum()+1e-9)
+        nol_acc = 100 * confusion_matrix.diag().sum() / torch.clamp(confusion_matrix.sum(),min=1e-9)
         logging.info('Overall Acc: %f',nol_acc)
         perfrom = top1.avg
         perfrom_cw = cw_acc
@@ -1029,9 +1014,9 @@ def search_infer(valid_queue, gf_model, criterion, multilabel=False, n_class=10,
     table_dic[f'{mode}_target_score'] = targets_score_np
     table_dic[f'{mode}_predict_score'] = preds_score_np
     if not multilabel:
-        cw_acc = 100 * confusion_matrix.diag()/(confusion_matrix.sum(1)+1e-9)
+        cw_acc = 100 * confusion_matrix.diag()/torch.clamp(confusion_matrix.sum(1),min=1e-9)
         logging.info(f'{mode} class-wise Acc: ' + str(cw_acc))
-        nol_acc = 100 * confusion_matrix.diag().sum() / (confusion_matrix.sum()+1e-9)
+        nol_acc = 100 * confusion_matrix.diag().sum() / torch.clamp(confusion_matrix.sum(),min=1e-9)
         logging.info('%s Overall Acc: %f',mode,nol_acc)
         perfrom = top1.avg
         perfrom_cw = cw_acc

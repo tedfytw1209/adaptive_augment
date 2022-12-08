@@ -563,3 +563,9 @@ def reproducibility(seed):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     torch.autograd.set_detect_anomaly(True)
+
+def seed_worker(worker_id): #for dataloader worker
+    worker_seed = torch.initial_seed() % 2**32
+    np.random.seed(worker_seed)
+    random.seed(worker_seed)
+

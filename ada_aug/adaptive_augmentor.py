@@ -258,7 +258,7 @@ class AdaAug_TS(AdaAug):
     def __init__(self, after_transforms, n_class, gf_model, h_model, save_dir=None, visualize=False,
                     config=default_config,keepaug_config=default_config, multilabel=False, augselect='',class_adaptive=False,
                     sub_mix=1.0,search_temp=1.0,noaug_add=False,add_method='',transfrom_dic={},preprocessors=[],
-                    max_noaug_add=0.5,max_noaug_reduce=0,class_target=-1):
+                    max_noaug_add=0.5,max_noaug_reduce=0,seed=None):
         super(AdaAug_TS, self).__init__(after_transforms, n_class, gf_model, h_model, save_dir, config)
         #other already define in AdaAug
         self.ops_names,self.aug_dict = select_augments(augselect)
@@ -582,7 +582,7 @@ class AdaAugkeep_TS(AdaAug):
     def __init__(self, after_transforms, n_class, gf_model, h_model, save_dir=None, visualize=False,
                     config=default_config,keepaug_config=default_config, multilabel=False, augselect='',class_adaptive=False,ind_mix=False,
                     sub_mix=1.0,search_temp=1.0,noaug_add=False,add_method='',transfrom_dic={},preprocessors=[],
-                    max_noaug_add=0.5,max_noaug_reduce=0,class_target=-1):
+                    max_noaug_add=0.5,max_noaug_reduce=0,seed=None):
         super(AdaAugkeep_TS, self).__init__(after_transforms, n_class, gf_model, h_model, save_dir, config)
         #other already define in AdaAug
         self.ops_names,self.aug_dict = select_augments(augselect)

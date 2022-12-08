@@ -165,11 +165,8 @@ def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_
     table_dic['train_predict'] = preds_np
     #tmp only look noaug %
     #print('sum tr output matrix: ',tr_add_up)
-    print('sum tr count matrix: ',tr_count)
     tr_class_augm = tr_class_augm / tr_count #every output add up is one
     tr_class_augw = tr_class_augw / tr_count
-    print(tr_class_augm)
-    print(tr_class_augw)
     noaug_precent = tr_class_augw[:,0].view(-1) #only noaug %
     for i,e_c in enumerate(noaug_precent):
         table_dic[f'train_c{i}_id'] = e_c

@@ -107,7 +107,8 @@ parser.add_argument('--lambda_sim', type=float, default=1.0, help="augment sampl
 parser.add_argument('--lambda_noaug', type=float, default=0, help="no augment regular weight")
 # class adapt
 parser.add_argument('--class_adapt', action='store_true', default=False, help='class adaptive')
-parser.add_argument('--class_embed', action='store_true', default=False, help='class embed') #tmp use
+parser.add_argument('--class_embed', action='store_true', default=False, help='class embed')
+parser.add_argument('--n_embed', type=int, default=32, help='class embed number')
 parser.add_argument('--feature_mask', type=str, default='', help='add regular for noaugment ',
         choices=['dropout','select','average','classonly',''])
 parser.add_argument('--class_dist', type=str, default='', help='class distance loss')
@@ -290,7 +291,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         label_num, label_embed = 0,0
         if args.class_adapt and args.class_embed:
             label_num = n_class
-            label_embed = 32 #tmp use
+            label_embed = args.n_embed
             h_input = h_input + label_embed
         elif args.class_adapt:
             h_input =h_input + n_class

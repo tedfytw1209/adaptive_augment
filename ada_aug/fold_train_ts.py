@@ -103,7 +103,8 @@ parser.add_argument('--not_reweight', action='store_true', default=False, help='
 parser.add_argument('--lambda_aug', type=float, default=1.0, help="augment sample weight")
 #class adapt
 parser.add_argument('--class_adapt', action='store_true', default=False, help='class adaptive')
-parser.add_argument('--class_embed', action='store_true', default=False, help='class embed') #tmp use
+parser.add_argument('--class_embed', action='store_true', default=False, help='class embed')
+parser.add_argument('--n_embed', type=int, default=32, help='class embed number')
 parser.add_argument('--feature_mask', type=str, default='', help='add regular for noaugment ',
         choices=['dropout','select','average','classonly',''])
 parser.add_argument('--noaug_reg', type=str, default='', help='add regular for noaugment ',
@@ -230,7 +231,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             elif args.noaug_add=='add':
                 self.adapt_add = True
             #other add no need to adapt change
-            
+        
         test_fold_idx = self.config['kfold']
         train_val_test_folds = [[],[],[]] #train,valid,test
         for i in range(10):
@@ -287,13 +288,14 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         label_num,label_embed =0,0
         if args.class_adapt and args.class_embed:
             label_num = n_class
-            label_embed = 32 #tmp use
+            label_embed = args.n_embed #12/08
             h_input = h_input + label_embed
         elif args.class_adapt:
             h_input =h_input + n_class
         #keep aug, need improve!!
         proj_add = 0
         if args.keep_mode=='adapt':
+            print(f'Keep {args.keep_mode} target select {args.adapt_target}')
             if args.adapt_target=='len':
                 proj_add = len(args.keep_len) + 1
             elif args.adapt_target=='fea':

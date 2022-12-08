@@ -7,7 +7,7 @@ from torchvision import transforms
 from datasets import EDFX,PTBXL,Chapman,WISDM,ICBEB,Georgia
 import random
 from sklearn.preprocessing import StandardScaler
-from utils import make_weights_for_balanced_classes,make_weights_for_balanced_classes_maxrel
+from utils import make_weights_for_balanced_classes,make_weights_for_balanced_classes_maxrel,seed_worker
 
 _CIFAR_MEAN, _CIFAR_STD = (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)
 _SVHN_MEAN, _SVHN_STD = (0.43090966, 0.4302428, 0.44634357), (0.19652855, 0.19832038, 0.19942076)
@@ -410,7 +410,14 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
             rd_idxs.append(i)
             label_for_split.append(search_trainset.label[i])
     #rd_idxs = [i for i in range(total)]
-    if search_size > 0:
+    #valid as search
+    if valid_search:
+        print('Using valid set as search')
+        search_dataset = validset
+        total_trainset = search_trainset
+        print(f'Train len: {len(total_trainset)},Search len: {len(validset)}')
+    elif search_size > 0:
+        print(f'Split search set of {search_size} search_trainset')
         if not multilabel: #multilabel can't, label<2 can't
             sss = StratifiedShuffleSplit(n_splits=5, test_size=search_size, random_state=0)
             sss = sss.split(list(rd_idxs), label_for_split)
@@ -432,11 +439,7 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
     else:
         search_dataset = None
         total_trainset = search_trainset
-    #valid as search
-    if valid_search:
-        print('Using valid set as search')
-        search_dataset = validset
-        print(f'Train len: {len(total_trainset)},Search len: {len(validset)}')
+    
     #make train/valid split
     train_sampler = None
     if split < 1.0 and validset==None:
@@ -474,17 +477,26 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
         tr_weights = make_weights_for_balanced_classes_maxrel(train_data.dataset.label,nclasses=num_class,alpha=sampler_alpha)
         train_sampler = torch.utils.data.sampler.WeightedRandomSampler(tr_weights, len(tr_weights))
         print('train sampler with weight',tr_weights) #!
-    
+    else:
+        print('normal train sampler')
+    #worker seed for multi worker 12/08
+    g = torch.Generator()
+    g.manual_seed(0)
+    #data loader
     if train_sampler is None:
         trainloader = torch.utils.data.DataLoader(
             train_data, batch_size=batch, shuffle=True,
             drop_last=True, pin_memory=True,
-            num_workers=num_workers)
+            num_workers=num_workers,
+            worker_init_fn=seed_worker,
+            generator=g)
     else:
         trainloader = torch.utils.data.DataLoader(
             train_data, batch_size=batch, shuffle=False,
             sampler=train_sampler, drop_last=True,
-            pin_memory=True, num_workers=num_workers)
+            pin_memory=True, num_workers=num_workers,
+            worker_init_fn=seed_worker,
+            generator=g)
 
     validloader = torch.utils.data.DataLoader(
         valid_data, batch_size=batch,shuffle=False,
@@ -497,15 +509,17 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
             se_sampler = torch.utils.data.sampler.WeightedRandomSampler(se_weights, len(se_weights))
             tr_weights = make_weights_for_balanced_classes(train_data.dataset.label,nclasses=num_class,alpha=sampler_alpha)
             tr_sampler = torch.utils.data.sampler.WeightedRandomSampler(tr_weights, len(tr_weights))
-            print('search sampler: ',se_sampler) #!
+            print('search sampler with weight: ',se_weights) #!
             shuffle_opt=False
         elif bal_ssampler=='wmaxrel':
             se_weights = make_weights_for_balanced_classes_maxrel(search_data.dataset.label,nclasses=num_class,alpha=sampler_alpha)
             se_sampler = torch.utils.data.sampler.WeightedRandomSampler(se_weights, len(se_weights))
             tr_weights = make_weights_for_balanced_classes_maxrel(train_data.dataset.label,nclasses=num_class,alpha=sampler_alpha)
             tr_sampler = torch.utils.data.sampler.WeightedRandomSampler(tr_weights, len(tr_weights))
+            print('search sampler with weight: ',se_weights) #!
             shuffle_opt=False
         else:
+            print('normal search sampler')
             se_sampler = None
             tr_sampler = None
             shuffle_opt=True
@@ -513,11 +527,15 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
         searchloader = torch.utils.data.DataLoader(
             search_data, batch_size=search_divider, sampler = se_sampler,
             shuffle=shuffle_opt, drop_last=True, pin_memory=True,
-            num_workers=num_workers)
+            num_workers=num_workers,
+            worker_init_fn=seed_worker,
+            generator=g)
         tr_searchloader = torch.utils.data.DataLoader(
             train_data, batch_size=search_divider, sampler = tr_sampler,
             shuffle=shuffle_opt, drop_last=True, pin_memory=True,
-            num_workers=num_workers)
+            num_workers=num_workers,
+            worker_init_fn=seed_worker,
+            generator=g)
     else:
         searchloader = None
         tr_searchloader = None

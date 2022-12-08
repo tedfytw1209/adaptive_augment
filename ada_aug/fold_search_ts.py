@@ -445,7 +445,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 max_noaug_add=args.noaug_max,
                 max_noaug_reduce=args.reduce_mag,
                 transfrom_dic=trans_config,
-                preprocessors=preprocessors)
+                preprocessors=preprocessors,
+                seed=args.seed)
         else:
             keepaug_config['length'] = keepaug_config['length'][0]
             self.adaaug = AdaAug_TS(after_transforms=after_transforms,
@@ -465,7 +466,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 max_noaug_add=args.noaug_max,
                 max_noaug_reduce=args.reduce_mag,
                 transfrom_dic=trans_config,
-                preprocessors=preprocessors)
+                preprocessors=preprocessors,
+                seed=args.seed)
         #to self
         self.n_channel = n_channel
         self.n_class = n_class

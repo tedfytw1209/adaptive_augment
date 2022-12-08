@@ -323,6 +323,7 @@ class AdaAug_TS(AdaAug):
         if self.add_method=='fixadd': #add fix amount noaug
             weights[:,0] = self.noaug_max
             weights[:,1:] = (1.0 - self.noaug_max) * weights[:,1:] / torch.sum(weights[:,1:],dim=1, keepdim=True).detach()
+            #print('weight[0]: ',weights[0])
         elif self.noaug_add: #add noaug reweights
             if self.class_adaptive: #alpha: (1,n_class), y: (batch_szie,n_class)=>(batch_size,1) one hotted
                 batch_alpha = torch.sum(self.alpha * y,dim=-1,keepdim=True) / torch.sum(y,dim=-1,keepdim=True)
@@ -330,7 +331,6 @@ class AdaAug_TS(AdaAug):
                 batch_alpha = self.alpha.view(-1)
             weights = batch_alpha * weights + (1.0-batch_alpha) * \
                 (self.noaug_tensor.cuda() + weights * (1.0-self.noaug_max))
-        #print('weight: ',weights)
         if self.max_noaug_reduce > 0:
             if self.class_adaptive: #multi_tensor: (1,n_class), y: (batch_szie,n_class)=>(batch_size,1) one hotted
                 magnitude_multi = (torch.sum(self.multi_tensor.cuda() * y,dim=-1,keepdim=True) / torch.sum(y,dim=-1,keepdim=True))
@@ -446,17 +446,17 @@ class AdaAug_TS(AdaAug):
         else:
             idx_list,magnitude_i = idx_matrix,magnitudes
         for idx in idx_list:
-            m_pi = self.delta_func(magnitude_i[idx], self.delta).detach().cpu().numpy()
+            m_pi = self.delta_func(magnitude_i[idx], self.delta).detach().cpu().numpy() #only affect magnitude
             image = apply_augment(image, self.ops_names[idx], m_pi,seq_len=seq_len,preprocessor=self.preprocessors[0],aug_dict=self.aug_dict,**self.transfrom_dic)
         return self.after_transforms(image)
     def get_training_aug_images(self, images, magnitudes, weights, seq_len=None,visualize=False,target=None):
         # visualization
         if self.k_ops > 0:
-            trans_images = []
             if self.sampling == 'prob':
                 idx_matrix = torch.multinomial(weights, self.k_ops, generator=self.generator)
             elif self.sampling == 'max':
                 idx_matrix = torch.topk(weights, self.k_ops, dim=1)[1] #where op index the highest weight
+            print('idx_matrix: ',idx_matrix)
             '''for i, image in enumerate(images):
                 pil_image = image.detach().cpu()
                 for idx in idx_matrix[i]:

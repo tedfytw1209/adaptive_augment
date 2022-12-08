@@ -261,6 +261,9 @@ class AdaAug_TS(AdaAug):
                     max_noaug_add=0.5,max_noaug_reduce=0,seed=None):
         super(AdaAug_TS, self).__init__(after_transforms, n_class, gf_model, h_model, save_dir, config)
         #other already define in AdaAug
+        self.generator = torch.Generator(device='cuda')
+        if seed!=None:
+            self.generator.manual_seed(seed)
         self.ops_names,self.aug_dict = select_augments(augselect)
         print('AdaAug Using ',self.ops_names)
         print('AdaAug Aug dict ',self.aug_dict)
@@ -451,7 +454,7 @@ class AdaAug_TS(AdaAug):
         if self.k_ops > 0:
             trans_images = []
             if self.sampling == 'prob':
-                idx_matrix = torch.multinomial(weights, self.k_ops)
+                idx_matrix = torch.multinomial(weights, self.k_ops, generator=self.generator)
             elif self.sampling == 'max':
                 idx_matrix = torch.topk(weights, self.k_ops, dim=1)[1] #where op index the highest weight
             '''for i, image in enumerate(images):
@@ -585,6 +588,9 @@ class AdaAugkeep_TS(AdaAug):
                     max_noaug_add=0.5,max_noaug_reduce=0,seed=None):
         super(AdaAugkeep_TS, self).__init__(after_transforms, n_class, gf_model, h_model, save_dir, config)
         #other already define in AdaAug
+        self.generator = torch.Generator(device='cuda')
+        if seed!=None:
+            self.generator.manual_seed(seed)
         self.ops_names,self.aug_dict = select_augments(augselect)
         print('AdaAug Using ',self.ops_names)
         print('AdaAug Aug dict ',self.aug_dict)
@@ -715,8 +721,6 @@ class AdaAugkeep_TS(AdaAug):
             mean_thre, std_thre = cuc_meanstd(keep_thres,idxs)
             self.history.add(k, mean_lambda, mean_p, mean_len, mean_thre, std_lambda, std_p, std_len, std_thre)
         
-
-
     def get_aug_valid_img(self, image, magnitudes,keep_thres,i=None,k=None,ops_name=None, seq_len=None):
         #print('mag shape: ',magnitudes.shape)
         #print(f'i: {i}, k: {k}, op name: {ops_name}')
@@ -811,8 +815,8 @@ class AdaAugkeep_TS(AdaAug):
                 return ba_features, [weights_subset, mag_subset, keeplen_ws]
     def select_params(self,weights,keeplen_ws):
         if self.sampling == 'prob':
-            idx_matrix = torch.multinomial(weights, self.k_ops)
-            len_idx = torch.multinomial(keeplen_ws, 1).view(-1).detach().cpu().numpy()
+            idx_matrix = torch.multinomial(weights, self.k_ops, generator=self.generator)
+            len_idx = torch.multinomial(keeplen_ws, 1, generator=self.generator).view(-1).detach().cpu().numpy()
         elif self.sampling == 'max':
             idx_matrix = torch.topk(weights, self.k_ops, dim=1)[1] #where op index the highest weight
             len_idx = torch.topk(keeplen_ws, 1, dim=1)[1].view(-1).detach().cpu().numpy()

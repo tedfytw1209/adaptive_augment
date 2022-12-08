@@ -487,16 +487,12 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
         trainloader = torch.utils.data.DataLoader(
             train_data, batch_size=batch, shuffle=True,
             drop_last=True, pin_memory=True,
-            num_workers=num_workers,
-            worker_init_fn=seed_worker,
-            generator=g)
+            num_workers=num_workers)
     else:
         trainloader = torch.utils.data.DataLoader(
             train_data, batch_size=batch, shuffle=False,
             sampler=train_sampler, drop_last=True,
-            pin_memory=True, num_workers=num_workers,
-            worker_init_fn=seed_worker,
-            generator=g)
+            pin_memory=True, num_workers=num_workers)
 
     validloader = torch.utils.data.DataLoader(
         valid_data, batch_size=batch,shuffle=False,
@@ -527,15 +523,11 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
         searchloader = torch.utils.data.DataLoader(
             search_data, batch_size=search_divider, sampler = se_sampler,
             shuffle=shuffle_opt, drop_last=True, pin_memory=True,
-            num_workers=num_workers,
-            worker_init_fn=seed_worker,
-            generator=g)
+            num_workers=num_workers)
         tr_searchloader = torch.utils.data.DataLoader(
             train_data, batch_size=search_divider, sampler = tr_sampler,
             shuffle=shuffle_opt, drop_last=True, pin_memory=True,
-            num_workers=num_workers,
-            worker_init_fn=seed_worker,
-            generator=g)
+            num_workers=num_workers)
     else:
         searchloader = None
         tr_searchloader = None

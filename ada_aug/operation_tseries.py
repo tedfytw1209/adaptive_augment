@@ -20,6 +20,7 @@ import matplotlib.pyplot as plt
 from ecgdetectors import Detectors
 from scipy.interpolate import CubicSpline
 from operations_ecg import *
+from numpy.random import default_rng
 
 #for model: (len, channel)
 #for this file (channel, len)!
@@ -1229,7 +1230,7 @@ class KeepAugment(object): #need fix
     def __init__(self, mode, length,thres=0.6,transfrom=None,default_select=None, early=False, low = False,adapt_target='len',
         possible_segment=[1],keep_leads=[12],grid_region=False, reverse=False,info_upper = 0.0, visualize=False,save_dir='./',
         sfreq=100,pw_len=0.2,tw_len=0.4,keep_prob=1,keep_back='',lead_sel='thres',keep_mixup=False,saliency_target='pred',
-        multilabel=False,**_kwargs):
+        multilabel=False,seed=None,**_kwargs):
         assert mode in ['auto','b','p','t','rand'] #auto: all, b: heart beat(-0.2,0.4), p: p-wave(-0.2,0), t: t-wave(0,0.4)
         self.mode = mode
         if self.mode=='p':
@@ -1310,6 +1311,7 @@ class KeepAugment(object): #need fix
             self.keep_func = keep_nomix
         self.saliency_target = saliency_target
         self.multilabel = multilabel
+        self.rng = default_rng(seed)
         #'torch.nn.functional.avg_pool1d' use this for segment
         ##self.m_pool = torch.nn.AvgPool1d(kernel_size=self.length, stride=1, padding=0) #for winodow sum
         print(f'Apply InfoKeep Augment: mode={self.mode}, threshold={self.thres}, transfrom={self.trans}, mixup={self.keep_mixup}, saliency target {self.saliency_target}')
@@ -1388,7 +1390,8 @@ class KeepAugment(object): #need fix
         #windowed_slc = self.m_pool(slc_.view(b,1,w)).view(b,-1)
         apply_keep = torch.rand(b) #prob for apply keep
         #select a segment number
-        n_keep_lead = np.random.choice(self.keep_leads)
+        #n_keep_lead = np.random.choice(self.keep_leads)
+        n_keep_lead = self.keep_leads[self.rng.integers(len(self.keep_leads))]
         lead_quant = min(info_aug,1.0 - n_keep_lead / 12.0)
         '''if n_keep_lead!=12: #next step opt speed
             #keep lead select
@@ -1397,7 +1400,8 @@ class KeepAugment(object): #need fix
             lead_possible = torch.nonzero(slc_ch_each.ge(quant_lead_sc), as_tuple=True)[0]
             lead_potential = slc_ch_each[lead_possible]
             lead_select = torch.sort(lead_possible[torch.multinomial(lead_potential,n_keep_lead)])[0].detach()'''
-        seg_number = np.random.choice(self.possible_segment)
+        #seg_number = np.random.choice(self.possible_segment)
+        seg_number = self.possible_segment[self.rng.integers(len(self.possible_segment))]
         seg_len = int(w / seg_number)
         if self.fix_points:
             info_len = min(int(self.length * 12 /(seg_number*n_keep_lead)),w)
@@ -1444,7 +1448,8 @@ class KeepAugment(object): #need fix
                 quant_score = torch.quantile(windowed_slc_each[win_start:win_end],info_aug)
                 bound_score = torch.quantile(windowed_slc_each[win_start:win_end],info_bound)
                 while(True):
-                    x = np.random.randint(start,end)
+                    #x = np.random.randint(start,end)
+                    x = self.rng.integers(start,end)
                     x1 = np.clip(x - info_len // 2, 0, w)
                     x2 = np.clip(x + info_len // 2, 0, w)
                     reg_mean = slc[x1: x2].mean()
@@ -1495,9 +1500,11 @@ class KeepAugment(object): #need fix
         info_aug, compare_func, info_bound, bound_func = self.get_selective(selective)
         #windowed_slc = self.m_pool(slc_.view(b,1,w)).view(b,-1)
         #select a segment number
-        n_keep_lead = np.random.choice(self.keep_leads)
+        #n_keep_lead = np.random.choice(self.keep_leads)
+        n_keep_lead = self.keep_leads[self.rng.integers(len(self.keep_leads))]
         lead_quant = min(info_aug,1.0 - n_keep_lead / 12.0)
-        seg_number = np.random.choice(self.possible_segment)
+        #seg_number = np.random.choice(self.possible_segment)
+        seg_number = self.possible_segment[self.rng.integers(len(self.possible_segment))]
         seg_len = int(w / seg_number)
         if self.fix_points:
             info_len = min(int(self.length * 12 /(seg_number*n_keep_lead)),w)
@@ -1551,7 +1558,8 @@ class KeepAugment(object): #need fix
                     quant_score = torch.quantile(windowed_slc_each[win_start: win_end],info_aug)
                     bound_score = torch.quantile(windowed_slc_each[win_start:win_end],info_bound)
                     while(True):
-                        x = np.random.randint(start,end)
+                        #x = np.random.randint(start,end)
+                        x = self.rng.integers(start,end)
                         x1 = np.clip(x - info_len // 2, 0, w)
                         x2 = np.clip(x + info_len // 2, 0, w)
                         reg_mean = slc[x1: x2].mean()
@@ -1685,7 +1693,7 @@ def stop_gradient_keep(trans_image, magnitude, keep_thre, region_list):
 class AdaKeepAugment(KeepAugment): #
     def __init__(self, mode, length,thres=0.6,transfrom=None,default_select=None, early=False, low = False,
         possible_segment=[1],keep_leads=[12],grid_region=False, reverse=False,info_upper = 0.0, thres_adapt=True, adapt_target='len',save_dir='./',
-        sfreq=100,pw_len=0.2,tw_len=0.4,keep_prob=1,keep_back='',lead_sel='thres',keep_mixup=False,**_kwargs):
+        sfreq=100,pw_len=0.2,tw_len=0.4,keep_prob=1,keep_back='',lead_sel='thres',keep_mixup=False,seed=None,**_kwargs):
         assert mode in ['auto','b','p','t','rand'] #auto: all, b: heart beat(-0.2,0.4), p: p-wave(-0.2,0), t: t-wave(0,0.4)
         self.mode = mode
         if self.mode=='p':
@@ -1755,6 +1763,7 @@ class AdaKeepAugment(KeepAugment): #
             self.keep_func = keep_mix
         else:
             self.keep_func = keep_nomix
+        self.rng = default_rng(seed)
         #'torch.nn.functional.avg_pool1d' use this for segment
         print(f'Apply InfoKeep Augment: mode={self.mode},target={self.adapt_target}, threshold={self.thres}, \
             transfrom={self.trans}, mixup={self.keep_mixup}')
@@ -1765,8 +1774,8 @@ class AdaKeepAugment(KeepAugment): #
         slc_,slc_ch, t_series_ = self.get_slc(t_series,model,target)
         #windowed_slc = self.m_pool(slc_.view(b,1,w)).view(b,-1)
         #select a segment number
-        n_keep_lead = np.random.choice(self.keep_leads)
-        seg_number = np.random.choice(self.possible_segment)
+        n_keep_lead = self.keep_leads[self.rng.integers(len(self.keep_leads))]
+        seg_number = self.possible_segment[self.rng.integers(len(self.possible_segment))]
         total_len = self.length[0]
         #print(slc_)
         t_series_ = t_series_.detach().cpu()
@@ -1835,7 +1844,8 @@ class AdaKeepAugment(KeepAugment): #
                     print('quant_score: ',quant_score)
                     print('bound_score: ',bound_score)
                     print('max windows: ',torch.max(seg_window))
-                select_p = np.random.choice(select_windows) #window start for adjust
+                #select_p = np.random.choice(select_windows) #window start for adjust
+                select_p = select_windows[self.rng.integers(len(select_windows))]
                 x = select_p + win_start #back to center points
                 x1 = np.clip(x - info_len // 2, 0, w)
                 x2 = np.clip(x + info_len // 2, 0, w)
@@ -1973,7 +1983,8 @@ class AdaKeepAugment(KeepAugment): #
                             print('quant_score: ',quant_score)
                             print('bound_score: ',bound_score)
                             print('max windows: ',torch.max(seg_window))
-                        select_p = np.random.choice(select_windows)#window start for adjust
+                        #select_p = np.random.choice(select_windows)#window start for adjust
+                        select_p = select_windows[self.rng.integers(len(select_windows))]
                         x = select_p + win_start #back to seg
                         x1 = np.clip(x - info_len // 2, 0, w)
                         x2 = np.clip(x + info_len // 2, 0, w)
@@ -2090,7 +2101,8 @@ class AdaKeepAugment(KeepAugment): #
                             print('quant_score: ',quant_score)
                             print('bound_score: ',bound_score)
                             print('max windows: ',torch.max(seg_window))
-                        select_p = np.random.choice(select_windows) #window start for adjust
+                        #select_p = np.random.choice(select_windows) #window start for adjust
+                        select_p = select_windows[self.rng.integers(len(select_windows))]
                         x = select_p + win_start #back to seg
                         x1 = np.clip(x - info_len // 2, 0, w)
                         x2 = np.clip(x + info_len // 2, 0, w)

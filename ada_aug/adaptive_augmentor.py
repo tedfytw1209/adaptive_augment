@@ -267,7 +267,7 @@ class AdaAug_TS(AdaAug):
         if seed!=None:
             self.generator.manual_seed(seed)
         self.aug_rng = RandomState(seed)
-        self.perm_rng = default_config(seed)
+        self.perm_rng = default_rng(seed)
         self.ops_names,self.aug_dict = select_augments(augselect)
         print('AdaAug Using ',self.ops_names)
         print('AdaAug Aug dict ',self.aug_dict)
@@ -598,7 +598,7 @@ class AdaAugkeep_TS(AdaAug):
         if seed!=None:
             self.generator.manual_seed(seed)
         self.aug_rng = RandomState(seed)
-        self.perm_rng = default_config(seed)
+        self.perm_rng = default_rng(seed)
         self.ops_names,self.aug_dict = select_augments(augselect)
         print('AdaAug Using ',self.ops_names)
         print('AdaAug Aug dict ',self.aug_dict)

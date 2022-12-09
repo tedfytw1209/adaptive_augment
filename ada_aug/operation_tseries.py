@@ -1216,7 +1216,6 @@ def leads_threshold_select(slc_ch_each,n_keep_lead,lead_quant,default_leads):
 def keep_nomix(t_s,inforegion_list,x1,x2,reg_i,lead_select):
     t_s[x1: x2, lead_select.to(t_s.device)] = inforegion_list[reg_i][:,lead_select.to(t_s.device)].to(t_s.device)
     return t_s
-
 def keep_mix(t_s,inforegion_list,x1,x2,reg_i,lead_select,mix_alpha=1):
     lam = np.random.beta(mix_alpha, mix_alpha)
     #mixed_x = lam * x + (1 - lam) * x[index, :]

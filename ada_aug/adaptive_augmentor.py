@@ -14,6 +14,8 @@ import operation
 from networks import get_model
 from utils import PolicyHistory,PolicyHistoryKeep
 from config import OPS_NAMES,TS_OPS_NAMES
+from numpy.random import RandomState
+from numpy.random import default_rng
 
 default_config = {'sampling': 'prob',
                     'k_ops': 1,
@@ -23,24 +25,24 @@ default_config = {'sampling': 'prob',
                     'target_d': 32}
 defaultkeep_config = {'keep_aug':False,'mode':'auto','thres':0.6,'length':100}
 
-def perturb_param(param, delta):
+def perturb_param(param, delta, rng):
     if delta <= 0:
         return param
-    amt = random.uniform(0, delta)
-    if random.random() < 0.5:
+    amt = rng.uniform(0, delta)
+    if rng.random() < 0.5:
         #return torch.tensor(max(0, param.clone().detach()-amt))
         return torch.clip(param.clone().detach()-amt,min=0.0,max=1.0)
     else:
         #return torch.tensor(min(1, param.clone().detach()+amt))
         return torch.clip(param.clone().detach()+amt,min=0.0,max=1.0)
 
-def perturb_param_wide(param, delta):
+def perturb_param_wide(param, delta, rng):
     if delta <= 0:
-        down_amt = random.uniform(0, float(torch.max(param.cpu().detach())))
+        down_amt = rng.uniform(0, float(torch.max(param.cpu().detach())))
         return torch.clip(param.clone().detach()-down_amt,min=0.0,max=1.0)
-    up_amt = random.uniform(0, delta)
-    down_amt = random.uniform(0, float(torch.max(param.cpu().detach()))) #make possible from 0 to params
-    if random.random() < 0.5:
+    up_amt = rng.uniform(0, delta)
+    down_amt = rng.uniform(0, float(torch.max(param.cpu().detach()))) #make possible from 0 to params
+    if rng.random() < 0.5:
         #return torch.tensor(max(0, param.clone().detach()-amt))
         out = torch.clip(param.clone().detach()-down_amt,min=0.0,max=1.0)
     else:
@@ -264,6 +266,8 @@ class AdaAug_TS(AdaAug):
         self.generator = torch.Generator(device='cuda')
         if seed!=None:
             self.generator.manual_seed(seed)
+        self.aug_rng = RandomState(seed)
+        self.perm_rng = default_config(seed)
         self.ops_names,self.aug_dict = select_augments(augselect)
         print('AdaAug Using ',self.ops_names)
         print('AdaAug Aug dict ',self.aug_dict)
@@ -372,7 +376,8 @@ class AdaAug_TS(AdaAug):
         return (mag_list,weight_list)
 
     def get_aug_valid_img(self, image, magnitudes,i=None,k=None,ops_name=None, seq_len=None):
-        trans_image = apply_augment(image, ops_name, magnitudes[i][k].detach().cpu().numpy(),seq_len=seq_len,preprocessor=self.preprocessors[0],aug_dict=self.aug_dict,**self.transfrom_dic)
+        trans_image = apply_augment(image, ops_name, magnitudes[i][k].detach().cpu().numpy(),rd_seed=self.aug_rng
+            ,seq_len=seq_len,preprocessor=self.preprocessors[0],aug_dict=self.aug_dict,**self.transfrom_dic)
         trans_image = self.after_transforms(trans_image)
         trans_image = stop_gradient(trans_image.cuda(), magnitudes[i][k])
         return trans_image
@@ -446,8 +451,9 @@ class AdaAug_TS(AdaAug):
         else:
             idx_list,magnitude_i = idx_matrix,magnitudes
         for idx in idx_list:
-            m_pi = self.delta_func(magnitude_i[idx], self.delta).detach().cpu().numpy() #only affect magnitude
-            image = apply_augment(image, self.ops_names[idx], m_pi,seq_len=seq_len,preprocessor=self.preprocessors[0],aug_dict=self.aug_dict,**self.transfrom_dic)
+            m_pi = self.delta_func(magnitude_i[idx], self.delta,rng=self.perm_rng).detach().cpu().numpy() #only affect magnitude
+            image = apply_augment(image, self.ops_names[idx], m_pi,seq_len=seq_len,rd_seed=self.aug_rng,
+                preprocessor=self.preprocessors[0],aug_dict=self.aug_dict,**self.transfrom_dic)
         return self.after_transforms(image)
     def get_training_aug_images(self, images, magnitudes, weights, seq_len=None,visualize=False,target=None):
         # visualization
@@ -591,6 +597,8 @@ class AdaAugkeep_TS(AdaAug):
         self.generator = torch.Generator(device='cuda')
         if seed!=None:
             self.generator.manual_seed(seed)
+        self.aug_rng = RandomState(seed)
+        self.perm_rng = default_config(seed)
         self.ops_names,self.aug_dict = select_augments(augselect)
         print('AdaAug Using ',self.ops_names)
         print('AdaAug Aug dict ',self.aug_dict)
@@ -724,7 +732,8 @@ class AdaAugkeep_TS(AdaAug):
     def get_aug_valid_img(self, image, magnitudes,keep_thres,i=None,k=None,ops_name=None, seq_len=None):
         #print('mag shape: ',magnitudes.shape)
         #print(f'i: {i}, k: {k}, op name: {ops_name}')
-        trans_image = apply_augment(image, ops_name, magnitudes[i][k].detach().cpu().numpy(),seq_len=seq_len,preprocessor=self.preprocessors[0],aug_dict=self.aug_dict,**self.transfrom_dic)
+        trans_image = apply_augment(image, ops_name, magnitudes[i][k].detach().cpu().numpy(),rd_seed=self.aug_rng
+            ,seq_len=seq_len,preprocessor=self.preprocessors[0],aug_dict=self.aug_dict,**self.transfrom_dic)
         trans_image = self.after_transforms(trans_image)
         #trans_image = stop_gradient_keep(trans_image.cuda(), magnitudes[i][k], keep_thres[i]) #add keep thres
         return trans_image
@@ -828,8 +837,9 @@ class AdaAugkeep_TS(AdaAug):
         else:
             idx_list,magnitude_i = idx_matrix,magnitudes
         for idx in idx_list:
-            m_pi = self.delta_func(magnitude_i[idx], self.delta).detach().cpu().numpy()
-            image = apply_augment(image, self.ops_names[idx], m_pi,seq_len=seq_len,preprocessor=self.preprocessors[0],aug_dict=self.aug_dict,**self.transfrom_dic)
+            m_pi = self.delta_func(magnitude_i[idx], self.delta, rng=self.perm_rng).detach().cpu().numpy()
+            image = apply_augment(image, self.ops_names[idx], m_pi,rd_seed=self.aug_rng
+                ,seq_len=seq_len,preprocessor=self.preprocessors[0],aug_dict=self.aug_dict,**self.transfrom_dic)
         return self.after_transforms(image)
     def get_training_aug_images(self, images, magnitudes, weights, keeplen_ws, keep_thres, seq_len=None,visualize=False):
         # visualization

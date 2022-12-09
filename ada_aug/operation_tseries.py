@@ -1387,7 +1387,7 @@ class KeepAugment(object): #need fix
         slc_,slc_ch, t_series_ = self.get_slc(t_series,model,target=target) #slc_:(bs,seqlen), slc_ch:(bs,chs)
         info_aug, compare_func, info_bound, bound_func = self.get_selective(selective)
         #windowed_slc = self.m_pool(slc_.view(b,1,w)).view(b,-1)
-        apply_keep = torch.rand(b) #prob for apply keep
+        apply_keep = self.rng.random((b,)) #prob for apply keep
         #select a segment number
         #n_keep_lead = np.random.choice(self.keep_leads)
         n_keep_lead = self.keep_leads[self.rng.integers(len(self.keep_leads))]

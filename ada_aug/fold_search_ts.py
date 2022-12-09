@@ -111,7 +111,7 @@ parser.add_argument('--class_embed', action='store_true', default=False, help='c
 parser.add_argument('--n_embed', type=int, default=32, help='class embed number')
 parser.add_argument('--feature_mask', type=str, default='', help='add regular for noaugment ',
         choices=['dropout','select','average','classonly',''])
-parser.add_argument('--class_dist', type=str, default='', help='class distance loss')
+parser.add_argument('--class_dist', type=str, default='', help='class distance loss from and calculate ways')
 parser.add_argument('--lambda_dist', type=float, default=1.0, help="class distance weight")
 parser.add_argument('--class_sim', action='store_true', default=False, help='class distance use similar or not')
 parser.add_argument('--noaug_reg', type=str, default='', help='add regular for noaugment ',

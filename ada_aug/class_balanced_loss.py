@@ -302,7 +302,7 @@ class ClassDistLoss(torch.nn.Module):
     def __init__(self, distance_func='conf',loss_choose='conf',similar=False,init_k=3,lamda=1.0,num_classes=10,use_loss=True,
         noaug_target='se'):
         super().__init__()
-        self.loss_target = 'output' #['output','embed']
+        self.loss_target = 'output' #['output','embed','policy']
         if '_' in distance_func:
             self.loss_target = distance_func.split('_')[0]
             self.distance_func = distance_func.split('_')[1]

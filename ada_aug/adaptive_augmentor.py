@@ -493,6 +493,8 @@ class AdaAug_TS(AdaAug):
             resize_imgs = images
         #resize_imgs = F.interpolate(images, size=self.search_d) if self.resize else images
         magnitudes, weights = self.predict_aug_params(resize_imgs, seq_len, 'exploit',y=y,policy_apply=policy_apply)
+        print('mean mag: ',torch.mean(magnitudes,dim=0), torch.std(magnitudes,dim=0)) #!
+        print('mean weights: ',torch.mean(weights,dim=0), torch.std(weights,dim=0)) #!
         aug_imgs = self.get_training_aug_images(images, magnitudes, weights,seq_len=seq_len,target=y) #!!! bug when not use class_embed
         if self.visualize:
             print('Visualize for Debug')

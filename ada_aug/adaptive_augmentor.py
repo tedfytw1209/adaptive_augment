@@ -462,7 +462,7 @@ class AdaAug_TS(AdaAug):
                 idx_matrix = torch.multinomial(weights, self.k_ops, generator=self.generator)
             elif self.sampling == 'max':
                 idx_matrix = torch.topk(weights, self.k_ops, dim=1)[1] #where op index the highest weight
-            print('idx_matrix: ',idx_matrix)
+            #print('idx_matrix: ',idx_matrix)
             '''for i, image in enumerate(images):
                 pil_image = image.detach().cpu()
                 for idx in idx_matrix[i]:

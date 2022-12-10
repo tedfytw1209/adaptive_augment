@@ -77,7 +77,9 @@ parser.add_argument('--model_name', type=str, default='wresnet40_2', help="mode 
 parser.add_argument('--num_workers', type=int, default=0, help="num_workers")
 parser.add_argument('--k_ops', type=int, default=1, help="number of augmentation applied during training")
 parser.add_argument('--temperature', type=float, default=1.0, help="temperature")
+parser.add_argument('--mag_temperature', type=float, default=1.0, help="magnitude temperature")
 parser.add_argument('--sear_temp', type=float, default=1.0, help="temperature for search")
+parser.add_argument('--sear_magtemp', type=float, default=1.0, help="magnitude temperature for search")
 parser.add_argument('--search_freq', type=float, default=1, help='exploration frequency')
 parser.add_argument('--search_round', type=int, default=1, help='exploration frequency') #search_round
 parser.add_argument('--n_proj_layer', type=int, default=0, help="number of hidden layer in augmentation policy projection")
@@ -416,6 +418,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                     'k_ops': self.config['k_ops'], #as paper
                     'delta': 0.0, 
                     'temp': args.temperature, 
+                    'mag_temp': args.mag_temperature,
                     'search_d': get_dataset_dimension(args.dataset),
                     'target_d': get_dataset_dimension(args.dataset),
                     'gf_model_name': args.model_name,
@@ -440,6 +443,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 class_adaptive=self.class_noaug,
                 ind_mix=ind_mix,
                 search_temp=args.sear_temp,
+                mag_search_temp=args.sear_magtemp,
                 sub_mix=sub_mix,
                 noaug_add=self.noaug_add,
                 max_noaug_add=args.noaug_max,
@@ -461,6 +465,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 augselect=args.augselect,
                 class_adaptive=self.class_noaug,
                 search_temp=args.sear_temp,
+                mag_search_temp=args.sear_magtemp,
                 sub_mix=sub_mix,
                 noaug_add=self.noaug_add,
                 max_noaug_add=args.noaug_max,

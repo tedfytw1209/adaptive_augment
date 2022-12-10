@@ -329,6 +329,7 @@ class ClassDistLoss(torch.nn.Module):
         self.classpair_dist = np.ones((num_classes,num_classes))
         self.classweight_dist = np.ones((num_classes))
         self.class_embed_mat = None
+        self.class_policy_mat = None
         self.noaug_target = noaug_target
 
     def update_distance(self,class_output_mat): #(n_class,n_class)
@@ -355,6 +356,11 @@ class ClassDistLoss(torch.nn.Module):
         self.class_embed_mat = class_embed_mat
         print('Update embed shape: ',class_embed_mat.shape)
         return self.class_embed_mat
+    #policy mat
+    def update_embed(self,class_policy_mat):
+        self.class_policy_mat = class_policy_mat
+        print('Update policy shape: ',class_policy_mat.shape)
+        return self.class_policy_mat
     #for loss weight
     def update_weight(self,class_output_mat):
         '''
@@ -390,7 +396,10 @@ class ClassDistLoss(torch.nn.Module):
         for c in range(n_class): #tmp use min distance
             pair_dists = np.minimum(self.classpair_dist[c,:], self.classpair_dist[:,c])
             sorted_dist = np.argsort(pair_dists)
-            class_pairs[c] = sorted_dist[1:self.k+1] #top k
+            if self.k > 0:
+                class_pairs[c] = sorted_dist[1:self.k+1] #top k
+            else:
+                class_pairs[c] = sorted_dist[1:] #use all
         self.class_pairs = torch.from_numpy(class_pairs).long()
         self.updated = True
         
@@ -410,6 +419,8 @@ class ClassDistLoss(torch.nn.Module):
             class_out_mat = self.class_output_mat
         elif self.loss_target=='embed':
             class_out_mat = self.class_embed_mat
+        elif self.loss_target=='policy':
+            class_out_mat = self.class_policy_mat
         else:
             print('Unknown distance target choose ',self.loss_choose)
             raise

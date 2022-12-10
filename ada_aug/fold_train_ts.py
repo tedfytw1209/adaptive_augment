@@ -82,6 +82,7 @@ parser.add_argument('--k_ops', type=int, default=1, help="number of augmentation
 parser.add_argument('--delta', type=float, default=0.3, help="degree of perturbation in magnitude")
 parser.add_argument('--wide_delta', action='store_true', default=False, help="wider delta range")
 parser.add_argument('--temperature', type=float, default=1.0, help="temperature")
+parser.add_argument('--mag_temperature', type=float, default=1.0, help="magnitude temperature")
 parser.add_argument('--n_proj_layer', type=int, default=0, help="number of additional hidden layer in augmentation policy projection")
 parser.add_argument('--n_proj_hidden', type=int, default=128, help="number of hidden units in augmentation policy projection layers")
 parser.add_argument('--aug_mix', action='store_true', default=False, help='mixup augment and origin data')
@@ -356,6 +357,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                     'delta': args.delta,
                     'wide_delta': args.wide_delta,
                     'temp': args.temperature,
+                    'mag_temp': args.mag_temperature,
                     'search_d': get_dataset_dimension(args.search_dataset),
                     'target_d': get_dataset_dimension(args.dataset),
                     'gf_model_name': args.gf_model_name}

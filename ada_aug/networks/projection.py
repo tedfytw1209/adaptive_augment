@@ -90,6 +90,7 @@ class Projection_TSeries(nn.Module):
         print('Projection Using ',self.ops_names)
         print('In_features: ',in_features) #already add y_feature_len if needed
         proj_out = 2*self.ops_len + proj_addition
+        self.proj_out = proj_out
         self.label_embed = None
         self.feature_embed = None
         if label_num>0 and label_embed>0:

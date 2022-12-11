@@ -53,7 +53,7 @@ def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_
                 policy_y = nn.functional.one_hot(target, num_classes=n_class).cuda().float()
             else:
                 policy_y = target.cuda().float()
-        aug_images = adaaug(input, seq_len, mode='exploit',y=policy_y,policy_apply=policy_apply)
+        aug_images,_ = adaaug(input, seq_len, mode='exploit',y=policy_y,policy_apply=policy_apply)
         #mixup if need
         if mixup:
             aug_images, target_a, target_b, mixup_lam = mixup_data(aug_images,target,mixup_alpha)
@@ -388,8 +388,8 @@ def embed_diff(gf_model,mixed_features,aug_weights,adv_criterion,target_trsearch
 def loss_mix(gf_model,mixed_features,aug_weights,adv_criterion,target_trsearch,multilabel):
     # mixed_features=(batch, keep_lens, n_ops, n_hidden) or (batch, keep_lens, n_hidden) or (batch, n_ops, n_hidden)
     target_trsearch = torch.unsqueeze(target_trsearch,dim=1) #(bs,1) !!!tmp not for multilabel
-    if len(aug_weights[1].shape)==3: #(batch, keep_lens, n_ops, n_hidden)
-        batch, keep_lens,n_ops, n_hidden = mixed_features.shape
+    if len(aug_weights[1].shape)==3: ### !!! maybe have bug !!!
+        batch, keep_lens,n_ops, n_hidden = mixed_features.shape #(batch, keep_lens, n_ops, n_hidden)
         weights, keeplen_ws = aug_weights[0], aug_weights[2]
         target_trsearch = target_trsearch.expand(-1,n_ops*keep_lens).reshape(batch*n_ops*keep_lens)
         mixed_features = mixed_features.reshape(batch*n_ops*keep_lens,n_hidden)
@@ -489,6 +489,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     sea_output_matrix = torch.zeros(n_class,n_class).float()
     tr_embed_matrix = torch.zeros(n_class,gf_model.z_dim).float()
     sea_embed_matrix = torch.zeros(n_class,gf_model.z_dim).float()
+    sea_policy_matrix = torch.zeros(n_class,adaaug.h_model.proj_out).float()
     tr_embed_count = torch.zeros(n_class,1)
     sea_embed_count = torch.zeros(n_class,1)
     softmax_m = nn.Softmax(dim=1)
@@ -552,7 +553,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
         # exploitation
         timer = time.time()
         if epoch>=warmup_epoch:
-            aug_images = adaaug(input, seq_len, mode='exploit', y=policy_y, policy_apply=policy_apply)
+            aug_images, tr_policy = adaaug(input, seq_len, mode='exploit', y=policy_y, policy_apply=policy_apply)
         else:
             aug_images = input
         aug_images = aug_images.cuda()
@@ -852,6 +853,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
             else:
                 policy_y_list = None
             policy = adaaug.add_history(input_search_list, seq_len_list, target_search_list,y=policy_y_list)
+
         exploration_time = time.time() - timer
         torch.cuda.empty_cache()
         #log

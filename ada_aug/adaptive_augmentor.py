@@ -505,7 +505,7 @@ class AdaAug_TS(AdaAug):
             exit()
         self.gf_model.eval() #11/09 add
         self.h_model.eval()
-        return aug_imgs
+        return aug_imgs, [magnitudes, weights]
 
     def visualize_result(self, images, seq_len,policy_y=None,y=None):
         if self.resize and 'lstm' not in self.config['gf_model_name']:

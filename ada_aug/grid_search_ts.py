@@ -78,7 +78,9 @@ parser.add_argument('--model_name', type=str, default='wresnet40_2', help="mode 
 parser.add_argument('--num_workers', type=int, default=0, help="num_workers")
 parser.add_argument('--k_ops', type=int, default=1, help="number of augmentation applied during training")
 parser.add_argument('--temperature', type=float, default=1.0, help="temperature")
+parser.add_argument('--mag_temperature', type=float, default=1.0, help="magnitude temperature")
 parser.add_argument('--sear_temp', type=float, default=1.0, help="temperature for search")
+parser.add_argument('--sear_magtemp', type=float, default=1.0, help="magnitude temperature for search")
 parser.add_argument('--search_freq', type=float, default=1, help='exploration frequency')
 parser.add_argument('--search_round', type=int, default=1, help='exploration frequency') #search_round
 parser.add_argument('--n_proj_layer', type=int, default=0, help="number of hidden layer in augmentation policy projection")
@@ -108,10 +110,11 @@ parser.add_argument('--lambda_sim', type=float, default=1.0, help="augment sampl
 parser.add_argument('--lambda_noaug', type=float, default=0, help="no augment regular weight")
 # class adapt
 parser.add_argument('--class_adapt', action='store_true', default=False, help='class adaptive')
-parser.add_argument('--class_embed', action='store_true', default=False, help='class embed') #tmp use
+parser.add_argument('--class_embed', action='store_true', default=False, help='class embed')
+parser.add_argument('--n_embed', type=int, default=32, help='class embed number')
 parser.add_argument('--feature_mask', type=str, default='', help='add regular for noaugment ',
         choices=['dropout','select','average','classonly',''])
-parser.add_argument('--class_dist', type=str, default='', help='class distance loss')
+parser.add_argument('--class_dist', type=str, default='', help='class distance loss from and calculate ways')
 parser.add_argument('--lambda_dist', type=float, default=1.0, help="class distance weight")
 parser.add_argument('--class_sim', action='store_true', default=False, help='class distance use similar or not')
 parser.add_argument('--noaug_reg', type=str, default='', help='add regular for noaugment ',
@@ -291,7 +294,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         label_num, label_embed = 0,0
         if args.class_adapt and args.class_embed:
             label_num = n_class
-            label_embed = 32 #tmp use
+            label_embed = args.n_embed
             h_input = h_input + label_embed
         elif args.class_adapt:
             h_input =h_input + n_class
@@ -416,6 +419,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                     'k_ops': self.config['k_ops'], #as paper
                     'delta': 0.0, 
                     'temp': args.temperature, 
+                    'mag_temp': args.mag_temperature,
                     'search_d': get_dataset_dimension(args.dataset),
                     'target_d': get_dataset_dimension(args.dataset),
                     'gf_model_name': args.model_name,
@@ -423,7 +427,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         keepaug_config = {'keep_aug':args.keep_aug,'mode':args.keep_mode,'thres':args.keep_thres,'length':args.keep_len,'thres_adapt':args.thres_adapt,
             'grid_region':args.keep_grid, 'possible_segment': args.keep_seg, 'info_upper': args.keep_bound, 'sfreq':self.sfreq, 'adapt_target':args.adapt_target,
             'keep_leads':args.keep_lead,'keep_prob':args.keep_prob,'keep_back':args.keep_back,'lead_sel':args.lead_sel,'keep_mixup':args.keep_mix,
-            'saliency_target':args.saliency}
+            'saliency_target':args.saliency,'seed':args.seed}
         trans_config = {'sfreq':self.sfreq}
         if args.keep_mode=='adapt':
             keepaug_config['mode'] = 'auto'
@@ -440,12 +444,14 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 class_adaptive=self.class_noaug,
                 ind_mix=ind_mix,
                 search_temp=args.sear_temp,
+                mag_search_temp=args.sear_magtemp,
                 sub_mix=sub_mix,
                 noaug_add=self.noaug_add,
                 max_noaug_add=args.noaug_max,
                 max_noaug_reduce=args.reduce_mag,
                 transfrom_dic=trans_config,
-                preprocessors=preprocessors)
+                preprocessors=preprocessors,
+                seed=args.seed)
         else:
             keepaug_config['length'] = keepaug_config['length'][0]
             self.adaaug = AdaAug_TS(after_transforms=after_transforms,
@@ -460,12 +466,14 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 augselect=args.augselect,
                 class_adaptive=self.class_noaug,
                 search_temp=args.sear_temp,
+                mag_search_temp=args.sear_magtemp,
                 sub_mix=sub_mix,
                 noaug_add=self.noaug_add,
                 max_noaug_add=args.noaug_max,
                 max_noaug_reduce=args.reduce_mag,
                 transfrom_dic=trans_config,
-                preprocessors=preprocessors)
+                preprocessors=preprocessors,
+                seed=args.seed)
         #to self
         self.n_channel = n_channel
         self.n_class = n_class
@@ -718,29 +726,32 @@ def main():
         hparams['kfold'] = args.kfold #for some fold
     #for grid search params ###important###
     print(hparams)
-    #hparams['search_freq'] = tune.grid_search([5,10]) #tune.grid_search(hparams['search_freq'])
+    hparams['search_freq'] = tune.grid_search([3,5]) #tune.grid_search(hparams['search_freq'])
     #hparams['search_round'] = tune.grid_search([4,8,16]) #tune.grid_search(hparams['search_round'])
-    #hparams['proj_learning_rate'] = tune.grid_search([1e-12,0.00003,0.0001,0.0003,0.001,0.003,0.01])
+    hparams['proj_learning_rate'] = tune.grid_search([0.0003,0.001,0.003,0.01])
     #hparams['k_ops'] = tune.grid_search([1,2])
     #hparams['lambda_aug'] = tune.quniform(hparams['lambda_aug'][0],hparams['lambda_aug'][1],0.01)
     #hparams['lambda_sim'] = tune.quniform(hparams['lambda_sim'][0],hparams['lambda_sim'][1],0.01)
     #hparams['keep_thres'] = hparams['keep_thres'] #tune.grid_search(hparams['keep_thres'])
     #keep_lens = [[n] for n in [50,100,400]]
     #hparams['keep_len'] = tune.grid_search(keep_lens) #tune.grid_search(hparams['keep_len'])
-    hparams['class_target'] = tune.grid_search([i for i in range(args.class_target)])
+    #hparams['class_target'] = tune.grid_search([i for i in range(args.class_target)])
     #hparams['loss_type'] = tune.grid_search(['minus','minusdiff','relative','relativesample','relativediff'])
-    #hparams['sear_temp'] = tune.grid_search([1,3]) #tune.grid_search(hparams['search_round'])
+    #hparams['sear_temp'] = tune.grid_search([1,3])
     #hparams['temperature'] = tune.grid_search([1,3])
+    #hparams['sear_magtemp'] = tune.grid_search([1,3])
+    hparams['mag_temperature'] = tune.grid_search([1,2])
     #hparams['diff_aug'] = tune.grid_search([True,False])
     #hparams['lambda_noaug'] = tune.grid_search([1,10,50])
     #hparams['noaug_reg'] = tune.grid_search(['creg','cpwreg'])
     #hparams['lambda_dist'] = tune.grid_search([1,10,50])
     #hparams['class_dist'] = tune.grid_search(['wass','embed_wass']) #tmp
     #hparams['output_source'] = tune.grid_search(['allsearch'])
-    #hparams['feature_mask'] = tune.grid_search(['','select','classonly'])
+    hparams['n_embed'] = tune.grid_search([32,64,128])
+    hparams['feature_mask'] = tune.grid_search(['','select','classonly'])
     #hparams['grid_target'] = ['noaug_reg','lambda_noaug','feature_mask']
     #hparams['grid_target'] = ['noaug_reg','lambda_noaug','class_dist','lambda_dist']
-    hparams['grid_target'] = ['class_target']
+    hparams['grid_target'] = ['search_freq','proj_learning_rate','mag_temperature','n_embed','feature_mask']
     print(hparams)
     #wandb
     wandb_config = {

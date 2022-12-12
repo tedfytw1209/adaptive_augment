@@ -274,19 +274,23 @@ def wass_loss(logits,targets,target_pair,class_output,sim_target=None,embed=Fals
     elif policy:
         bs, n_policy = logits.shape
         soft_logits = logits
-        target_output = class_output.view(1,n_policy).expand(bs, -1) #same for every sample (n_hidden) -> (bs, n_hidden)
-        print('target ouput shape: ',target_output.shape) #!tmp
+        target_output = class_output.view(1,n_policy).expand(bs, -1).to(soft_logits.device) #same for every sample (n_hidden) -> (bs, n_hidden)
+        #print('target ouput shape: ',target_output.shape) #!tmp
+        #print('soft logits sample: ',soft_logits[0]) #!tmp
+        #print('target logits sample: ',target_output[0]) #!tmp
         each_loss = wasserstein_loss(target_output,soft_logits) #smaller more different
+        loss += each_loss
     else:
         if embed:
             soft_logits = logits
         else:
             soft_logits = logits.softmax(dim=1)
-        print('soft logits: ',soft_logits) #!tmp
+        #print('soft logits: ',soft_logits) #!tmp
         pairs_label = target_pair[targets.detach().cpu()] #(batch, k)
         #print(f'class {targets} pair with {pairs_label}') #!tmp
         for e_k in range(pairs_label.shape[1]):
             target_output = class_output[pairs_label[:,e_k].view(-1)].to(soft_logits.device) #(batch, n_class)
+            #print('target logits: ',target_output) #!tmp
             each_loss = wasserstein_loss(target_output,soft_logits) #smaller more different
             loss += each_loss
 

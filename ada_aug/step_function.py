@@ -489,6 +489,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     sea_output_matrix = torch.zeros(n_class,n_class).float()
     tr_embed_matrix = torch.zeros(n_class,gf_model.z_dim).float()
     sea_embed_matrix = torch.zeros(n_class,gf_model.z_dim).float()
+    tr_policy_matrix = torch.zeros(n_class,adaaug.h_model.proj_out).float()
     sea_policy_matrix = torch.zeros(n_class,adaaug.h_model.proj_out).float()
     tr_embed_count = torch.zeros(n_class,1)
     sea_embed_count = torch.zeros(n_class,1)
@@ -554,6 +555,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
         timer = time.time()
         if epoch>=warmup_epoch:
             aug_images, tr_policy = adaaug(input, seq_len, mode='exploit', y=policy_y, policy_apply=policy_apply)
+            tr_policy_matrix += torch.cat(tr_policy,dim=1) #sum of policy
         else:
             aug_images = input
         aug_images = aug_images.cuda()
@@ -853,6 +855,9 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
             else:
                 policy_y_list = None
             policy = adaaug.add_history(input_search_list, seq_len_list, target_search_list,y=policy_y_list)
+            #back to policy
+            policy_out = torch.cat(policy,dim=1)
+            sea_policy_matrix += policy_out #sum of policy
 
         exploration_time = time.time() - timer
         torch.cuda.empty_cache()
@@ -901,7 +906,11 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     table_dic['search_output'] = (sea_output_matrix / torch.clamp(sea_output_matrix.sum(dim=1,keepdim=True),min=1e-9))
     table_dic['train_output'] = (tr_output_matrix / torch.clamp(tr_output_matrix.sum(dim=1,keepdim=True),min=1e-9))
     table_dic['train_embed'] = tr_embed_matrix / torch.clamp(tr_embed_count.float(),min=1e-9)
+    table_dic['train_policy'] = tr_policy_matrix / torch.clamp(tr_embed_count.float(),min=1e-9)
     table_dic['search_embed'] = sea_embed_matrix / torch.clamp(sea_embed_count.float(),min=1e-9)
+    table_dic['search_policy'] = sea_policy_matrix / torch.clamp(sea_embed_count.float(),min=1e-9)
+    #average policy for all train+search data
+    table_dic['total_policy'] = (tr_policy_matrix+sea_policy_matrix).sum(0) / (tr_embed_count+sea_embed_count).sum(0)
     table_dic['train_confusion'] = confusion_matrix
     #tmp for aug loss visual
     if mix_type=='loss':

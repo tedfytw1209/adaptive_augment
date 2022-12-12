@@ -266,16 +266,23 @@ def confidence(c,class_output):
 def wasserstein_loss(y_true, y_pred): 
     #smaller when two distribution different, minus if need make distribution similar
     return torch.mean(y_true * y_pred)
-def wass_loss(logits,targets,target_pair,class_output,sim_target=None,embed=False):
+def wass_loss(logits,targets,target_pair,class_output,sim_target=None,embed=False,policy=False):
     loss = 0
     if torch.is_tensor(sim_target): #only for embed simliar class distance
         each_loss = wasserstein_loss(sim_target,logits) #smaller more different
         loss += each_loss
+    elif policy:
+        bs, n_policy = logits.shape
+        soft_logits = logits
+        target_output = class_output.view(1,n_policy).expand(bs, -1) #same for every sample (n_hidden) -> (bs, n_hidden)
+        print('target ouput shape: ',target_output.shape) #!tmp
+        each_loss = wasserstein_loss(target_output,soft_logits) #smaller more different
     else:
         if embed:
             soft_logits = logits
         else:
             soft_logits = logits.softmax(dim=1)
+        print('soft logits: ',soft_logits) #!tmp
         pairs_label = target_pair[targets.detach().cpu()] #(batch, k)
         #print(f'class {targets} pair with {pairs_label}') #!tmp
         for e_k in range(pairs_label.shape[1]):
@@ -357,9 +364,9 @@ class ClassDistLoss(torch.nn.Module):
         print('Update embed shape: ',class_embed_mat.shape)
         return self.class_embed_mat
     #policy mat
-    def update_embed(self,class_policy_mat):
+    def update_policy(self,class_policy_mat):
         self.class_policy_mat = class_policy_mat
-        print('Update policy shape: ',class_policy_mat.shape)
+        print('Update policy shape: ',class_policy_mat.shape, class_policy_mat)
         return self.class_policy_mat
     #for loss weight
     def update_weight(self,class_output_mat):
@@ -415,20 +422,23 @@ class ClassDistLoss(torch.nn.Module):
             print('Unknown loss_choose ',self.loss_choose)
             raise
         #output / embedding as matrix
+        add_kwargs = {}
         if self.loss_target=='output':
             class_out_mat = self.class_output_mat
         elif self.loss_target=='embed':
             class_out_mat = self.class_embed_mat
+            add_kwargs['embed'] = True
         elif self.loss_target=='policy':
             class_out_mat = self.class_policy_mat
+            add_kwargs['policy'] = True
         else:
             print('Unknown distance target choose ',self.loss_choose)
             raise
         #calculate
-        classdist_loss = loss_func(logits,targets,self.class_pairs,class_out_mat) * self.lamda
+        classdist_loss = loss_func(logits,targets,self.class_pairs,class_out_mat,**add_kwargs) * self.lamda
         print('difference loss: ',classdist_loss) #!tmp
         if self.similar and torch.is_tensor(sim_targets):
-            classdist_loss -= loss_func(logits,targets,self.class_pairs,class_out_mat,sim_target=sim_targets) * self.lamda
+            classdist_loss -= loss_func(logits,targets,self.class_pairs,class_out_mat,sim_target=sim_targets,**add_kwargs) * self.lamda
             print('similar loss: ',classdist_loss) #!tmp
         return classdist_loss
 

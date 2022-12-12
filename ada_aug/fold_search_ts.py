@@ -541,6 +541,9 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             if 'embed' in args.class_dist:
                 select_embed = select_embed_source(args.output_source,table_dic,valid_table,search_table)
                 self.class_criterion.update_embed(select_embed)
+            elif 'policy' in args.class_dist:
+                select_policy = table_dic['total_policy'] #now only this option
+                self.class_criterion.update_policy(select_policy)
             if args.noaug_add=='coadd': #cadd use output
                 class_outw = torch.from_numpy(self.class_criterion.classweight_dist)
                 print(f'Noaug add method {args.noaug_add} weights: ',class_outw)

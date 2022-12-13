@@ -116,6 +116,7 @@ parser.add_argument('--feature_mask', type=str, default='', help='add regular fo
 parser.add_argument('--class_dist', type=str, default='', help='class distance loss from and calculate ways')
 parser.add_argument('--lambda_dist', type=float, default=1.0, help="class distance weight")
 parser.add_argument('--class_sim', action='store_true', default=False, help='class distance use similar or not')
+parser.add_argument('--policy_dist', type=str, default='pwk', help='Assume mags:w,weights:p,(keeplen):k,(thres)')
 parser.add_argument('--noaug_reg', type=str, default='', help='add regular for noaugment ',
         choices=['reg','creg','wreg','cwreg','pwreg','cpwreg','cdummy',''])
 parser.add_argument('--noaug_add', type=str, default='', help='add regular for noaugment ',
@@ -513,7 +514,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 'lambda_sim':args.lambda_sim,'class_adaptive':args.class_adapt,'lambda_noaug':args.lambda_noaug,'train_perfrom':self.pre_train_acc,
                 'loss_type':args.loss_type, 'adv_criterion': self.adv_criterion, 'teacher_model':self.ema_model, 'sim_criterion':self.sim_criterion,
                 'noaug_reg':args.noaug_reg,'class_weight': self.class_weight,'mixup': args.mixup,'mixup_alpha': args.mixup_alpha,'aug_mix': args.aug_mix,
-                'extra_criterions':self.extra_losses,'sim_reweight':args.sim_rew,'warmup_epoch': args.pwarmup,'mix_type':args.mix_type,'visualize':args.visualize}
+                'extra_criterions':self.extra_losses,'policy_dist':args.policy_dist,
+                'sim_reweight':args.sim_rew,'warmup_epoch': args.pwarmup,'mix_type':args.mix_type,'visualize':args.visualize}
         
         # searching
         train_acc, train_obj, train_dic, table_dic = search_train(args,self.train_queue, self.search_queue, self.tr_search_queue, self.gf_model, self.adaaug,

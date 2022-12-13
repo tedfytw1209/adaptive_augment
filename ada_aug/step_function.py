@@ -491,6 +491,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
             difficult_aug=False,same_train=False,reweight=True,sim_reweight=False,mix_type='embed', warmup_epoch = 0
             ,lambda_sim = 1.0,lambda_aug = 1.0,loss_type='minus',lambda_noaug = 0,train_perfrom = 0.0,noaug_reg='',
             class_adaptive=False,adv_criterion=None,sim_criterion=None,class_weight=None,extra_criterions=[],
+            policy_dist='pwk',
             teacher_model=None,map_select=False,mixup=False,mixup_alpha=1.0,aug_mix=False,visualize=False):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
@@ -508,7 +509,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     aug_output_matrix = torch.zeros(n_class,n_ops,n_class).float()
     aug_loss_mat = torch.zeros(n_ops).float()
     aug_class_loss = torch.zeros(n_class,n_ops).float()
-    policy_dist = 'pwk' # w=magnitude, p=weight, k=keeplen (if have)
+    #policy_dist = 'pwk' # w=magnitude, p=weight, k=keeplen (if have)
     if policy_dist=='pwk':
         n_policy = adaaug.h_model.proj_out
     else: #single target except threshold
@@ -572,7 +573,8 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
         if epoch>=warmup_epoch:
             aug_images, tr_policy = adaaug(input, seq_len, mode='exploit', y=policy_y, policy_apply=policy_apply)
             #sum of policy, not class wise
-            tr_policy_matrix += torch.cat(tr_policy,dim=1).detach().cpu().sum(0) #[mags,weights], correct
+            #tr_policy_matrix += torch.cat(tr_policy,dim=1).detach().cpu().sum(0) #[mags,weights], correct
+            tr_policy_matrix += select_npolicy(tr_policy,policy_dist=policy_dist).sum(0) #(n_policy)
         else:
             aug_images = input
         aug_images = aug_images.cuda()
@@ -732,7 +734,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                         policy_y = target_search.cuda().float()
                 policy_y_list.append(policy_y)
                 mixed_features, aug_weights = adaaug(input_search, seq_len, mode='explore',mix_feature=mix_feature,y=policy_y)
-                #weight regular to NOAUG
+                #weight regular to NOAUG, [weight,mag] different from other policy output
                 aug_weight = aug_weights[0] # (bs, n_ops), 0 is NOAUG
                 aug_magnitude = aug_weights[1]
                 aug_policy = torch.cat([aug_weights[1],aug_weights[0]],dim=1) #h_model output is mag,weight
@@ -876,8 +878,9 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 policy_y_list = None
             policy = adaaug.add_history(input_search_list, seq_len_list, target_search_list,y=policy_y_list)
             #back to policy
-            policy_out = torch.cat(policy,dim=1).detach().cpu() #(mag, weight) is same with h_model output
-            sea_policy_matrix += policy_out #sum of policy
+            #policy_out = torch.cat(policy,dim=1).detach().cpu() #[mag, weight] is same with h_model output
+            policy_out = select_npolicy(policy,policy_dist=policy_dist)
+            sea_policy_matrix += policy_out #sum of policy for each class
 
         exploration_time = time.time() - timer
         torch.cuda.empty_cache()

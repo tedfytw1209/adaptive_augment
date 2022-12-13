@@ -474,6 +474,17 @@ def noaug_select(noaug_reg,extra_criterions,noaug_lossw):
     elif noaug_reg=='cdummy':
         noaug_target = 'p'
     return use_noaug_reg, noaug_target, noaug_lossw
+#n_policy select
+def select_npolicy(policy_list,policy_dist='pwk'):
+    #assume [mags:w,weights:p,(keeplen):k,(thres)]
+    sel_policy_list = []
+    if 'p' in policy_dist:
+        sel_policy_list.append(policy_list[1])
+    if 'w' in policy_dist:
+        sel_policy_list.append(policy_dist[0])
+    if 'k' in policy_dist and len(policy_list)>2:
+        sel_policy_list.append(policy_list[2])
+    return torch.cat(sel_policy_list,dim=1).detach().cpu() 
 
 def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, adaaug, criterion, gf_optimizer,scheduler,
             grad_clip, h_optimizer, epoch, search_freq,search_round=1,search_repeat=1, multilabel=False,n_class=10,
@@ -489,8 +500,6 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     sea_output_matrix = torch.zeros(n_class,n_class).float()
     tr_embed_matrix = torch.zeros(n_class,gf_model.z_dim).float()
     sea_embed_matrix = torch.zeros(n_class,gf_model.z_dim).float()
-    tr_policy_matrix = torch.zeros(adaaug.h_model.proj_out).float()
-    sea_policy_matrix = torch.zeros(n_class,adaaug.h_model.proj_out).float()
     tr_embed_count = torch.zeros(n_class,1)
     sea_embed_count = torch.zeros(n_class,1)
     softmax_m = nn.Softmax(dim=1)
@@ -499,6 +508,13 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     aug_output_matrix = torch.zeros(n_class,n_ops,n_class).float()
     aug_loss_mat = torch.zeros(n_ops).float()
     aug_class_loss = torch.zeros(n_class,n_ops).float()
+    policy_dist = 'pwk' # w=magnitude, p=weight, k=keeplen (if have)
+    if policy_dist=='pwk':
+        n_policy = adaaug.h_model.proj_out
+    else: #single target except threshold
+        n_policy = n_ops
+    tr_policy_matrix = torch.zeros(n_policy).float()
+    sea_policy_matrix = torch.zeros(n_class,adaaug.h_model.proj_out).float()
     
     print(loss_type)
     print(adv_criterion)
@@ -914,7 +930,6 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     table_dic['search_embed'] = sea_embed_matrix / torch.clamp(sea_embed_count.float(),min=1e-9)
     table_dic['search_policy'] = sea_policy_matrix / torch.clamp(sea_embed_count.float(),min=1e-9)
     #average policy for all train+search data
-    table_dic['total_policy'] = (tr_policy_matrix+sea_policy_matrix.sum(0)) / (tr_embed_count+sea_embed_count).sum(0)
     table_dic['train_confusion'] = confusion_matrix
     #tmp for aug loss visual
     if mix_type=='loss':

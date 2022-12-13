@@ -469,9 +469,12 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 class_outw = torch.from_numpy(self.class_criterion.classweight_dist)
                 print(f'Noaug add method {args.noaug_add} weights: ',class_outw)
                 #assert class_outw.mean() <= 1.0
-                if class_outw.max() > 1.0:
+                if class_outw.max() > 1.0: #need 0<w<1
                     class_outw = class_outw / class_outw.max()
-                    print('regulate mean to ',class_outw)
+                    print('regulate outw to ',class_outw)
+                    class_outw = 1.0 - class_outw
+                else:
+                    class_outw = 1.0 - class_outw
                 self.adaaug.update_alpha(class_outw)
         if self.adapt_add and not self.use_class_w: #cadd use perfrom
             class_acc = select_perfrom_source(args.output_source,train_dic,valid_dic,search_dic,ptype,self.n_class,self.class_noaug)
@@ -697,7 +700,7 @@ def main():
         num_samples=1, #grid search no need
     )
     #clean up 12/13
-    RayModel.cleanup()
+    ray.shutdown()
     wandb.finish()
     
 

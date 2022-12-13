@@ -341,6 +341,9 @@ class AdaAug_TS(AdaAug):
                 batch_alpha = torch.sum(self.alpha * y,dim=-1,keepdim=True) / torch.sum(y,dim=-1,keepdim=True)
             else:
                 batch_alpha = self.alpha.view(-1)
+            #print('self.alpha: ',self.alpha)
+            #print('y:', y)
+            #print('batch_alpha (less means add more noaug)', batch_alpha)
             weights = batch_alpha * weights + (1.0-batch_alpha) * \
                 (self.noaug_tensor.cuda() + weights * (1.0-self.noaug_max))
         if self.max_noaug_reduce > 0:

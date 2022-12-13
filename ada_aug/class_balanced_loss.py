@@ -271,10 +271,12 @@ def wass_loss(logits,targets,target_pair,class_output,sim_target=None,embed=Fals
     if torch.is_tensor(sim_target): #only for embed simliar class distance
         each_loss = wasserstein_loss(sim_target,logits) #smaller more different
         loss += each_loss
-    elif policy:
+    elif policy: #class_output: (n_class,policy)
         bs, n_policy = logits.shape
+        n_class = class_output.shape[0]
         soft_logits = logits
-        target_output = class_output.view(1,n_policy).expand(bs, -1).to(soft_logits.device) #same for every sample (n_hidden) -> (bs, n_hidden)
+        #target_output = class_output.view(1,n_policy).expand(bs, -1).to(soft_logits.device) #same for every sample (n_hidden) -> (bs, n_hidden)
+        target_output = ((class_output.sum(0).view(1,n_policy) - class_output[targets.detach().cpu()]) / (n_class-1)).to(soft_logits.device) #(bs, n_hidden)
         #print('target ouput shape: ',target_output.shape) #!tmp
         #print('soft logits sample: ',soft_logits[0]) #!tmp
         #print('target logits sample: ',target_output[0]) #!tmp
@@ -380,6 +382,7 @@ class ClassDistLoss(torch.nn.Module):
         '''
         classweight_dist = []
         n_class = class_output_mat.shape[0]
+        print(f'Class similar/noaug weight(more means more noaug) update')
         for c in range(n_class):
             c_output = class_output_mat[c,c] #0~1
             c_been_output = (class_output_mat[:,c].sum() - c_output) + 1e-2 #0~1 + smooth

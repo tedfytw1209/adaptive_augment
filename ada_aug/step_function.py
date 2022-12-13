@@ -481,10 +481,11 @@ def select_npolicy(policy_list,policy_dist='pwk'):
     if 'p' in policy_dist:
         sel_policy_list.append(policy_list[1])
     if 'w' in policy_dist:
-        sel_policy_list.append(policy_dist[0])
+        sel_policy_list.append(policy_list[0])
     if 'k' in policy_dist and len(policy_list)>2:
         sel_policy_list.append(policy_list[2])
-    return torch.cat(sel_policy_list,dim=1).detach().cpu()
+    print('sel policy shape: ',[n.shape for n in sel_policy_list])
+    return torch.cat(sel_policy_list,dim=1)
 
 def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, adaaug, criterion, gf_optimizer,scheduler,
             grad_clip, h_optimizer, epoch, search_freq,search_round=1,search_repeat=1, multilabel=False,n_class=10,
@@ -574,7 +575,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
             aug_images, tr_policy = adaaug(input, seq_len, mode='exploit', y=policy_y, policy_apply=policy_apply)
             #sum of policy, not class wise
             #tr_policy_matrix += torch.cat(tr_policy,dim=1).detach().cpu().sum(0) #[mags,weights], correct
-            tr_policy_matrix += select_npolicy(tr_policy,policy_dist=policy_dist).sum(0) #(n_policy)
+            tr_policy_matrix += select_npolicy(tr_policy,policy_dist=policy_dist).detach().cpu().sum(0) #(n_policy)
         else:
             aug_images = input
         aug_images = aug_images.cuda()
@@ -737,7 +738,8 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 #weight regular to NOAUG, [weight,mag] different from other policy output
                 aug_weight = aug_weights[0] # (bs, n_ops), 0 is NOAUG
                 aug_magnitude = aug_weights[1]
-                aug_policy = torch.cat([aug_weights[1],aug_weights[0]],dim=1) #h_model output is mag,weight
+                #aug_policy = torch.cat([aug_weights[1],aug_weights[0]],dim=1) #h_model output is mag,weight
+                aug_policy = select_npolicy([aug_weights[1],aug_weights[0]],policy_dist=policy_dist)
                 noaug_mag_target = torch.zeros(aug_magnitude.shape).cuda().float()
                 if noaug_reg=='cdummy':
                     print('Use taget to fake noaug target')
@@ -879,7 +881,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
             policy = adaaug.add_history(input_search_list, seq_len_list, target_search_list,y=policy_y_list)
             #back to policy
             #policy_out = torch.cat(policy,dim=1).detach().cpu() #[mag, weight] is same with h_model output
-            policy_out = select_npolicy(policy,policy_dist=policy_dist)
+            policy_out = select_npolicy(policy,policy_dist=policy_dist).detach().cpu()
             sea_policy_matrix += policy_out #sum of policy for each class
 
         exploration_time = time.time() - timer

@@ -289,11 +289,14 @@ class AdaAug_TS(AdaAug):
         self.noaug_config = noaug_config
         print('Config for NoAug Add: ',noaug_config)
         self.add_method = self.noaug_config['add_method']
-        self.alpha = torch.tensor([0.5]).view(1,-1).cuda() #higher low noaug regulate
         self.noaug_max = self.noaug_config['max_noaug_add']
         self.max_noaug_reduce = self.noaug_config['max_noaug_reduce']
         self.noaug_alpha = self.noaug_config['noaug_alpha']
         self.noaug_warmup = self.noaug_config['noaug_warmup']
+        if self.noaug_alpha < 1.0:
+            self.alpha = torch.tensor([0.0]).view(1,-1).cuda()
+        else:
+            self.alpha = torch.tensor([0.5]).view(1,-1).cuda() #higher low noaug regulate
         self.noaug_tensor = self.noaug_max * F.one_hot(torch.tensor([0]), num_classes=self.n_ops).float()
         self.multi_tensor = (1.0 - self.max_noaug_reduce) * torch.ones(1,self.n_class).float() #higher low noaug regulate
         if self.max_noaug_reduce>0:
@@ -343,8 +346,8 @@ class AdaAug_TS(AdaAug):
                 batch_alpha = self.alpha.view(-1)
             #print('self.alpha: ',self.alpha)
             #print('y:', y)
-            #print('batch_alpha (less means add more noaug)', batch_alpha)
-            weights = batch_alpha * weights + (1.0-batch_alpha) * \
+            #print('batch_alpha (more means add more noaug)', batch_alpha)
+            weights = (1.0-batch_alpha) * weights + batch_alpha * \
                 (self.noaug_tensor.cuda() + weights * (1.0-self.noaug_max))
         if self.max_noaug_reduce > 0:
             if self.class_adaptive: #multi_tensor: (1,n_class), y: (batch_szie,n_class)=>(batch_size,1) one hotted
@@ -589,12 +592,12 @@ class AdaAug_TS(AdaAug):
                     plt.title(f'{title}{op_name}_{e_lb}')
                 plt.savefig(f'{self.save_dir}/img{idx}ch{i}_{title}{op_name}_{e_lb}.png')
     
-    def update_alpha(self,class_acc):
-        self.alpha = self.noaug_alpha * torch.tensor(class_acc).view(1,-1).cuda()
+    def update_alpha(self,class_w):
+        self.alpha = self.noaug_alpha * torch.tensor(class_w).view(1,-1).cuda()
         #tmp disable
-        if self.max_noaug_reduce > 0:
-            self.multi_tensor = ((1.0 - self.max_noaug_reduce * torch.tensor(class_acc).view(1,-1)) * torch.ones(1,self.n_class).float()).cuda()
-        print('class_acc for noaug cadd: ',class_acc)
+        if self.max_noaug_reduce > 0: #may have bug!!!
+            self.multi_tensor = ((1.0 - self.max_noaug_reduce * torch.tensor(class_w).view(1,-1)) * torch.ones(1,self.n_class).float()).cuda()
+        print('class_w for noaug cadd: ',class_w)
         print('new alpha for noaug cadd: ',self.alpha)
         print('new reduce magnitude multi for cadd: ',self.multi_tensor)
 
@@ -669,11 +672,14 @@ class AdaAugkeep_TS(AdaAug):
         self.noaug_config = noaug_config
         print('Config for NoAug Add: ',noaug_config)
         self.add_method = self.noaug_config['add_method']
-        self.alpha = torch.tensor([0.5]).view(1,-1).cuda()
         self.noaug_max = self.noaug_config['max_noaug_add']
         self.max_noaug_reduce = self.noaug_config['max_noaug_reduce']
         self.noaug_alpha = self.noaug_config['noaug_alpha']
         self.noaug_warmup = self.noaug_config['noaug_warmup']
+        if self.noaug_alpha < 1.0:
+            self.alpha = torch.tensor([0.0]).view(1,-1).cuda()
+        else:
+            self.alpha = torch.tensor([0.5]).view(1,-1).cuda() #higher low noaug regulate
         self.noaug_tensor = self.noaug_max * F.one_hot(torch.tensor([0]), num_classes=self.n_ops).float()
         self.multi_tensor = (1.0 - self.max_noaug_reduce) * torch.ones(1,self.n_class).float() #higher low noaug regulate
         if self.max_noaug_reduce>0:

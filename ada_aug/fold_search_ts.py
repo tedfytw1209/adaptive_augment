@@ -555,16 +555,13 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 if class_outw.max() > 1.0:
                     class_outw = class_outw / class_outw.max()
                     print('regulate outw to ',class_outw)
-                    class_outw = 1.0 - class_outw
-                else:
-                    class_outw = 1.0 - class_outw
                 self.adaaug.update_alpha(class_outw)
         if self.noaug_add and not self.use_class_w: #cadd use perfrom
             '''class_acc = train_acc / 100.0
             if self.class_noaug: #use train perfromance as noaug reg
                 class_acc = [train_dic[f'train_{ptype}_c{i}'] / 100.0 for i in range(self.n_class)]'''
             class_acc = select_perfrom_source(args.output_source,train_dic,valid_dic,search_dic,ptype,self.n_class,self.class_noaug)
-            self.adaaug.update_alpha(class_acc)
+            self.adaaug.update_alpha(1.0 - class_acc)
         self.pre_train_acc = train_acc / 100.0
         #test
         test_acc, test_obj, test_dic, test_table  = search_infer(self.test_queue, self.gf_model, self.criterion, 

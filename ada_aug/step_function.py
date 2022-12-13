@@ -484,7 +484,7 @@ def select_npolicy(policy_list,policy_dist='pwk'):
         sel_policy_list.append(policy_dist[0])
     if 'k' in policy_dist and len(policy_list)>2:
         sel_policy_list.append(policy_list[2])
-    return torch.cat(sel_policy_list,dim=1).detach().cpu() 
+    return torch.cat(sel_policy_list,dim=1).detach().cpu()
 
 def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, adaaug, criterion, gf_optimizer,scheduler,
             grad_clip, h_optimizer, epoch, search_freq,search_round=1,search_repeat=1, multilabel=False,n_class=10,
@@ -515,7 +515,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     else: #single target except threshold
         n_policy = n_ops
     tr_policy_matrix = torch.zeros(n_policy).float()
-    sea_policy_matrix = torch.zeros(n_class,adaaug.h_model.proj_out).float()
+    sea_policy_matrix = torch.zeros(n_class,n_policy).float()
     
     print(loss_type)
     print(adv_criterion)
@@ -932,6 +932,8 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     table_dic['train_policy'] = tr_policy_matrix / tr_embed_count.sum(0)
     table_dic['search_embed'] = sea_embed_matrix / torch.clamp(sea_embed_count.float(),min=1e-9)
     table_dic['search_policy'] = sea_policy_matrix / torch.clamp(sea_embed_count.float(),min=1e-9)
+    #sample
+    print('sample policy class 0: ',table_dic['search_policy'][0])
     #average policy for all train+search data
     table_dic['train_confusion'] = confusion_matrix
     #tmp for aug loss visual

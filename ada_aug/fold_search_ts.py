@@ -119,8 +119,10 @@ parser.add_argument('--class_sim', action='store_true', default=False, help='cla
 parser.add_argument('--noaug_reg', type=str, default='', help='add regular for noaugment ',
         choices=['reg','creg','wreg','cwreg','pwreg','cpwreg','cdummy',''])
 parser.add_argument('--noaug_add', type=str, default='', help='add regular for noaugment ',
-        choices=['cadd','add','coadd',''])
+        choices=['cadd','add','coadd','constadd',''])
 parser.add_argument('--noaug_max', type=float, default=0.5, help='max noaugment regular')
+parser.add_argument('--noaug_alpha', type=float, default=1.0, help='noaugment alpha for noaug add formula (default 1.0)')
+parser.add_argument('--noaug_warmup', type=int, default=0, help='noaugment warmup steps (if need)')
 parser.add_argument('--reduce_mag', type=float, default=0, help='max reduce magnitude (default 0 is no reduce mag')
 parser.add_argument('--noaug_target', type=str, default='se', help='add regular for noaugment target difference',
         choices=['se','s','e'])
@@ -428,6 +430,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             'keep_leads':args.keep_lead,'keep_prob':args.keep_prob,'keep_back':args.keep_back,'lead_sel':args.lead_sel,'keep_mixup':args.keep_mix,
             'saliency_target':args.saliency,'seed':args.seed}
         trans_config = {'sfreq':self.sfreq}
+        noaugadd_config = {'add_method':args.noaug_add,'max_noaug_add':args.noaug_max,'max_noaug_reduce':args.reduce_mag,'noaug_alpha':args.noaug_alpha,
+            'noaug_warmup':args.noaug_warmup}
         if args.keep_mode=='adapt':
             keepaug_config['mode'] = 'auto'
             self.adaaug = AdaAugkeep_TS(after_transforms=after_transforms,
@@ -446,8 +450,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 mag_search_temp=args.sear_magtemp,
                 sub_mix=sub_mix,
                 noaug_add=self.noaug_add,
-                max_noaug_add=args.noaug_max,
-                max_noaug_reduce=args.reduce_mag,
+                noaug_config=noaugadd_config,
                 transfrom_dic=trans_config,
                 preprocessors=preprocessors,
                 seed=args.seed)
@@ -468,8 +471,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 mag_search_temp=args.sear_magtemp,
                 sub_mix=sub_mix,
                 noaug_add=self.noaug_add,
-                max_noaug_add=args.noaug_max,
-                max_noaug_reduce=args.reduce_mag,
+                noaug_config=noaugadd_config,
                 transfrom_dic=trans_config,
                 preprocessors=preprocessors,
                 seed=args.seed)

@@ -794,7 +794,9 @@ def main():
         local_dir=args.ray_dir,
         num_samples=1, #grid search no need
     )
-    
+    #clean up 12/13
+    RayModel.cleanup()
+    wandb.finish()
     
 
 

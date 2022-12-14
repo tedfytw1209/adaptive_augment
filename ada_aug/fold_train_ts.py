@@ -120,6 +120,7 @@ parser.add_argument('--noaug_target', type=str, default='se', help='add regular 
         choices=['se','s','e'])
 parser.add_argument('--output_source', type=str, default='', help='class output source',
         choices=['train','valid','search','allsearch',''])
+parser.add_argument('--prevalid', action='store_true', default=False, help='use df model to valid first')
 #mixup
 parser.add_argument('--mixup', action='store_true', help='mixup benchmark')
 parser.add_argument('--mixup_alpha', type=float, default=1.0, help='mixup parameter')
@@ -452,6 +453,29 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             training = False
         else:
             training = True
+        #prevalid iteration per valid
+        if args.prevalid and self._iteration==0:
+            print('### Pre Valid gf model for noaug add method:')
+            if args.output_source=='train':
+                prevalid_queue = self.train_queue
+            elif args.output_source=='train':
+                prevalid_queue = self.valid_queue
+            gf_acc, gf_obj, _, _, gf_dic, gf_table = infer(prevalid_queue, self.gf_model, self.criterion, multilabel=self.multilabel,
+                n_class=self.n_class,mode='gf',map_select=self.mapselect)
+            if args.noaug_add=='coadd':
+                select_output = select_output_source('gf',gf_table,{},{})
+                self.class_criterion.update_classpair(select_output)
+                class_outw = torch.from_numpy(self.class_criterion.classweight_dist)
+                print(f'Pre Valid Noaug add method {args.noaug_add} weights: ',class_outw)
+                #assert class_outw.mean() <= 1.0
+                if class_outw.max() > 1.0: #need 0<w<1
+                    class_outw = class_outw / class_outw.max()
+                    print('regulate outw to ',class_outw)
+                self.adaaug.update_alpha(class_outw)
+            elif args.noaug_add=='cadd':
+                class_acc = np.array(select_perfrom_source('gf',gf_dic,{},{},ptype,self.n_class,self.class_noaug))
+                print(f'Pre Valid Noaug add method {args.noaug_add} perfrom weights: ',class_acc)
+                self.adaaug.update_alpha(1.0 - class_acc)
         # training or evaluate training data
         train_acc, train_obj, train_dic, train_table = train(args,
                 self.train_queue, self.task_model, self.criterion, self.optimizer, self.scheduler, Curr_epoch, args.grad_clip, self.adaaug, 
@@ -462,7 +486,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         search_dic={}
         search_table = {}
         #update runtime weights
-        if 'c' in args.noaug_reg or args.noaug_add=='coadd': #cadd use output
+        if not args.prevalid and ('c' in args.noaug_reg or args.noaug_add=='coadd'): #cadd use output
             select_output = select_output_source(args.output_source,train_table,valid_table,search_table)
             self.class_criterion.update_classpair(select_output)
             if args.noaug_add=='coadd': #cadd use output
@@ -473,7 +497,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                     class_outw = class_outw / class_outw.max()
                     print('regulate outw to ',class_outw)
                 self.adaaug.update_alpha(class_outw)
-        if self.adapt_add and not self.use_class_w: #cadd use perfrom
+        if not args.prevalid and (self.adapt_add and not self.use_class_w): #cadd use perfrom
             class_acc = np.array(select_perfrom_source(args.output_source,train_dic,valid_dic,search_dic,ptype,self.n_class,self.class_noaug))
             print(f'Noaug add method {args.noaug_add} perfrom weights: ',class_acc)
             self.adaaug.update_alpha(1.0 - class_acc)

@@ -107,6 +107,8 @@ parser.add_argument('--pwarmup', type=int, default=0, help="warmup epoch for pol
 parser.add_argument('--lambda_aug', type=float, default=1.0, help="augment sample weight (difficult)")
 parser.add_argument('--lambda_sim', type=float, default=1.0, help="augment sample weight (simular)")
 parser.add_argument('--lambda_noaug', type=float, default=0, help="no augment regular weight")
+parser.add_argument('--optim_type', type=str, default='', help='policy netowrk optimize type (default: '' use density matching)',
+        choices=['maml','neumann',''])
 # class adapt
 parser.add_argument('--class_adapt', action='store_true', default=False, help='class adaptive')
 parser.add_argument('--class_embed', action='store_true', default=False, help='class embed')
@@ -514,7 +516,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 'lambda_sim':args.lambda_sim,'class_adaptive':args.class_adapt,'lambda_noaug':args.lambda_noaug,'train_perfrom':self.pre_train_acc,
                 'loss_type':args.loss_type, 'adv_criterion': self.adv_criterion, 'teacher_model':self.ema_model, 'sim_criterion':self.sim_criterion,
                 'noaug_reg':args.noaug_reg,'class_weight': self.class_weight,'mixup': args.mixup,'mixup_alpha': args.mixup_alpha,'aug_mix': args.aug_mix,
-                'extra_criterions':self.extra_losses,'policy_dist':args.policy_dist,
+                'extra_criterions':self.extra_losses,'policy_dist':args.policy_dist,'optim_type':args.optim_type,
                 'sim_reweight':args.sim_rew,'warmup_epoch': args.pwarmup,'mix_type':args.mix_type,'visualize':args.visualize}
         
         # searching

@@ -486,13 +486,14 @@ def select_npolicy(policy_list,policy_dist='pwk'):
         sel_policy_list.append(policy_list[2])
     print('sel policy shape: ',[n.shape for n in sel_policy_list])
     return torch.cat(sel_policy_list,dim=1)
+#difficult search
 
 def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, adaaug, criterion, gf_optimizer,scheduler,
             grad_clip, h_optimizer, epoch, search_freq,search_round=1,search_repeat=1, multilabel=False,n_class=10,
             difficult_aug=False,same_train=False,reweight=True,sim_reweight=False,mix_type='embed', warmup_epoch = 0
             ,lambda_sim = 1.0,lambda_aug = 1.0,loss_type='minus',lambda_noaug = 0,train_perfrom = 0.0,noaug_reg='',
             class_adaptive=False,adv_criterion=None,sim_criterion=None,class_weight=None,extra_criterions=[],
-            policy_dist='pwk',
+            policy_dist='pwk',optim_type='',
             teacher_model=None,map_select=False,mixup=False,mixup_alpha=1.0,aug_mix=False,visualize=False):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()

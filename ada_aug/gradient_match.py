@@ -92,7 +92,7 @@ def hyper_step(model, aug, hyper_params, train_loader, optimizer, val_loader, el
         optimizer.zero_grad()
         d_train_loss_d_w += gather_flat_grad(grad(train_loss, list(model.parameters()), 
                                                   create_graph=True, allow_unused=True))
-        if batch_idx==search_round-1:
+        if batch_idx==search_round-1: #not iterate all data
             break
     optimizer.zero_grad()
     # Initialize the preconditioner and counter

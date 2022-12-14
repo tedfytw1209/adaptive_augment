@@ -21,7 +21,7 @@ from networks.projection import Projection_TSeries
 from config import get_search_divider
 from dataset import get_ts_dataloaders, get_num_class, get_label_name, get_dataset_dimension,get_num_channel,Freq_dict,TimeS_dict
 from operation_tseries import TS_OPS_NAMES,ECG_OPS_NAMES,TS_ADD_NAMES,MAG_TEST_NAMES,NOMAG_TEST_NAMES
-from step_function import train,infer,search_train,search_infer
+from step_function import train,infer,search_train,search_infer,search_train_neumann #!!! tmp add
 from non_saturating_loss import NonSaturatingLoss,Wasserstein_loss
 from class_balanced_loss import ClassBalLoss,ClassDiffLoss,ClassDistLoss,make_class_balance_count,make_class_weights,make_loss,make_class_weights_maxrel \
     ,make_class_weights_samples
@@ -519,10 +519,15 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 'extra_criterions':self.extra_losses,'policy_dist':args.policy_dist,'optim_type':args.optim_type,
                 'sim_reweight':args.sim_rew,'warmup_epoch': args.pwarmup,'mix_type':args.mix_type,'visualize':args.visualize}
         
-        # searching
-        train_acc, train_obj, train_dic, table_dic = search_train(args,self.train_queue, self.search_queue, self.tr_search_queue, self.gf_model, self.adaaug,
-            self.criterion, self.gf_optimizer,self.scheduler, args.grad_clip, self.h_optimizer, self._iteration, args.search_freq, 
-            search_round=args.search_round,search_repeat=self.search_repeat,multilabel=self.multilabel,n_class=self.n_class,map_select=self.mapselect, **diff_dic)
+        # searching, !!!12/14 tmp add neumann search for testing new gradient method
+        if args.optim_type=='neumann':
+            train_acc, train_obj, train_dic, table_dic = search_train_neumann(args,self.train_queue, self.search_queue, self.tr_search_queue, self.gf_model, self.adaaug,
+                self.criterion, self.gf_optimizer,self.scheduler, args.grad_clip, self.h_optimizer, self._iteration, args.search_freq, 
+                search_round=args.search_round,search_repeat=self.search_repeat,multilabel=self.multilabel,n_class=self.n_class,map_select=self.mapselect, **diff_dic)
+        else:
+            train_acc, train_obj, train_dic, table_dic = search_train(args,self.train_queue, self.search_queue, self.tr_search_queue, self.gf_model, self.adaaug,
+                self.criterion, self.gf_optimizer,self.scheduler, args.grad_clip, self.h_optimizer, self._iteration, args.search_freq, 
+                search_round=args.search_round,search_repeat=self.search_repeat,multilabel=self.multilabel,n_class=self.n_class,map_select=self.mapselect, **diff_dic)
         # validation
         valid_acc, valid_obj,valid_dic,valid_table = search_infer(self.valid_queue, self.gf_model, self.criterion, 
             multilabel=self.multilabel,n_class=self.n_class,mode='valid',map_select=self.mapselect)

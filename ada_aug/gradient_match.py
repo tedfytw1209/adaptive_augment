@@ -59,12 +59,15 @@ def get_hyper_train_flat(hyper_params): #flaaten all hyper params
 def gather_flat_grad(loss_grad): #flaaten all hyper params grad
     return torch.cat([p.reshape(-1) for p in loss_grad]) #g_vector
 
-def get_loss(enc, x_batch_ecg, seqlen, y_batch, loss_obj,use_mix=False):
+def get_loss(enc, x_batch_ecg, seqlen, y_batch, loss_obj,use_mix=False,multilabel=False):
     if use_mix:
         yhat = enc.classify(x_batch_ecg)
     else:
         yhat = enc.forward(x_batch_ecg, seqlen)
-    y_batch = y_batch.float()
+    if multilabel:
+        y_batch = y_batch.float()
+    else:
+        y_batch = y_batch.long()
     loss = loss_obj(yhat.squeeze(), y_batch.squeeze())
     return loss
 
@@ -84,16 +87,18 @@ def hyper_step(model, aug, hyper_params, train_loader, optimizer, val_loader, el
     num_weights = sum(p.numel() for p in model.parameters())
     d_train_loss_d_w = torch.zeros(num_weights).to(device)
     model.train(), model.zero_grad()
-    aug_diff_loss,aug_search_loss = 0,0
+    input_search_list,seq_len_list,target_search_list,policy_y_list = [],[],[],[]
+    aug_diff_loss,ori_search_loss = 0,0
     for batch_idx, (x, seqlen, y) in enumerate(train_loader):
         x = x.to(device).float()
         y = y.to(device)
         x = do_aug(x,seqlen, y, aug,n_class,class_adaptive,multilabel)
-        train_loss= get_loss(model, x, seqlen, y, loss_obj,use_mix=True) / search_round
+        train_loss= get_loss(model, x, seqlen, y, loss_obj,use_mix=True,multilabel=multilabel) / search_round
         optimizer.zero_grad()
         d_train_loss_d_w += gather_flat_grad(grad(train_loss, list(model.parameters()), 
                                                   create_graph=True, allow_unused=True))
         aug_diff_loss += train_loss.detach().mean().item()
+        print('inner step loss: ',aug_diff_loss)
         if batch_idx==search_round-1: #not iterate all data
             break
     optimizer.zero_grad()
@@ -104,10 +109,20 @@ def hyper_step(model, aug, hyper_params, train_loader, optimizer, val_loader, el
     for batch_idx, (x, seqlen, y) in enumerate(val_loader):
         x = x.to(device).float()
         y = y.to(device)
-        val_loss = get_loss(model, x,seqlen, y, loss_obj) / search_round
-        aug_search_loss += val_loss.detach().mean().item()
+        val_loss = get_loss(model, x,seqlen, y, loss_obj,multilabel=multilabel) / search_round
+        ori_search_loss += val_loss.detach().mean().item()
+        print('inner valid step loss: ',ori_search_loss)
         optimizer.zero_grad()
         d_val_loss_d_theta += gather_flat_grad(grad(val_loss, model.parameters(), retain_graph=False))
+        if class_adaptive: #target to onehot
+            if not multilabel:
+                policy_y = nn.functional.one_hot(y, num_classes=n_class).cuda().float()
+            else:
+                policy_y = y.cuda().float()
+        policy_y_list.append(policy_y)
+        input_search_list.append(x.detach())
+        seq_len_list.append(seqlen.detach())
+        target_search_list.append(y.detach())
         if batch_idx==search_round-1:
             break
     preconditioner = d_val_loss_d_theta
@@ -117,4 +132,4 @@ def hyper_step(model, aug, hyper_params, train_loader, optimizer, val_loader, el
     zero_hypergrad(hyper_params)
     store_hypergrad(hyper_params, -hypergrad)
 
-    return hypergrad, aug_diff_loss, aug_search_loss
+    return hypergrad, aug_diff_loss, ori_search_loss, input_search_list,seq_len_list,target_search_list,policy_y_list

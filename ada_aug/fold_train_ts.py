@@ -458,7 +458,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             print('### Pre Valid gf model for noaug add method:')
             if args.output_source=='train':
                 prevalid_queue = self.train_queue
-            elif args.output_source=='train':
+            elif args.output_source=='valid':
                 prevalid_queue = self.valid_queue
             gf_acc, gf_obj, _, _, gf_dic, gf_table = infer(prevalid_queue, self.gf_model, self.criterion, multilabel=self.multilabel,
                 n_class=self.n_class,mode='gf',map_select=self.mapselect)

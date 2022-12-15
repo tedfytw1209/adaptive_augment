@@ -1326,8 +1326,9 @@ def search_train_neumann(args, train_queue, search_queue, tr_search_queue, gf_mo
             #gradient match hyper step
             elementary_lr = 0.0001 #tmp
             neum_steps = 5
-            use_device = gf_model.device
-            hyper_grad,diff_loss,sea_loss = hyper_step(gf_model,adaaug,adaaug.h_model,tr_search_queue,gf_optimizer,search_queue,elementary_lr,
+            use_device = torch.device('cuda')
+            hyp_params = list(adaaug.h_model.parameters())
+            hyper_grad,diff_loss,sea_loss = hyper_step(gf_model,adaaug,hyp_params,tr_search_queue,gf_optimizer,search_queue,elementary_lr,
                 neum_steps,use_device,sim_criterion,n_class,search_round,class_adaptive,multilabel)
             aug_diff_loss += diff_loss
             aug_search_loss += sea_loss

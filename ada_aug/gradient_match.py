@@ -84,6 +84,7 @@ def hyper_step(model, aug, hyper_params, train_loader, optimizer, val_loader, el
     num_weights = sum(p.numel() for p in model.parameters())
     d_train_loss_d_w = torch.zeros(num_weights).to(device)
     model.train(), model.zero_grad()
+    aug_diff_loss,aug_search_loss = 0,0
     for batch_idx, (x, seqlen, y) in enumerate(train_loader):
         x = x.to(device).float()
         y = y.to(device)
@@ -92,7 +93,8 @@ def hyper_step(model, aug, hyper_params, train_loader, optimizer, val_loader, el
         optimizer.zero_grad()
         d_train_loss_d_w += gather_flat_grad(grad(train_loss, list(model.parameters()), 
                                                   create_graph=True, allow_unused=True))
-        if batch_idx==search_round-1:
+        aug_diff_loss += train_loss.detach().mean().item()
+        if batch_idx==search_round-1: #not iterate all data
             break
     optimizer.zero_grad()
     # Initialize the preconditioner and counter
@@ -103,6 +105,7 @@ def hyper_step(model, aug, hyper_params, train_loader, optimizer, val_loader, el
         x = x.to(device).float()
         y = y.to(device)
         val_loss = get_loss(model, x,seqlen, y, loss_obj) / search_round
+        aug_search_loss += val_loss.detach().mean().item()
         optimizer.zero_grad()
         d_val_loss_d_theta += gather_flat_grad(grad(val_loss, model.parameters(), retain_graph=False))
         if batch_idx==search_round-1:
@@ -113,4 +116,5 @@ def hyper_step(model, aug, hyper_params, train_loader, optimizer, val_loader, el
     hypergrad = indirect_grad # + direct_Grad
     zero_hypergrad(hyper_params)
     store_hypergrad(hyper_params, -hypergrad)
-    return hypergrad
+
+    return hypergrad, aug_diff_loss, aug_search_loss

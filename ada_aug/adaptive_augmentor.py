@@ -595,7 +595,7 @@ class AdaAug_TS(AdaAug):
     def update_alpha(self,class_w):
         self.alpha = self.noaug_alpha * torch.tensor(class_w).view(1,-1).cuda()
         #tmp disable
-        if self.max_noaug_reduce > 0: #may have bug!!!
+        if self.max_noaug_reduce > 0: #weight bigger noaug bigger
             self.multi_tensor = ((1.0 - self.max_noaug_reduce * torch.tensor(class_w).view(1,-1)) * torch.ones(1,self.n_class).float()).cuda()
         print('class_w for noaug cadd: ',class_w)
         print('new alpha for noaug cadd: ',self.alpha)

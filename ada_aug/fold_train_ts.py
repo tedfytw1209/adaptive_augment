@@ -114,6 +114,7 @@ parser.add_argument('--noaug_add', type=str, default='', help='add regular for n
         choices=['cadd','add','coadd','fixadd','constadd',''])
 parser.add_argument('--noaug_max', type=float, default=0.5, help='max noaugment regular')
 parser.add_argument('--noaug_alpha', type=float, default=1.0, help='noaugment alpha for noaug add formula')
+parser.add_argument('--noaug_pow', type=float, default=1.0, help='power for noaug weight')
 parser.add_argument('--noaug_warmup', type=int, default=0, help='noaugment warmup steps (if need)')
 parser.add_argument('--reduce_mag', type=float, default=0, help='max reduce magnitude (default 0 is no reduce mag')
 parser.add_argument('--noaug_target', type=str, default='se', help='add regular for noaugment target difference',
@@ -465,8 +466,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             if args.noaug_add=='coadd':
                 select_output = select_output_source('gf',gf_table,{},{})
                 self.class_criterion.update_classpair(select_output)
-                class_outw = torch.from_numpy(self.class_criterion.classweight_dist)
-                print(f'Pre Valid Noaug add method {args.noaug_add} weights: ',class_outw)
+                class_outw = torch.pow(torch.from_numpy(self.class_criterion.classweight_dist),args.noaug_pow)
+                print(f'Pre Valid Noaug add method {args.noaug_add} noaug power: {args.noaug_pow} weights: {class_outw}')
                 #assert class_outw.mean() <= 1.0
                 if class_outw.max() > 1.0: #need 0<w<1
                     class_outw = class_outw / class_outw.max()
@@ -474,8 +475,9 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 self.adaaug.update_alpha(class_outw)
             elif args.noaug_add=='cadd':
                 class_acc = np.array(select_perfrom_source('gf',gf_dic,{},{},ptype,self.n_class,self.class_noaug))
-                print(f'Pre Valid Noaug add method {args.noaug_add} perfrom weights: ',class_acc)
-                self.adaaug.update_alpha(1.0 - class_acc)
+                class_noaugw = 1.0 - np.power(class_acc,args.noaug_pow)
+                print(f'Noaug add method {args.noaug_add} perfrom class: {class_acc} noaug power: {args.noaug_pow} noaug weight: {class_noaugw}')
+                self.adaaug.update_alpha(class_noaugw)
         # training or evaluate training data
         train_acc, train_obj, train_dic, train_table = train(args,
                 self.train_queue, self.task_model, self.criterion, self.optimizer, self.scheduler, Curr_epoch, args.grad_clip, self.adaaug, 
@@ -490,8 +492,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             select_output = select_output_source(args.output_source,train_table,valid_table,search_table)
             self.class_criterion.update_classpair(select_output)
             if args.noaug_add=='coadd': #cadd use output
-                class_outw = torch.from_numpy(self.class_criterion.classweight_dist)
-                print(f'Noaug add method {args.noaug_add} weights: ',class_outw)
+                class_outw = torch.pow(torch.from_numpy(self.class_criterion.classweight_dist),args.noaug_pow)
+                print(f'Pre Valid Noaug add method {args.noaug_add} noaug power: {args.noaug_pow} weights: {class_outw}')
                 #assert class_outw.mean() <= 1.0
                 if class_outw.max() > 1.0: #need 0<w<1
                     class_outw = class_outw / class_outw.max()
@@ -499,8 +501,9 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 self.adaaug.update_alpha(class_outw)
         if not args.prevalid and (self.adapt_add and not self.use_class_w): #cadd use perfrom
             class_acc = np.array(select_perfrom_source(args.output_source,train_dic,valid_dic,search_dic,ptype,self.n_class,self.class_noaug))
-            print(f'Noaug add method {args.noaug_add} perfrom weights: ',class_acc)
-            self.adaaug.update_alpha(1.0 - class_acc)
+            class_noaugw = 1.0 - np.power(class_acc,args.noaug_pow)
+            print(f'Noaug add method {args.noaug_add} perfrom class: {class_acc} noaug power: {args.noaug_pow} noaug weight: {class_noaugw}')
+            self.adaaug.update_alpha(class_noaugw)
         self.pre_train_acc = train_acc / 100.0
         #restore train just for real policy used !!! with problem
         if args.restore and args.output_policy:

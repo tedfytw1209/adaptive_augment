@@ -1324,13 +1324,16 @@ def search_train_neumann(args, train_queue, search_queue, tr_search_queue, gf_mo
             h_optimizer.zero_grad()
             #input_search_list,seq_len_list,target_search_list,policy_y_list = [],[],[],[]
             #gradient match hyper step
-            elementary_lr = 0.0001 #tmp
-            neum_steps = 5
+            #current train lr
+            for param_group in gf_optimizer.param_groups:
+                elementary_lr = param_group['lr']
+                break
+            neum_steps = 1 #follow taskaug
             use_device = torch.device('cuda')
             hyp_params = list(adaaug.h_model.parameters())
             hyper_grad,diff_loss,sea_loss,input_search_list,seq_len_list,target_search_list,policy_y_list = \
                 hyper_step(gf_model,adaaug,hyp_params,tr_search_queue,gf_optimizer,search_queue,elementary_lr,
-                neum_steps,use_device,sim_criterion,n_class,search_round,class_adaptive,multilabel)
+                neum_steps,use_device,sim_criterion,n_class,search_round,class_adaptive,multilabel,update_w=diff_update_w)
             aug_diff_loss += diff_loss
             aug_search_loss += sea_loss
             hyper_grad_avg += hyper_grad.detach().mean().item()

@@ -75,7 +75,7 @@ class Projection(nn.Module):
 
 class Projection_TSeries(nn.Module):
     def __init__(self, in_features, n_layers, n_hidden=128,label_num=0,label_embed=0, augselect='', proj_addition=0, 
-        feature_mask="", input_act=False,proj_b=True,embed_b=True):
+        feature_mask="", input_act=False,proj_b=True,embed_b=True,bn=False):
         super(Projection_TSeries, self).__init__()
         self.ops_names = TS_OPS_NAMES.copy()
         if augselect.startswith('goodtrans'): #only use good transfrom
@@ -91,6 +91,7 @@ class Projection_TSeries(nn.Module):
         print('In_features: ',in_features) #already add y_feature_len if needed
         proj_out = 2*self.ops_len + proj_addition
         self.proj_out = proj_out
+        self.bn = bn
         self.label_embed = None
         self.feature_embed = None
         if label_num>0 and label_embed>0:
@@ -101,6 +102,12 @@ class Projection_TSeries(nn.Module):
             n_label = label_num
         else:
             n_label = 0
+        if self.bn:
+            self.label_bn = nn.BatchNorm1d(label_embed)
+            self.feature_bn = nn.BatchNorm1d(in_features-n_label)
+        else:
+            self.label_bn = nn.Identity()
+            self.feature_bn = nn.Identity()
         self.class_adapt = int(n_label>0)
         self.n_layers = n_layers
         layers = []
@@ -137,6 +144,7 @@ class Projection_TSeries(nn.Module):
         self.projection = nn.Sequential(*layers)
 
     def forward(self, x,y=None):
+        x = self.feature_bn(x) #bn
         if self.feature_embed!=None:
             x = self.feature_embed(x)
         
@@ -144,9 +152,11 @@ class Projection_TSeries(nn.Module):
             agg_x = x
         elif self.feature_mask=='classonly':
             y_tmp = self.label_embed(y)
+            y_tmp = self.label_bn(y_tmp)
             agg_x = y_tmp
         elif self.label_embed!=None:
             y_tmp = self.label_embed(y)
+            y_tmp = self.label_bn(y_tmp)
             #print('y embed: ',agg_x)
             agg_x = torch.cat([x,y_tmp], dim=1) #feature dim
             #print(x.shape, y_tmp.shape)

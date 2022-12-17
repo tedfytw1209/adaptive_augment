@@ -799,7 +799,7 @@ def main():
         num_samples=1, #grid search no need
     )
     #clean up 12/13
-    RayModel.cleanup()
+    ray.shutdown()
     wandb.finish()
     
 

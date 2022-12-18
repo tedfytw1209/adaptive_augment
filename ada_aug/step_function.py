@@ -680,6 +680,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
         loss = ori_loss + aug_loss
         loss.backward()
         nn.utils.clip_grad_norm_(gf_model.parameters(), grad_clip)
+        h_optimizer.zero_grad() #12/18 add, assert h_model weight not update
         gf_optimizer.step()
         scheduler.step() #8/03 add
         gf_optimizer.zero_grad()

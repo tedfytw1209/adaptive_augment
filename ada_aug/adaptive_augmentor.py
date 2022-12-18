@@ -260,7 +260,7 @@ class AdaAug_TS(AdaAug):
     def __init__(self, after_transforms, n_class, gf_model, h_model, save_dir=None, visualize=False,
                     config=default_config,keepaug_config=default_config, multilabel=False, augselect='',class_adaptive=False,
                     sub_mix=1.0,search_temp=1.0,mag_search_temp=1.0,noaug_add=False,transfrom_dic={},preprocessors=[],
-                    noaug_config={},seed=None):
+                    noaug_config={},train_bn=False,seed=None):
         super(AdaAug_TS, self).__init__(after_transforms, n_class, gf_model, h_model, save_dir, config)
         #other already define in AdaAug
         self.generator = torch.Generator(device='cuda')
@@ -308,6 +308,7 @@ class AdaAug_TS(AdaAug):
         self.mag_temp = config['mag_temp']
         self.preprocessors=preprocessors
         self.wide_delta = self.config.get('wide_delta',False)
+        self.train_bn = train_bn
         if self.wide_delta:
             self.delta_func = perturb_param_wide
         else:
@@ -316,7 +317,10 @@ class AdaAug_TS(AdaAug):
     def predict_aug_params(self, X, seq_len, mode,y=None,policy_apply=True):
         self.gf_model.eval()
         if mode == 'exploit':
-            self.h_model.eval()
+            if self.train_bn: #train for bn layer
+                self.h_model.train()
+            else:
+                self.h_model.eval()
             T = self.temp
             MAG_T = self.mag_temp
         elif mode == 'explore':
@@ -446,7 +450,7 @@ class AdaAug_TS(AdaAug):
         a_imgs = self.get_aug_valid_imgs(images, magnitudes,seq_len=seq_len, mask_idx=ops_mask_idx,target=y)
         #a_imgs = self.Augment_wrapper(images, model=self.gf_model,apply_func=self.get_aug_valid_imgs,magnitudes=magnitudes,selective='paste')
         #a_features = self.gf_model.extract_features(a_imgs, a_seq_len)
-        self.gf_model.eval() #11/09 add
+        self.gf_model.eval() #11/09 add !!!why here!!!
         if hasattr(self.gf_model, 'lstm'):
             self.gf_model.lstm.train() #!!!maybe for bn is better
         self.h_model.train()
@@ -460,10 +464,10 @@ class AdaAug_TS(AdaAug):
             return ba_features, [weights_subset, mag_subset]
     def get_training_aug_image(self, image, magnitudes, idx_matrix,i=None, seq_len=None):
         if i!=None:
-            idx_list = idx_matrix[i]
-            magnitude_i = magnitudes[i]
+            idx_list = idx_matrix[i].detach()
+            magnitude_i = magnitudes[i].detach()
         else:
-            idx_list,magnitude_i = idx_matrix,magnitudes
+            idx_list,magnitude_i = idx_matrix.detach(),magnitudes.detach()
         for idx in idx_list:
             m_pi = self.delta_func(magnitude_i[idx], self.delta,rng=self.perm_rng).detach().cpu().numpy() #only affect magnitude
             image = apply_augment(image, self.ops_names[idx], m_pi,seq_len=seq_len,rd_seed=self.aug_rng,
@@ -514,7 +518,10 @@ class AdaAug_TS(AdaAug):
             self.print_imgs(imgs=aug_imgs,title='aug')
             exit()
         self.gf_model.eval() #11/09 add
-        self.h_model.eval()
+        if self.train_bn: #train for bn layer
+            self.h_model.train()
+        else:
+            self.h_model.eval()
         return aug_imgs, [magnitudes, weights]
 
     def visualize_result(self, images, seq_len,policy_y=None,y=None):
@@ -605,7 +612,7 @@ class AdaAugkeep_TS(AdaAug):
     def __init__(self, after_transforms, n_class, gf_model, h_model, save_dir=None, visualize=False,
                     config=default_config,keepaug_config=default_config, multilabel=False, augselect='',class_adaptive=False,ind_mix=False,
                     sub_mix=1.0,search_temp=1.0,mag_search_temp=1.0,noaug_add=False,transfrom_dic={},preprocessors=[],
-                    noaug_config={},seed=None):
+                    noaug_config={},train_bn=False,seed=None):
         super(AdaAugkeep_TS, self).__init__(after_transforms, n_class, gf_model, h_model, save_dir, config)
         #other already define in AdaAug
         self.generator = torch.Generator(device='cuda')
@@ -690,6 +697,7 @@ class AdaAugkeep_TS(AdaAug):
         self.mag_search_temp = mag_search_temp
         self.mag_temp = config['mag_temp']
         self.preprocessors=preprocessors
+        self.train_bn = train_bn
         self.wide_delta = self.config.get('wide_delta',False)
         if self.wide_delta:
             self.delta_func = perturb_param_wide
@@ -699,7 +707,10 @@ class AdaAugkeep_TS(AdaAug):
     def predict_aug_params(self, X, seq_len, mode,y=None,policy_apply=True):
         self.gf_model.eval()
         if mode == 'exploit':
-            self.h_model.eval()
+            if self.train_bn: #train for bn layer
+                self.h_model.train()
+            else:
+                self.h_model.eval()
             T = self.temp
             MAG_T = self.mag_temp
         elif mode == 'explore':
@@ -857,10 +868,10 @@ class AdaAugkeep_TS(AdaAug):
         return idx_matrix,len_idx
     def get_training_aug_image(self, image, magnitudes, idx_matrix,i=None, seq_len=None):
         if i!=None:
-            idx_list = idx_matrix[i]
-            magnitude_i = magnitudes[i]
+            idx_list = idx_matrix[i].detach()
+            magnitude_i = magnitudes[i].detach()
         else:
-            idx_list,magnitude_i = idx_matrix,magnitudes
+            idx_list,magnitude_i = idx_matrix.detach(),magnitudes.detach()
         for idx in idx_list:
             m_pi = self.delta_func(magnitude_i[idx], self.delta, rng=self.perm_rng).detach().cpu().numpy()
             image = apply_augment(image, self.ops_names[idx], m_pi,rd_seed=self.aug_rng
@@ -901,7 +912,10 @@ class AdaAugkeep_TS(AdaAug):
             self.print_imgs(imgs=aug_imgs,title='aug')
             exit()
         self.gf_model.eval() #11/09 add
-        self.h_model.eval()
+        if self.train_bn:
+            self.h_model.train()
+        else:
+            self.h_model.eval()
         return aug_imgs
     def visualize_result(self, images, seq_len,policy_y=None,y=None):
         if self.resize and 'lstm' not in self.config['gf_model_name']:

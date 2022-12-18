@@ -858,23 +858,24 @@ class RandAugment:
     def __init__(self, n, m, rd_seed=None,augselect='',sfreq=100,preprocessor=None):
         self.n = n
         self.m = m      # [0, 1]
-        self.augment_list = TS_AUGMENT_LIST
+        self.augment_list = TS_AUGMENT_LIST.copy()
         self.aug_dict = None
         if 'tsadd' in augselect:
             print('Augmentation add TS_ADD_LIST')
-            self.augment_list += TS_ADD_LIST
+            self.augment_list += TS_ADD_LIST.copy()
         if 'ecg_noise' in augselect:
             self.ops_names = ECG_NOISE_LIST.copy()
-            self.aug_dict = ECG_NOISE_DICT
+            self.aug_dict = ECG_NOISE_DICT.copy()
         elif 'ecg' in augselect:
             print('Augmentation add ECG_AUGMENT_LIST')
-            self.augment_list += ECG_AUGMENT_LIST
+            self.augment_list += ECG_AUGMENT_LIST.copy()
         self.augment_ids = [i for i in range(len(self.augment_list))]
         self.aug_rng = RandomState(rd_seed)
         self.rng = default_rng(rd_seed)
         #self.rng = check_random_state(rd_seed)
         #self.aug_rng = check_random_state(rd_seed)
         self.sfreq = sfreq
+        print(f'Using RandAug {self.augment_list}, m={m}, n={n}')
         self.preprocessor=preprocessor
     def __call__(self, img, seq_len=None):
         #print(img.shape)
@@ -882,7 +883,7 @@ class RandAugment:
         if seq_len==None:
             seq_len = max_seq_len
         img = img.permute(1,0).view(1,channel,max_seq_len)
-        tmp_img = img[:,:,:seq_len] #12/18 add
+        tmp_img = img[:,:,:seq_len] #12/18 add or not!!!
         op_ids = self.rng.choice(self.augment_ids, size=self.n)
         for id in op_ids:
             op, minval, maxval = self.augment_list[id]
@@ -906,7 +907,8 @@ class TransfromAugment:
         self.m = m      # [0, 1]
         self.n = n
         self.names = names
-        self.rng = check_random_state(rd_seed)
+        self.aug_rng = RandomState(rd_seed)
+        self.rng = default_rng(rd_seed)
         self.sfreq = sfreq
         self.aug_dict = aug_dict
     def __call__(self, img, seq_len=None, **_kwargs): #ignore other args
@@ -922,7 +924,7 @@ class TransfromAugment:
             if use_op:
                 op, minval, maxval = augment
                 val = float(self.m_dic[name]) * float(maxval - minval) + minval
-                img = op(img, val,random_state=self.rng,sfreq=self.sfreq,seq_len=seq_len)
+                img = op(img, val,random_state=self.aug_rng,sfreq=self.sfreq,seq_len=seq_len)
             else: #pass
                 pass
         return img.permute(0,2,1).detach().view(max_seq_len,channel) #back to (len,channel)

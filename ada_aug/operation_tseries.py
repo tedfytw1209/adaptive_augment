@@ -21,6 +21,7 @@ from ecgdetectors import Detectors
 from scipy.interpolate import CubicSpline
 from operations_ecg import *
 from numpy.random import default_rng
+from numpy.random import RandomState
 
 #for model: (len, channel)
 #for this file (channel, len)!
@@ -854,7 +855,7 @@ class ToTensor:
         return torch.tensor(img).float()
 
 class RandAugment:
-    def __init__(self, n, m, rd_seed=None,augselect='',sfreq=100):
+    def __init__(self, n, m, rd_seed=None,augselect='',sfreq=100,preprocessor=None):
         self.n = n
         self.m = m      # [0, 1]
         self.augment_list = TS_AUGMENT_LIST
@@ -869,21 +870,27 @@ class RandAugment:
             print('Augmentation add ECG_AUGMENT_LIST')
             self.augment_list += ECG_AUGMENT_LIST
         self.augment_ids = [i for i in range(len(self.augment_list))]
-        self.rng = check_random_state(rd_seed)
+        self.aug_rng = RandomState(rd_seed)
+        self.rng = default_rng(rd_seed)
+        #self.rng = check_random_state(rd_seed)
+        #self.aug_rng = check_random_state(rd_seed)
         self.sfreq = sfreq
+        self.preprocessor=preprocessor
     def __call__(self, img, seq_len=None):
         #print(img.shape)
         max_seq_len , channel = img.shape
         if seq_len==None:
             seq_len = max_seq_len
         img = img.permute(1,0).view(1,channel,max_seq_len)
+        tmp_img = img[:,:,:seq_len] #12/18 add
         op_ids = self.rng.choice(self.augment_ids, size=self.n)
         for id in op_ids:
             op, minval, maxval = self.augment_list[id]
             val = float(self.m) * float(maxval - minval) + minval
             #print(val)
-            img = op(img, val,random_state=self.rng,sfreq=self.sfreq,seq_len=seq_len)
-
+            aug_img = op(tmp_img, val,random_state=self.aug_rng,sfreq=self.sfreq,
+                seq_len=seq_len,preprocessor=self.preprocessor)
+            img[:,:,:seq_len] = aug_img #tmp fix, may become slower
         return img.permute(0,2,1).detach().view(max_seq_len,channel) #back to (len,channel)
 
 class TransfromAugment:

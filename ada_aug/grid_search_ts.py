@@ -22,7 +22,7 @@ from networks.projection import Projection_TSeries
 from config import get_search_divider
 from dataset import get_ts_dataloaders, get_num_class, get_label_name, get_dataset_dimension,get_num_channel,Freq_dict,TimeS_dict
 from operation_tseries import TS_OPS_NAMES,ECG_OPS_NAMES,TS_ADD_NAMES,MAG_TEST_NAMES,NOMAG_TEST_NAMES
-from step_function import train,infer,search_train,search_infer
+from step_function import train,infer,search_train,search_infer,search_train_neumann #!!! tmp add
 from non_saturating_loss import NonSaturatingLoss,Wasserstein_loss
 from class_balanced_loss import ClassBalLoss,ClassDiffLoss,ClassDistLoss,make_class_balance_count,make_class_weights,make_loss,make_class_weights_maxrel \
     ,make_class_weights_samples
@@ -70,6 +70,8 @@ parser.add_argument('--proj_learning_rate', type=float, default=1e-2, help='lear
 parser.add_argument('--proj_weight_decay', type=float, default=1e-3, help='weight decay for h]')
 parser.add_argument('--proj_nobias', type=str, default='', help='proj bias',
         choices=['ep','e','p',''])
+parser.add_argument('--proj_bn', action='store_true', default=False, help='project feature and label using batch norm')
+parser.add_argument('--train_bn', action='store_true', default=False, help='project batch norm learn when training')
 parser.add_argument('--cutout', action='store_true', default=False, help='use cutout')
 parser.add_argument('--cutout_length', type=int, default=16, help='cutout length')
 parser.add_argument('--use_cuda', type=bool, default=True, help="use cuda default True")
@@ -108,6 +110,8 @@ parser.add_argument('--pwarmup', type=int, default=0, help="warmup epoch for pol
 parser.add_argument('--lambda_aug', type=float, default=1.0, help="augment sample weight (difficult)")
 parser.add_argument('--lambda_sim', type=float, default=1.0, help="augment sample weight (simular)")
 parser.add_argument('--lambda_noaug', type=float, default=0, help="no augment regular weight")
+parser.add_argument('--optim_type', type=str, default='', help='policy netowrk optimize type (default: '' use density matching)',
+        choices=['maml','neumann',''])
 # class adapt
 parser.add_argument('--class_adapt', action='store_true', default=False, help='class adaptive')
 parser.add_argument('--class_embed', action='store_true', default=False, help='class embed')
@@ -324,7 +328,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             embed_b = False
         self.h_model = Projection_TSeries(in_features=h_input,label_num=label_num,label_embed=label_embed,
             n_layers=args.n_proj_layer, n_hidden=args.n_proj_hidden, augselect=args.augselect, proj_addition=proj_add,
-            feature_mask=args.feature_mask,proj_b=proj_b,embed_b=embed_b).cuda()
+            feature_mask=args.feature_mask,proj_b=proj_b,embed_b=embed_b,bn=args.proj_bn).cuda()
         #  training settings
         self.gf_optimizer = torch.optim.AdamW(self.gf_model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
         self.scheduler = torch.optim.lr_scheduler.OneCycleLR(self.gf_optimizer, max_lr=args.learning_rate, 
@@ -455,6 +459,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 noaug_config=noaugadd_config,
                 transfrom_dic=trans_config,
                 preprocessors=preprocessors,
+                train_bn=args.train_bn, #only search need
                 seed=args.seed)
         else:
             keepaug_config['length'] = keepaug_config['length'][0]
@@ -476,6 +481,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 noaug_config=noaugadd_config,
                 transfrom_dic=trans_config,
                 preprocessors=preprocessors,
+                train_bn=args.train_bn, #only search need
                 seed=args.seed)
         #to self
         self.n_channel = n_channel
@@ -515,13 +521,18 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 'lambda_sim':args.lambda_sim,'class_adaptive':args.class_adapt,'lambda_noaug':args.lambda_noaug,'train_perfrom':self.pre_train_acc,
                 'loss_type':args.loss_type, 'adv_criterion': self.adv_criterion, 'teacher_model':self.ema_model, 'sim_criterion':self.sim_criterion,
                 'noaug_reg':args.noaug_reg,'class_weight': self.class_weight,'mixup': args.mixup,'mixup_alpha': args.mixup_alpha,'aug_mix': args.aug_mix,
-                'extra_criterions':self.extra_losses,'policy_dist':args.policy_dist,
+                'extra_criterions':self.extra_losses,'policy_dist':args.policy_dist,'optim_type':args.optim_type,
                 'sim_reweight':args.sim_rew,'warmup_epoch': args.pwarmup,'mix_type':args.mix_type,'visualize':args.visualize}
         
-        # searching
-        train_acc, train_obj, train_dic, table_dic = search_train(args,self.train_queue, self.search_queue, self.tr_search_queue, self.gf_model, self.adaaug,
-            self.criterion, self.gf_optimizer,self.scheduler, args.grad_clip, self.h_optimizer, self._iteration, args.search_freq, 
-            search_round=args.search_round,search_repeat=self.search_repeat,multilabel=self.multilabel,n_class=self.n_class,map_select=self.mapselect, **diff_dic)
+        # searching, !!!12/14 tmp add neumann search for testing new gradient method
+        if args.optim_type=='neumann':
+            train_acc, train_obj, train_dic, table_dic = search_train_neumann(args,self.train_queue, self.search_queue, self.tr_search_queue, self.gf_model, self.adaaug,
+                self.criterion, self.gf_optimizer,self.scheduler, args.grad_clip, self.h_optimizer, self._iteration, args.search_freq, 
+                search_round=args.search_round,search_repeat=self.search_repeat,multilabel=self.multilabel,n_class=self.n_class,map_select=self.mapselect, **diff_dic)
+        else:
+            train_acc, train_obj, train_dic, table_dic = search_train(args,self.train_queue, self.search_queue, self.tr_search_queue, self.gf_model, self.adaaug,
+                self.criterion, self.gf_optimizer,self.scheduler, args.grad_clip, self.h_optimizer, self._iteration, args.search_freq, 
+                search_round=args.search_round,search_repeat=self.search_repeat,multilabel=self.multilabel,n_class=self.n_class,map_select=self.mapselect, **diff_dic)
         # validation
         valid_acc, valid_obj,valid_dic,valid_table = search_infer(self.valid_queue, self.gf_model, self.criterion, 
             multilabel=self.multilabel,n_class=self.n_class,mode='valid',map_select=self.mapselect)
@@ -730,9 +741,9 @@ def main():
         hparams['kfold'] = args.kfold #for some fold
     #for grid search params ###important###
     print(hparams)
-    hparams['search_freq'] = tune.grid_search([3,5]) #tune.grid_search(hparams['search_freq'])
+    #hparams['search_freq'] = tune.grid_search([3,5]) #tune.grid_search(hparams['search_freq'])
     #hparams['search_round'] = tune.grid_search([4,8,16]) #tune.grid_search(hparams['search_round'])
-    hparams['proj_learning_rate'] = tune.grid_search([0.0003,0.001,0.003,0.01])
+    hparams['proj_learning_rate'] = tune.grid_search([0.0001,0.0003,0.001,0.003,0.01])
     #hparams['k_ops'] = tune.grid_search([1,2])
     #hparams['lambda_aug'] = tune.quniform(hparams['lambda_aug'][0],hparams['lambda_aug'][1],0.01)
     #hparams['lambda_sim'] = tune.quniform(hparams['lambda_sim'][0],hparams['lambda_sim'][1],0.01)
@@ -744,18 +755,18 @@ def main():
     #hparams['sear_temp'] = tune.grid_search([1,3])
     #hparams['temperature'] = tune.grid_search([1,3])
     #hparams['sear_magtemp'] = tune.grid_search([1,3])
-    hparams['mag_temperature'] = tune.grid_search([1,2])
+    #hparams['mag_temperature'] = tune.grid_search([1,2])
     #hparams['diff_aug'] = tune.grid_search([True,False])
     #hparams['lambda_noaug'] = tune.grid_search([1,10,50])
     #hparams['noaug_reg'] = tune.grid_search(['creg','cpwreg'])
     #hparams['lambda_dist'] = tune.grid_search([1,10,50])
     #hparams['class_dist'] = tune.grid_search(['wass','embed_wass']) #tmp
     #hparams['output_source'] = tune.grid_search(['allsearch'])
-    hparams['n_embed'] = tune.grid_search([32,64,128])
+    hparams['n_embed'] = tune.grid_search([64])
     hparams['feature_mask'] = tune.grid_search(['','select','classonly'])
     #hparams['grid_target'] = ['noaug_reg','lambda_noaug','feature_mask']
     #hparams['grid_target'] = ['noaug_reg','lambda_noaug','class_dist','lambda_dist']
-    hparams['grid_target'] = ['search_freq','proj_learning_rate','mag_temperature','n_embed','feature_mask']
+    hparams['grid_target'] = ['proj_learning_rate','feature_mask']
     print(hparams)
     #wandb
     wandb_config = {

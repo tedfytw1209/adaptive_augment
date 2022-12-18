@@ -131,7 +131,7 @@ parser.add_argument('--noaug_alpha', type=float, default=1.0, help='noaugment al
 parser.add_argument('--noaug_warmup', type=int, default=0, help='noaugment warmup steps (if need)')
 parser.add_argument('--reduce_mag', type=float, default=0, help='max reduce magnitude (default 0 is no reduce mag')
 parser.add_argument('--noaug_target', type=str, default='se', help='add regular for noaugment target difference',
-        choices=['se','s','e'])     
+        choices=['se','s','e','-se','-s','-e'])
 parser.add_argument('--output_source', type=str, default='', help='class output source',
         choices=['train','valid','search','allsearch',''])
 parser.add_argument('--class_target', type=int, default=-1, help='single class weight target')

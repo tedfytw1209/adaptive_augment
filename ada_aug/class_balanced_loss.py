@@ -343,6 +343,11 @@ class ClassDistLoss(torch.nn.Module):
         self.classweight_dist = np.ones((num_classes))
         self.class_embed_mat = None
         self.class_policy_mat = None
+        if '-' in noaug_target:
+            self.reverse_w = True
+            noaug_target = noaug_target.replace('-','')
+        else:
+            self.reverse_w = False
         self.noaug_target = noaug_target
 
     def update_distance(self,class_output_mat): #(n_class,n_class)

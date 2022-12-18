@@ -459,6 +459,8 @@ def noaug_select(noaug_reg,extra_criterions,noaug_lossw):
         print('Using NOAUG regularation ',noaug_reg)
         use_noaug_reg = True
         noaug_lossw = torch.from_numpy(extra_criterions[0].classweight_dist).cuda()
+        if extra_criterions[0].reverse_w: #similar to 1/w
+            noaug_lossw = noaug_lossw.max() / noaug_lossw
         print('NOAUG regularation class weights',noaug_lossw)
     elif noaug_reg:
         print('Using NOAUG regularation ',noaug_reg)

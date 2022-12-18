@@ -119,7 +119,7 @@ parser.add_argument('--noaug_pow', type=float, default=1.0, help='power for noau
 parser.add_argument('--noaug_warmup', type=int, default=0, help='noaugment warmup steps (if need)')
 parser.add_argument('--reduce_mag', type=float, default=0, help='max reduce magnitude (default 0 is no reduce mag')
 parser.add_argument('--noaug_target', type=str, default='se', help='add regular for noaugment target difference',
-        choices=['se','s','e'])
+        choices=['se','s','e','-se','-s','-e'])
 parser.add_argument('--output_source', type=str, default='', help='class output source',
         choices=['train','valid','search','allsearch',''])
 parser.add_argument('--prevalid', action='store_true', default=False, help='use df model to valid first')
@@ -475,6 +475,9 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 if class_outw.max() > 1.0: #need 0<w<1
                     class_outw = class_outw / class_outw.max()
                     print('regulate outw to ',class_outw)
+                if self.class_criterion.reverse_w:
+                    class_outw = 1.0 - class_outw
+                    print('reverse weight to ',class_outw)
                 self.adaaug.update_alpha(class_outw)
             elif args.noaug_add=='cadd':
                 class_acc = np.array(select_perfrom_source('gf',gf_dic,{},{},ptype,self.n_class,self.class_noaug))
@@ -501,6 +504,9 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 if class_outw.max() > 1.0: #need 0<w<1
                     class_outw = class_outw / class_outw.max()
                     print('regulate outw to ',class_outw)
+                if self.class_criterion.reverse_w:
+                    class_outw = 1.0 - class_outw
+                    print('reverse weight to ',class_outw)
                 self.adaaug.update_alpha(class_outw)
         if not args.prevalid and (self.adapt_add and not self.use_class_w): #cadd use perfrom
             class_acc = np.array(select_perfrom_source(args.output_source,train_dic,valid_dic,search_dic,ptype,self.n_class,self.class_noaug))

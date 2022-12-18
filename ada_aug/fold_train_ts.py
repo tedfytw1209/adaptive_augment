@@ -186,8 +186,10 @@ if args.restore:
     restore_str = args.restore_path.strip('/').split('/')[-1]
     restore_l = restore_str.split('_')[0].split('-')
     restore_str = restore_l[0]+'-'+restore_l[1]
-    description = restore_str+description
-now_str = time.strftime("%Y%m%d-%H%M%S")
+    description = 'restore'+description
+    now_str = restore_str
+else:
+    now_str = time.strftime("%Y%m%d-%H%M%S")
 args.save = '{}-{}-{}{}'.format(now_str, args.save,Aug_type,description+args.augselect+args.balance_loss)
 if debug:
     args.save = os.path.join('debug', args.save)

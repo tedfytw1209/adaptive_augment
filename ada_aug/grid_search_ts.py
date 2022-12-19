@@ -743,7 +743,7 @@ def main():
     print(hparams)
     #hparams['search_freq'] = tune.grid_search([3,5]) #tune.grid_search(hparams['search_freq'])
     #hparams['search_round'] = tune.grid_search([4,8,16]) #tune.grid_search(hparams['search_round'])
-    hparams['proj_learning_rate'] = tune.grid_search([0.0001,0.0003,0.001,0.003,0.01])
+    hparams['proj_learning_rate'] = tune.grid_search([0.001])
     #hparams['k_ops'] = tune.grid_search([1,2])
     #hparams['lambda_aug'] = tune.quniform(hparams['lambda_aug'][0],hparams['lambda_aug'][1],0.01)
     #hparams['lambda_sim'] = tune.quniform(hparams['lambda_sim'][0],hparams['lambda_sim'][1],0.01)

@@ -1362,8 +1362,8 @@ class KeepAugment(object): #need fix
             slc_,slc_ch = self.get_rand(t_series)
         else:
             slc_,slc_ch = self.get_heartbeat(t_series)
-        
         t_series_.requires_grad = False #no need gradient now
+        torch.cuda.empty_cache()
         return slc_,slc_ch, t_series_
     def get_seg(self,seg_number,seg_len,w,window_w,windowed_len):
         if self.grid_region:

@@ -742,8 +742,8 @@ def main():
     #for grid search params ###important###
     print(hparams)
     #hparams['search_freq'] = tune.grid_search([3,5]) #tune.grid_search(hparams['search_freq'])
-    #hparams['search_round'] = tune.grid_search([4,8,16]) #tune.grid_search(hparams['search_round'])
-    hparams['proj_learning_rate'] = tune.grid_search([0.001])
+    hparams['search_round'] = tune.grid_search([4,16]) #tune.grid_search(hparams['search_round'])
+    hparams['proj_learning_rate'] = tune.grid_search([0.0003,0.001])
     #hparams['k_ops'] = tune.grid_search([1,2])
     #hparams['lambda_aug'] = tune.quniform(hparams['lambda_aug'][0],hparams['lambda_aug'][1],0.01)
     #hparams['lambda_sim'] = tune.quniform(hparams['lambda_sim'][0],hparams['lambda_sim'][1],0.01)
@@ -755,18 +755,19 @@ def main():
     #hparams['sear_temp'] = tune.grid_search([1,3])
     #hparams['temperature'] = tune.grid_search([1,3])
     #hparams['sear_magtemp'] = tune.grid_search([1,3])
-    #hparams['mag_temperature'] = tune.grid_search([1,2])
+    hparams['sear_magtemp'] = tune.grid_search([1,2])
+    hparams['mag_temperature'] = tune.grid_search([3])
     #hparams['diff_aug'] = tune.grid_search([True,False])
     #hparams['lambda_noaug'] = tune.grid_search([1,10,50])
     #hparams['noaug_reg'] = tune.grid_search(['creg','cpwreg'])
     #hparams['lambda_dist'] = tune.grid_search([1,10,50])
     #hparams['class_dist'] = tune.grid_search(['wass','embed_wass']) #tmp
     #hparams['output_source'] = tune.grid_search(['allsearch'])
-    hparams['n_embed'] = tune.grid_search([64])
-    hparams['feature_mask'] = tune.grid_search(['','select','classonly'])
+    hparams['n_embed'] = tune.grid_search([64,128])
+    hparams['feature_mask'] = tune.grid_search([''])
     #hparams['grid_target'] = ['noaug_reg','lambda_noaug','feature_mask']
     #hparams['grid_target'] = ['noaug_reg','lambda_noaug','class_dist','lambda_dist']
-    hparams['grid_target'] = ['proj_learning_rate','feature_mask']
+    hparams['grid_target'] = ['proj_learning_rate','search_round','n_embed','sear_magtemp','mag_temperature']
     print(hparams)
     #wandb
     wandb_config = {

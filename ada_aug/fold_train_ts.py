@@ -69,6 +69,7 @@ parser.add_argument('--proj_weight_decay', type=float, default=1e-3, help='weigh
 parser.add_argument('--proj_nobias', type=str, default='', help='proj bias',
         choices=['ep','e','p',''])
 parser.add_argument('--proj_bn', action='store_true', default=False, help='project feature and label using batch norm')
+parser.add_argument('--train_bn', action='store_true', default=False, help='project batch norm learn when training (not use in training step)')
 parser.add_argument('--cutout', action='store_true', default=False, help='use cutout')
 parser.add_argument('--cutout_length', type=int, default=16, help='cutout length')
 parser.add_argument('--use_cuda', type=bool, default=True, help="use cuda default True")

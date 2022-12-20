@@ -575,6 +575,8 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     aug_loss_mat = torch.zeros(n_ops).float()
     aug_class_loss = torch.zeros(n_class,n_ops).float()
     #policy_dist = 'pwk' # w=magnitude, p=weight, k=keeplen (if have)
+    if policy_model==None:
+        policy_model = gf_model
     if policy_dist=='pwk':
         n_policy = adaaug.h_model.proj_out
     else: #single target except threshold
@@ -625,6 +627,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     noaug_reg_sum = 0
     policy_apply = (warmup_epoch==0) #apply policy or not
     for step, (input, seq_len, target) in enumerate(train_queue):
+        print(f'Step {step} start') #!tmp for debug
         input = input.float().cuda() #(batch,sed_len,channel)
         target = target.cuda()
         policy_y = None

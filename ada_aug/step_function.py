@@ -104,7 +104,7 @@ def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_
             w_aug = torch.sqrt(t_aug * torch.clamp(t_aug - p_aug, min=0)) + 1 #a=0.5,b=0.5 ???
             w_aug /= (w_aug.mean().detach() + 1e-9)
             aug_loss = (w_aug * aug_loss).mean()
-        loss = ori_loss + aug_loss
+        loss = ori_loss + aug_loss.mean() #assert
         if training:
             loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
@@ -679,7 +679,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                 aug_loss = (w_aug * lambda_aug * aug_loss).mean() / 2
             else:
                 aug_loss = (lambda_aug * aug_loss).mean() / 2
-        loss = ori_loss + aug_loss
+        loss = ori_loss + aug_loss.mean() #assert
         loss.backward()
         nn.utils.clip_grad_norm_(gf_model.parameters(), grad_clip)
         h_optimizer.zero_grad() #12/18 add, assert h_model weight not update

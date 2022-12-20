@@ -25,6 +25,7 @@ from warmup_scheduler import GradualWarmupScheduler
 from config import get_warmup_config
 from class_balanced_loss import ClassBalLoss,ClassDiffLoss,ClassDistLoss,make_class_balance_count,make_class_weights,make_loss,make_class_weights_maxrel \
     ,make_class_weights_samples
+from softaug import Soft_Criterion
 import wandb
 import copy
 from utils import plot_conf_wandb, select_output_source, select_embed_source, select_perfrom_source
@@ -129,6 +130,7 @@ parser.add_argument('--mixup', action='store_true', help='mixup benchmark')
 parser.add_argument('--mixup_alpha', type=float, default=1.0, help='mixup parameter')
 #loss
 parser.add_argument('--balance_loss', type=str, default='', help="loss type for model and policy training to acheive class balance")
+parser.add_argument('--soft_conf', type=float, default=1.0, help="confidence for soft augment")
 #info keep
 parser.add_argument('--keep_aug', action='store_true', default=False, help='info keep augment')
 parser.add_argument('--keep_mode', type=str, default='auto', help='info keep mode',choices=['auto','adapt','b','p','t','rand'])
@@ -277,7 +279,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         default_criterion = make_loss(multilabel=multilabel)
         train_labels = self.train_queue.dataset.dataset.label
         self.criterion = self.choose_criterion(train_labels,None,multilabel,n_class,
-            loss_type=args.balance_loss,default=default_criterion)
+            loss_type=args.balance_loss,default=default_criterion,confidence=args.soft_conf)
         self.criterion = self.criterion.cuda()
         #  restore setting
         if args.restore:
@@ -627,7 +629,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         self.config = new_config
         return True
     
-    def choose_criterion(self,train_labels,search_labels,multilabel,n_class,loss_type='',mix_type='',default=None):
+    def choose_criterion(self,train_labels,search_labels,multilabel,n_class,loss_type='',mix_type='',default=None,confidence=1):
         if loss_type=='classbal': 
             out_criterion = make_class_balance_count(train_labels,search_labels,multilabel,n_class)
         elif loss_type=='classdiff':
@@ -644,6 +646,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             class_weights = make_class_weights_maxrel(train_labels,n_class,search_labels)
             class_weights = torch.from_numpy(class_weights).float()
             out_criterion = make_loss(multilabel=multilabel,weight=class_weights).cuda()
+        elif loss_type=='softkl':
+            out_criterion = Soft_Criterion(confidence=confidence)
         elif mix_type=='loss':
             if not multilabel:
                 out_criterion = nn.CrossEntropyLoss(reduction='none').cuda()

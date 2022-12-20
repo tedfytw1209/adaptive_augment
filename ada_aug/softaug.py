@@ -87,10 +87,10 @@ class Soft_Criterion(torch.nn.Module):
 
 def soft_criterion(pred, label, confidence=0.9):
     log_prob = F.log_softmax(pred, dim=1)
-    n_class = pred.size(1)
+    n_class = pred.size(1) #(bs,n_class)
     # make soft one-hot target
     one_hot = torch.ones_like(pred) * (1 - confidence) / (n_class - 1)
     one_hot.scatter_(dim=1, index=label, src= confidence)
     # compute weighted KL loss 10
-    kl = confidence * F.kl_div(input=log_prob, target=one_hot, reduction='none').sum(-1)
-    return kl.mean()
+    kl = confidence * F.kl_div(input=log_prob, target=one_hot, reduction='none').sum(-1) #(bs)
+    return kl

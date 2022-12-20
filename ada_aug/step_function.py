@@ -627,7 +627,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     noaug_reg_sum = 0
     policy_apply = (warmup_epoch==0) #apply policy or not
     for step, (input, seq_len, target) in enumerate(train_queue):
-        print(f'Step {step} start') #!tmp for debug
+        #print(f'Step {step} start') #!tmp for debug
         input = input.float().cuda() #(batch,sed_len,channel)
         target = target.cuda()
         policy_y = None
@@ -637,6 +637,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
             else:
                 policy_y = target.cuda().float()
         # exploitation
+        #print(f'Origin pre-input {input}') #!tmp for debug
         timer = time.time()
         if epoch>=warmup_epoch:
             aug_images, tr_policy = adaaug(input, seq_len, mode='exploit', y=policy_y, policy_apply=policy_apply)
@@ -646,6 +647,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
         else:
             aug_images = input
         aug_images = aug_images.cuda()
+        #print(f'Origin post-input {input}') #!tmp for debug
         #mixup if need
         if mixup:
             aug_images, target_a, target_b, mixup_lam = mixup_data(aug_images,target,mixup_alpha)
@@ -689,7 +691,6 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
         gf_optimizer.step()
         scheduler.step() #8/03 add
         gf_optimizer.zero_grad()
-        torch.cuda.empty_cache()
         #ema teacher
         if teacher_model:
             teacher_model.update_parameters(gf_model)
@@ -697,7 +698,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
         n = target.size(0)
         objs.update(loss.detach().item(), n)
         if not multilabel:
-            prec1, prec5 = utils.accuracy(logits.detach(), target.detach(), topk=(1, 5))
+            prec1, prec5 = utils.accuracy(logits.cpu().detach(), target.cpu().detach(), topk=(1, 5))
             top1.update(prec1.detach().item(), n)
             top5.update(prec5.detach().item(), n)
             _, predicted = torch.max(logits.data, 1)
@@ -953,6 +954,8 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
             sea_policy_matrix += policy_out #sum of policy for each class
 
         exploration_time = time.time() - timer
+        gf_optimizer.zero_grad()
+        h_optimizer.zero_grad()
         torch.cuda.empty_cache()
         #log
         global_step = epoch * len(train_queue) + step

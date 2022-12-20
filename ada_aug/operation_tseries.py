@@ -256,7 +256,7 @@ def info_time_mask(X, mask_len_samples,start,end,
 def random_bandstop(X, bandwidth, max_freq=50, sfreq=100, random_state=None, *args,
                     **kwargs):
     rng = check_random_state(random_state)
-    transformed_X = X.clone()
+    transformed_X = X #.clone() 
     # Prevents transitions from going below 0 and above max_freq
     notched_freqs = rng.uniform(
         low=1 + 2 * bandwidth,
@@ -1354,7 +1354,7 @@ class KeepAugment(object): #need fix
         bound_func = self.compare_func_list[(com_idx+1)%2] #[lt, ge]
         return info_aug, compare_func, upper_bound, bound_func
     def get_slc(self,t_series,model,target=None):
-        t_series_ = t_series.clone().detach()
+        t_series_ = t_series #.clone().detach() 12/20 tmp
         if self.mode=='auto':
             t_series_.requires_grad = True
             slc_,slc_ch = self.get_importance(model,t_series_,target=target)

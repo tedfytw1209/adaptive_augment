@@ -6,6 +6,7 @@ import torch.nn.utils.rnn as rnn_utils
 import math
 import copy
 from ecgdetectors import Detectors
+import numpy as np
 
 class AdaptiveConcatPoolRNN(nn.Module):
     def __init__(self, bidirectional):
@@ -327,8 +328,8 @@ class Segmentation(nn.Module): #segment data for Transfromer
         #rr_method: fix, rpeak
         self.seg_ways = seg_ways
         self.rr_method = rr_method
-        self.pw_len = pw_len
-        self.tw_len = tw_len
+        self.pw_len = pw_len * hz
+        self.tw_len = tw_len * hz
         self.hz = hz
         self.detect_lead = 1 #normal use lead II
         if self.seg_ways=='rpeak':
@@ -336,7 +337,30 @@ class Segmentation(nn.Module): #segment data for Transfromer
             #detector
             if rr_method=='pan':
                 self.detect_func = self.detectors.pan_tompkins_detector
-
+        elif self.seg_ways=='fix':
+            self.detect_func = None
     
     def forward(self,x, seq_lens=None):
-        pass
+        bs, slen, ch = x.shape
+        new_len = int(slen / self.hz) #max len after transform
+        new_ch = ch * self.hz
+        if seq_lens==None:
+            seq_lens = slen
+        if self.detect_func==None:
+            tmp_x = x.reshape(bs,new_len,new_ch)
+            new_seq_lens = (seq_lens / self.hz).long() #real len after transform
+        else:
+            x_single = x[:,:,self.detect_lead].detach().cpu().numpy()
+            new_seq_lens = torch.zeros(bs)
+            tmp_x = []
+            for i,(x_each,slen_each) in enumerate(zip(x_single,seq_lens)): #each x = (seq_len)
+                rpeaks_array = self.detect_func(x_each[:slen_each])
+                new_seq_lens[i] = len(rpeaks_array)
+                new_x = torch.zeros(new_len,new_ch)
+                for p,peak in enumerate(rpeaks_array):
+                    x1 = np.clip(peak - self.pw_len , 0, slen)
+                    x2 = np.clip(peak + self.tw_len , 0, slen)
+                    new_x[p] = x_each[x1:x2,:].reshape(-1)
+                tmp_x.append(new_x)
+            tmp_x = torch.stack(tmp_x, dim=0).to(x.device)
+        return tmp_x, new_seq_lens

@@ -73,6 +73,7 @@ class Soft_Criterion(torch.nn.Module):
     def __init__(self, confidence=0.9):
         super().__init__()
         self.confidence = confidence
+        print('Using soft augment with confidence ',confidence)
     def forward(self,pred, label, confidence=None):
         if not torch.is_tensor(confidence):
             confidence = self.confidence
@@ -80,7 +81,10 @@ class Soft_Criterion(torch.nn.Module):
         n_class = pred.size(1)
         # make soft one-hot target
         one_hot = torch.ones_like(pred) * (1 - confidence) / (n_class - 1)
-        one_hot.scatter_(dim=1, index=label, src= confidence)
+        one_hot.scatter_(dim=1, index=label.view(-1,1), value= confidence)
+        print('Softmax predict: ',log_prob) #!tmp
+        print('Origin label: ',label.view(-1,1)) #!tmp
+        print('Soften label: ',one_hot) #!tmp
         # compute weighted KL loss 10
         kl = confidence * F.kl_div(input=log_prob, target=one_hot, reduction='none').sum(-1)
         return kl.mean()
@@ -90,7 +94,7 @@ def soft_criterion(pred, label, confidence=0.9):
     n_class = pred.size(1) #(bs,n_class)
     # make soft one-hot target
     one_hot = torch.ones_like(pred) * (1 - confidence) / (n_class - 1)
-    one_hot.scatter_(dim=1, index=label, src= confidence)
+    one_hot.scatter_(dim=1, index=label.view(-1,1), value= confidence)
     # compute weighted KL loss 10
     kl = confidence * F.kl_div(input=log_prob, target=one_hot, reduction='none').sum(-1) #(bs)
     return kl

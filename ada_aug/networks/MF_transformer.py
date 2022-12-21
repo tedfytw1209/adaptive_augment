@@ -363,4 +363,5 @@ class Segmentation(nn.Module): #segment data for Transfromer
                     new_x[p] = x_each[x1:x2,:].reshape(-1)
                 tmp_x.append(new_x)
             tmp_x = torch.stack(tmp_x, dim=0).to(x.device)
+        print('segmented shape: ',tmp_x.shape) #!tmp
         return tmp_x, new_seq_lens

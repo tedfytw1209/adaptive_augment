@@ -350,11 +350,12 @@ class Segmentation(nn.Module): #segment data for Transfromer
         new_ch = ch * self.hz
         if seq_lens==None:
             seq_lens = torch.full((bs),slen).long()
-        print('x shape: ',x.shape) #!tmp
+        
         if self.detect_func==None:
             tmp_x = x.reshape(bs,new_len,new_ch)
             new_seq_lens = (seq_lens / self.hz).long() #real len after transform
         else:
+            print('x shape: ',x.shape) #!tmp
             x_single = x[:,:,self.detect_lead].detach().cpu().numpy()
             new_seq_lens = torch.zeros(bs)
             tmp_x = []
@@ -368,5 +369,6 @@ class Segmentation(nn.Module): #segment data for Transfromer
                     new_x[p] = x_each[x1:x2,:].reshape(-1)
                 tmp_x.append(new_x)
             tmp_x = torch.stack(tmp_x, dim=0).to(x.device)
-        print('segmented shape: ',tmp_x.shape) #!tmp
+            print('segmented shape: ',tmp_x.shape) #!tmp
+        
         return tmp_x, new_seq_lens

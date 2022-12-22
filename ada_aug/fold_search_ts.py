@@ -124,7 +124,7 @@ parser.add_argument('--lambda_dist', type=float, default=1.0, help="class distan
 parser.add_argument('--class_sim', action='store_true', default=False, help='class distance use similar or not')
 parser.add_argument('--policy_dist', type=str, default='pwk', help='Assume mags:w,weights:p,(keeplen):k,(thres)')
 parser.add_argument('--noaug_reg', type=str, default='', help='add regular for noaugment ',
-        choices=['reg','creg','wreg','cwreg','pwreg','cpwreg','cdummy',''])
+        choices=['reg','creg','wreg','cwreg','pwreg','cpwreg','cdummy','careg',''])
 parser.add_argument('--noaug_add', type=str, default='', help='add regular for noaugment ',
         choices=['cadd','add','coadd','constadd',''])
 parser.add_argument('--noaug_max', type=float, default=0.5, help='max noaugment regular')
@@ -178,7 +178,7 @@ parser.add_argument('--output_pred', action='store_true', default=False, help='o
 args = parser.parse_args()
 debug = True if args.save == "debug" else False
 if args.k_ops>0:
-    Aug_type = 'AdaAug'
+    Aug_type = 'AdaAug' + args.optim_type
 else:
     Aug_type = 'NOAUG'
 
@@ -560,6 +560,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         if args.class_dist or 'c' in args.noaug_reg or args.noaug_add=='coadd':
             select_output = select_output_source(args.output_source,table_dic,valid_table,search_table)
             self.class_criterion.update_classpair(select_output)
+            class_acc = np.array(select_perfrom_source(args.output_source,train_dic,valid_dic,search_dic,ptype,self.n_class,self.class_noaug))
+            self.class_criterion.update_classperfrom(class_acc)
             if 'embed' in args.class_dist:
                 select_embed = select_embed_source(args.output_source,table_dic,valid_table,search_table)
                 self.class_criterion.update_embed(select_embed)

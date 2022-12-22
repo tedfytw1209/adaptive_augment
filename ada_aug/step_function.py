@@ -461,13 +461,14 @@ def noaug_select(noaug_reg,extra_criterions,noaug_lossw):
         noaug_lossw = torch.from_numpy(extra_criterions[0].classweight_dist).cuda()
         if extra_criterions[0].reverse_w: #similar to 1/w
             noaug_lossw = noaug_lossw.max() / noaug_lossw
-        print('NOAUG regularation class weights',noaug_lossw)
+    elif noaug_reg=='careg':
+        noaug_lossw = torch.from_numpy(extra_criterions[0].class_perfrom_w).cuda()
     elif noaug_reg:
         print('Using NOAUG regularation ',noaug_reg)
         print(noaug_lossw)
         use_noaug_reg = True
     
-    if noaug_reg=='creg' or noaug_reg=='reg':
+    if noaug_reg=='creg' or noaug_reg=='reg' or noaug_reg=='careg':
         noaug_target = 'p'
     elif noaug_reg=='cwreg':
         noaug_target = 'w'
@@ -475,6 +476,8 @@ def noaug_select(noaug_reg,extra_criterions,noaug_lossw):
         noaug_target = 'pw'
     elif noaug_reg=='cdummy':
         noaug_target = 'p'
+    if noaug_reg:
+        print('NOAUG regularation class weights',noaug_lossw)
     return use_noaug_reg, noaug_target, noaug_lossw
 #n_policy select
 def select_npolicy(policy_list,policy_dist='pwk'):

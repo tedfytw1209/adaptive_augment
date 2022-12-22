@@ -76,6 +76,7 @@ parser.add_argument('--cutout_length', type=int, default=16, help='cutout length
 parser.add_argument('--use_cuda', type=bool, default=True, help="use cuda default True")
 parser.add_argument('--use_parallel', type=bool, default=False, help="use data parallel default False")
 parser.add_argument('--model_name', type=str, default='wresnet40_2', help="mode _name")
+parser.add_argument('--seg_ways', type=str, default='fix', help="segment ways for transfromer",choices=['fix','rpeak'])
 parser.add_argument('--num_workers', type=int, default=0, help="num_workers")
 parser.add_argument('--search_dataset', type=str, default='./', help='search dataset name')
 parser.add_argument('--gf_model_name', type=str, default='./', help='gf_model name')
@@ -261,10 +262,14 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             search=False,test_size=args.test_size,multilabel=args.multilabel,default_split=args.default_split,
             fold_assign=train_val_test_folds,labelgroup=args.labelgroup,bal_trsampler=args.train_sampler,
             sampler_alpha=args.alpha)
+        #addition model config
+        add_model_config = {}
+        add_model_config['seg_config'] = {'seg_ways':args.seg_ways, 'rr_method':'pan'}
         #  task model settings
         self.task_model = get_model_tseries(model_name=args.model_name,
                             num_class=n_class,n_channel=n_channel,
-                            use_cuda=True, data_parallel=False,dataset=args.dataset,max_len=max_len)
+                            use_cuda=True, data_parallel=False,dataset=args.dataset,max_len=max_len,
+                            hz=self.sfreq,addition_config=add_model_config)
         #follow ptbxl batchmark!!!
         self.optimizer = torch.optim.AdamW(self.task_model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
         self.scheduler = torch.optim.lr_scheduler.OneCycleLR(self.optimizer, max_lr=args.learning_rate,
@@ -294,7 +299,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         search_n_class = get_num_class(args.search_dataset,args.labelgroup)
         self.gf_model = get_model_tseries(model_name=args.gf_model_name,
                             num_class=search_n_class,n_channel=n_channel,
-                            use_cuda=True, data_parallel=False,dataset=args.dataset)
+                            use_cuda=True, data_parallel=False,dataset=args.dataset,
+                            hz=self.sfreq,addition_config=add_model_config)
         h_input = self.gf_model.fc.in_features
         label_num,label_embed =0,0
         if args.class_adapt and args.class_embed:

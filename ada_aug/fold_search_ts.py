@@ -77,6 +77,7 @@ parser.add_argument('--cutout_length', type=int, default=16, help='cutout length
 parser.add_argument('--use_cuda', type=bool, default=True, help="use cuda default True")
 parser.add_argument('--use_parallel', type=bool, default=False, help="use data parallel default False")
 parser.add_argument('--model_name', type=str, default='wresnet40_2', help="mode _name")
+parser.add_argument('--seg_ways', type=str, default='fix', help="segment ways for transfromer",choices=['fix','rpeak'])
 parser.add_argument('--num_workers', type=int, default=0, help="num_workers")
 parser.add_argument('--k_ops', type=int, default=1, help="number of augmentation applied during training")
 parser.add_argument('--temperature', type=float, default=1.0, help="temperature")
@@ -284,9 +285,13 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             class_target_tensor = torch.tensor([args.class_target]).long()
             self.class_weight = nn.functional.one_hot(class_target_tensor,num_classes=n_class).view(n_class).float() # * n_class
             print('Single class weight for experiment: ',self.class_weight)
+        #addition model config
+        add_model_config = {}
+        add_model_config['seg_config'] = {'seg_ways':args.seg_ways, 'rr_method':'pan'}
         #  model settings
         self.gf_model = get_model_tseries(model_name=args.model_name, num_class=n_class,n_channel=n_channel,
-            use_cuda=True, data_parallel=False,dataset=args.dataset,max_len=max_len)
+            use_cuda=True, data_parallel=False,dataset=args.dataset,max_len=max_len,hz=self.sfreq,
+            addition_config=add_model_config)
         #EMA if needed
         self.ema_model = None
         if args.teach_aug:

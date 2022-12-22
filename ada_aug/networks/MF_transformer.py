@@ -188,7 +188,7 @@ class MF_Transformer(nn.Module): #LSTM for time series
         self.bidir_factor = 1 + int(config['b_dir'])
         self.config = config
         c = copy.deepcopy
-        n_input = config['n_embed'] #not good impl
+        n_input = config['n_embed'] * config['hz'] #not good impl
         d_model = config['n_hidden']
         n_embed = config['n_hidden']
         N = config['n_layers']
@@ -199,6 +199,8 @@ class MF_Transformer(nn.Module): #LSTM for time series
         attn = MultiHeadedAttention(h,d_model)
         ff = PositionwiseFeedForward(d_model,d_ff,drop_p)
         #model: input_embed, pos_embed, atten_model, fc
+        seg_config = config['seg_config']
+        self.segmentation = Segmentation(**seg_config)
         self.input_embed = nn.Linear(n_input, n_embed,bias=False) #linear as embed
         self.position = PositionalEncoding(d_model,drop_p,max_len=max_len)
         self.atten_encoder = Encoder(EncoderLayer(d_model,c(attn),c(ff),drop_p),N)
@@ -225,10 +227,13 @@ class MF_Transformer(nn.Module): #LSTM for time series
         x_shape = x.shape
         if self.input_channels == x_shape[1]:
             x = x.transpose(1, 2) #(bs,ch,len) -> (bs, len, ch)
-        batch_size = x.shape[0] #x=(bs,len,n_hidden)
+        bs, slen, ch = x.shape #x=(bs,len,n_hidden)
+        if seq_lens==None:
+            seq_lens = slen
         #packed_embedded = nn.utils.rnn.pack_padded_sequence(
         #    x, seq_lens.cpu(), batch_first=True)  # seq_len:128 [0]: lenght of each sentence
-        x_embed = self.input_embed(x)
+        seg_x,seg_len = self.segmentation(x,seq_lens)
+        x_embed = self.input_embed(seg_x)
         x_posemd = self.position(x_embed)
         x_encoded = self.atten_encoder(x_posemd)
         #rnn_out, (hidden, cell) = self.lstm(

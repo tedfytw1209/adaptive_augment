@@ -39,9 +39,11 @@ def get_model(model_name='wresnet40_2', num_class=10, n_channel=3, use_cuda=True
             model = model.cuda()
     return model
 
-def get_model_tseries(model_name='lstm', num_class=10, n_channel=3, use_cuda=True, data_parallel=False, dataset='', max_len=5000):
+def get_model_tseries(model_name='lstm', num_class=10, n_channel=3, use_cuda=True, data_parallel=False, dataset='', max_len=5000,hz=100,
+    addition_config={}):
     name = model_name
-    config = {'n_output':num_class,'n_embed':n_channel,'rnn_drop': 0.2,'fc_drop': 0.5,'max_len':max_len}
+    config = {'n_output':num_class,'n_embed':n_channel,'rnn_drop': 0.2,'fc_drop': 0.5,'max_len':max_len,'hz':hz}
+    config.update(addition_config)
     if model_name == 'lstm':
         n_hidden = 128
         model_config = {'n_hidden': n_hidden,

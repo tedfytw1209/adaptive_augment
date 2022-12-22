@@ -1060,7 +1060,7 @@ def search_infer(valid_queue, gf_model, criterion, multilabel=False, n_class=10,
     gf_model.eval()
     confusion_matrix = torch.zeros(n_class,n_class)
     output_matrix = torch.zeros(n_class,n_class).float()
-    embed_matrix = torch.zeros(n_class,256).float() #tmp !!!
+    embed_matrix = torch.zeros(n_class,gf_model.z_dim).float() #tmp !!!
     embed_count = torch.zeros(n_class,1)
     softmax_m = nn.Softmax(dim=1)
     preds = []

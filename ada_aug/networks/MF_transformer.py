@@ -69,7 +69,6 @@ class Encoder(nn.Module):
     
     def forward(self, x, mask=None):
         for (i,layer) in enumerate(self.layers):
-            print('encoder layer: ',i)
             x = layer(x, mask)
         return self.norm(x)
 
@@ -229,7 +228,7 @@ class MF_Transformer(nn.Module): #LSTM for time series
             x = x.transpose(1, 2) #(bs,ch,len) -> (bs, len, ch)
         bs, slen, ch = x.shape #x=(bs,len,n_hidden)
         if seq_lens==None:
-            seq_lens = slen
+            seq_lens = torch.full((bs),slen).long()
         #packed_embedded = nn.utils.rnn.pack_padded_sequence(
         #    x, seq_lens.cpu(), batch_first=True)  # seq_len:128 [0]: lenght of each sentence
         seg_x,seg_len = self.segmentation(x,seq_lens)
@@ -241,8 +240,7 @@ class MF_Transformer(nn.Module): #LSTM for time series
         #out_pad, _out_len = rnn_utils.pad_packed_sequence(rnn_out, batch_first=True)
         features = x_encoded.transpose(1, 2) #change to input shape bs, ch, ts
         if pool:
-            features = self.pool(features) #bs, ch * (1+b_dir) * concat pool
-            features = self.concat_fc(features) #bs, ch
+            features = self.pool_features(features) #bs, ch * (1+b_dir) * concat pool
         return features
 
     def pool_features(self, features):
@@ -331,6 +329,7 @@ class LSTM_ptb(nn.Module): #LSTM for PTBXL
 class Segmentation(nn.Module): #segment data for Transfromer
     def __init__(self, seg_ways='fix', rr_method='pan',pw_len=0.4,tw_len=0.6,hz=100):
         #rr_method: fix, rpeak
+        super().__init__()
         self.seg_ways = seg_ways
         self.rr_method = rr_method
         self.pw_len = pw_len * hz
@@ -350,7 +349,8 @@ class Segmentation(nn.Module): #segment data for Transfromer
         new_len = int(slen / self.hz) #max len after transform
         new_ch = ch * self.hz
         if seq_lens==None:
-            seq_lens = slen
+            seq_lens = torch.full((bs),slen).long()
+        print('x shape: ',x.shape) #!tmp
         if self.detect_func==None:
             tmp_x = x.reshape(bs,new_len,new_ch)
             new_seq_lens = (seq_lens / self.hz).long() #real len after transform

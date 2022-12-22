@@ -454,7 +454,7 @@ class AdaAug_TS(AdaAug):
         if hasattr(self.gf_model, 'lstm'):
             self.gf_model.lstm.train() #!!!maybe for bn is better
         self.h_model.train()
-        a_features = self.gf_model.extract_features(a_imgs)
+        a_features = self.gf_model.extract_features(a_imgs,seq_len)
         ba_features = a_features.reshape(len(images), n_ops_sub, -1) # batch, n_ops(sub), n_hidden
         if mix_feature: #weights with select
             mixed_features = [w.matmul(feat) for w, feat in zip(weights_subset, ba_features)]

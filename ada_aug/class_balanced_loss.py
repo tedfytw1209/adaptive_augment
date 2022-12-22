@@ -343,7 +343,7 @@ class ClassDistLoss(torch.nn.Module):
         self.classweight_dist = np.ones((num_classes))
         self.class_embed_mat = None
         self.class_policy_mat = None
-        self.class_perfrom_w = None
+        self.class_perfrom_w = np.ones((num_classes))
         if '-' in noaug_target:
             self.reverse_w = True
             noaug_target = noaug_target.replace('-','')
@@ -423,7 +423,10 @@ class ClassDistLoss(torch.nn.Module):
         self.class_pairs = torch.from_numpy(class_pairs).long()
         self.updated = True
     def update_classperfrom(self,class_acc):
+        print('Update class perfrom: ') #!
+        print('class ACC: ',class_acc) #!
         self.class_perfrom_w = 1.0 - class_acc
+        print('self.class_perfrom_w: ',self.class_perfrom_w) #!
     def forward(self, logits, targets, sim_targets=None):
         if not self.updated or not self.use_loss:
             return 0

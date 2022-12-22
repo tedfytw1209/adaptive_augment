@@ -560,7 +560,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         if args.class_dist or 'c' in args.noaug_reg or args.noaug_add=='coadd':
             select_output = select_output_source(args.output_source,table_dic,valid_table,search_table)
             self.class_criterion.update_classpair(select_output)
-            class_acc = np.array(select_perfrom_source(args.output_source,train_dic,valid_dic,search_dic,ptype,self.n_class,self.class_noaug))
+            class_acc = np.array(select_perfrom_source(args.output_source,train_dic,valid_dic,search_dic,ptype,self.n_class,True))
             self.class_criterion.update_classperfrom(class_acc)
             if 'embed' in args.class_dist:
                 select_embed = select_embed_source(args.output_source,table_dic,valid_table,search_table)

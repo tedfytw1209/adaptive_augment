@@ -607,6 +607,14 @@ class AdaAug_TS(AdaAug):
         print('class_w for noaug cadd: ',class_w)
         print('new alpha for noaug cadd: ',self.alpha)
         print('new reduce magnitude multi for cadd: ',self.multi_tensor)
+    
+    def update_noaug(self,noaug_alpha,noaug_max=None):
+        self.noaug_alpha = noaug_alpha
+        print('new noaug alpha for noaug cadd: ',self.noaug_alpha)
+        if noaug_max!=None:
+            self.noaug_max = noaug_max
+            self.noaug_tensor = self.noaug_max * F.one_hot(torch.tensor([0]), num_classes=self.n_ops).float()
+            print('new noaug max for cadd: ',self.noaug_max)
 
 class AdaAugkeep_TS(AdaAug):
     def __init__(self, after_transforms, n_class, gf_model, h_model, save_dir=None, visualize=False,

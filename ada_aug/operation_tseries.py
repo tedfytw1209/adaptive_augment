@@ -1426,6 +1426,7 @@ class KeepAugment(object): #need fix
         #print(slc_)
         t_series_ = t_series_.detach().cpu()
         info_region_record = np.zeros((b,seg_number,2))
+        v_score_list = []
         aug_t_s_list = []
         start, end = 0,w
         win_start, win_end = 0,windowed_w
@@ -1445,6 +1446,7 @@ class KeepAugment(object): #need fix
                 aug_t_s_list.append(t_s)
                 continue
             #find region for each segment
+            v_score = 0
             region_list,inforegion_list = [],[]
             for seg_idx in range(seg_number):
                 if self.grid_region:
@@ -1453,6 +1455,7 @@ class KeepAugment(object): #need fix
                 else: #11/09 for quant with different lens with some bug when segment !!!
                     end = min(each_seq_len,end)
                     win_end = min(each_seq_len,win_end)
+                max_score = torch.max(windowed_slc_each[win_start:win_end])
                 quant_score = torch.quantile(windowed_slc_each[win_start:win_end],info_aug)
                 bound_score = torch.quantile(windowed_slc_each[win_start:win_end],info_bound)
                 while(True):
@@ -1463,6 +1466,7 @@ class KeepAugment(object): #need fix
                     reg_mean = slc[x1: x2].mean()
                     if compare_func(reg_mean,quant_score) and bound_func(reg_mean,bound_score):
                         region_list.append([x1,x2])
+                        v_score += reg_mean / max_score
                         break
                 info_region = t_s[x1: x2,:].clone().detach().cpu()
                 inforegion_list.append(info_region)
@@ -1491,12 +1495,14 @@ class KeepAugment(object): #need fix
                 print(f'randam{apply_keep[i]}>{self.keep_prob}')
                 print(f'ops idx{idx} use keep {use_keep}')
             aug_t_s_list.append(t_s)
+            v_score_list.append(v_score/seg_number)
         #back
         if self.mode=='auto':
             model.train()
             for param in model.parameters():
                 param.requires_grad = True
         out = torch.stack(aug_t_s_list, dim=0)
+        v_scores = torch.stack(v_score_list,dim=0)
         info_region_record = torch.from_numpy(info_region_record).long()
         return out, info_region_record
 

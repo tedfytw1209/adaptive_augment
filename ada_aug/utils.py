@@ -20,8 +20,8 @@ sns.set()
 
 def stat_adapt(class_perfrom):
     n_class = len(class_perfrom)
-    class_q1 = np.quantile(class_perfrom,0.1)
-    class_q9 = np.quantile(class_perfrom,0.9)
+    class_q1 = np.quantile(class_perfrom,0.25)
+    class_q9 = np.quantile(class_perfrom,0.75)
     adapt_nomax = 1.0 - class_q1
     adapt_alpha = class_q9 - class_q1
     return adapt_alpha,adapt_nomax

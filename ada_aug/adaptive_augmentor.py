@@ -616,6 +616,13 @@ class AdaAug_TS(AdaAug):
         print('class_w for noaug cadd: ',class_w)
         print('new alpha for noaug cadd: ',self.alpha)
         print('new reduce magnitude multi for cadd: ',self.multi_tensor)
+        n_class = len(class_w)
+        noaug_config = {}
+        noaug_config['noaug_alpha'] = self.noaug_alpha
+        noaug_config['noaug_maxval'] = self.noaug_max
+        for c in range(n_class):
+            noaug_config[f'noaug_add_c{c}'] = self.alpha[0,c]
+        return noaug_config
     
     def update_noaug(self,noaug_alpha=None,noaug_max=None,noaug_bias=0,noaug_way=''):
         self.noaug_way = noaug_way

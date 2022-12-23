@@ -469,6 +469,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         else:
             training = True
         #prevalid iteration per valid
+        noaug_config={}
         if args.prevalid and self._iteration==0:
             print('### Pre Valid gf model for noaug add method:')
             if args.output_source=='train':
@@ -496,7 +497,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 elif args.adaptnoaug=='sigmoid':
                     _,_,adapt_bias,adapt_way = sigmoid_adapt(class_outw,ovr_output)
                     self.adaaug.update_noaug(noaug_bias=adapt_bias,noaug_way=adapt_way)
-                self.adaaug.update_alpha(class_outw)
+                noaug_config = self.adaaug.update_alpha(class_outw)
             elif args.noaug_add=='cadd':
                 class_acc = np.array(select_perfrom_source('gf',gf_dic,{},{},ptype,self.n_class,self.class_noaug))
                 ovr_acc = gf_acc / 100.0
@@ -508,7 +509,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                     self.adaaug.update_noaug(noaug_bias=adapt_bias,noaug_way=adapt_way)
                 class_noaugw = 1.0 - np.power(class_acc,args.noaug_pow)
                 print(f'Noaug add method {args.noaug_add} perfrom class: {class_acc} noaug power: {args.noaug_pow} noaug weight: {class_noaugw}')
-                self.adaaug.update_alpha(class_noaugw)
+                noaug_config = self.adaaug.update_alpha(class_noaugw)
         # training or evaluate training data
         train_acc, train_obj, train_dic, train_table = train(args,
                 self.train_queue, self.task_model, self.criterion, self.optimizer, self.scheduler, Curr_epoch, args.grad_clip, self.adaaug, 
@@ -532,13 +533,14 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 if self.class_criterion.reverse_w:
                     class_outw = 1.0 - class_outw
                     print('reverse weight to ',class_outw)
-                self.adaaug.update_alpha(class_outw)
+                noaug_config = self.adaaug.update_alpha(class_outw)
         if not args.prevalid and (self.adapt_add and not self.use_class_w): #cadd use perfrom
             class_acc = np.array(select_perfrom_source(args.output_source,train_dic,valid_dic,search_dic,ptype,self.n_class,self.class_noaug))
             class_noaugw = 1.0 - np.power(class_acc,args.noaug_pow)
             print(f'Noaug add method {args.noaug_add} perfrom class: {class_acc} noaug power: {args.noaug_pow} noaug weight: {class_noaugw}')
-            self.adaaug.update_alpha(class_noaugw)
+            noaug_config = self.adaaug.update_alpha(class_noaugw)
         self.pre_train_acc = train_acc / 100.0
+        step_dic.update(noaug_config)
         #restore train just for real policy used !!! with problem
         if args.restore and args.output_policy:
             train_acc, train_obj, train_dic, train_table = train(args,

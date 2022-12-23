@@ -505,7 +505,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                     adapt_noauga,adapt_noaugmax,adapt_bias,_ = stat_adapt(class_acc)
                     self.adaaug.update_noaug(adapt_noauga,adapt_noaugmax)
                 elif args.adaptnoaug=='sigmoid':
-                    _,_,adapt_bias,adapt_way = sigmoid_adapt(class_outw,ovr_acc)
+                    _,_,adapt_bias,adapt_way = sigmoid_adapt(class_acc,ovr_acc)
                     self.adaaug.update_noaug(noaug_bias=adapt_bias,noaug_way=adapt_way)
                 class_noaugw = 1.0 - np.power(class_acc,args.noaug_pow)
                 print(f'Noaug add method {args.noaug_add} perfrom class: {class_acc} noaug power: {args.noaug_pow} noaug weight: {class_noaugw}')

@@ -605,7 +605,7 @@ class AdaAug_TS(AdaAug):
         if self.noaug_way=='sigmoid':
             mean_w = class_w.mean()
             std_w = class_w.std()
-            norm_class_w = (class_w - mean_w) / std_w + self.noaug_bias
+            norm_class_w = 2 * (class_w - mean_w) / std_w + self.noaug_bias
             self.alpha = torch.sigmoid(torch.tensor(norm_class_w)).view(1,-1).cuda()
         else:
             self.alpha = self.noaug_alpha * torch.tensor(class_w).view(1,-1).cuda() + self.noaug_bias

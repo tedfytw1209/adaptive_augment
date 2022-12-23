@@ -127,7 +127,7 @@ parser.add_argument('--output_source', type=str, default='', help='class output 
         choices=['train','valid','search','allsearch',''])
 parser.add_argument('--prevalid', action='store_true', default=False, help='use df model to valid first')
 parser.add_argument('--adaptnoaug', type=str, default='', help='class output source',
-        choices=['stat',''])
+        choices=['stat','sigmoid',''])
 #mixup
 parser.add_argument('--mixup', action='store_true', help='mixup benchmark')
 parser.add_argument('--mixup_alpha', type=float, default=1.0, help='mixup parameter')
@@ -479,6 +479,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 n_class=self.n_class,mode='gf',map_select=self.mapselect)
             if args.noaug_add=='coadd':
                 select_output = select_output_source('gf',gf_table,{},{})
+                ovr_output = gf_table['gf_overall_output'] #targeted output
                 self.class_criterion.update_classpair(select_output)
                 class_outw = torch.pow(torch.from_numpy(self.class_criterion.classweight_dist),args.noaug_pow)
                 print(f'Pre Valid Noaug add method {args.noaug_add} noaug power: {args.noaug_pow} weights: {class_outw}')
@@ -490,13 +491,14 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                     class_outw = 1.0 - class_outw
                     print('reverse weight to ',class_outw)
                 if args.adaptnoaug=='stat':
-                    adapt_noauga,adapt_noaugmax = stat_adapt(class_outw)
+                    adapt_noauga,adapt_noaugmax,_ = stat_adapt(class_outw)
                     self.adaaug.update_noaug(adapt_noauga,adapt_noaugmax)
                 self.adaaug.update_alpha(class_outw)
             elif args.noaug_add=='cadd':
                 class_acc = np.array(select_perfrom_source('gf',gf_dic,{},{},ptype,self.n_class,self.class_noaug))
+                ovr_acc = gf_acc / 100.0
                 if args.adaptnoaug=='stat':
-                    adapt_noauga,adapt_noaugmax = stat_adapt(class_acc)
+                    adapt_noauga,adapt_noaugmax,_ = stat_adapt(class_acc)
                     self.adaaug.update_noaug(adapt_noauga,adapt_noaugmax)
                 class_noaugw = 1.0 - np.power(class_acc,args.noaug_pow)
                 print(f'Noaug add method {args.noaug_add} perfrom class: {class_acc} noaug power: {args.noaug_pow} noaug weight: {class_noaugw}')

@@ -213,6 +213,7 @@ def infer(valid_queue, model, criterion, multilabel=False, n_class=10,mode='test
     model.eval()
     confusion_matrix = torch.zeros(n_class,n_class)
     output_matrix = torch.zeros(n_class,n_class).float()
+    overall_output = 0.0
     softmax_m = nn.Softmax(dim=1)
     preds = []
     targets = []
@@ -241,6 +242,7 @@ def infer(valid_queue, model, criterion, multilabel=False, n_class=10,mode='test
                     confusion_matrix[t.long(), p.long()] += 1
                 for i,t in enumerate(target.data.view(-1)):
                     output_matrix[t.long(),:] += soft_out[i]
+                    overall_output += soft_out[i,t.long()] #for that point
                 total += target.size(0)
                 each_pscore = torch.gather(soft_out,1,predicted.cpu().detach().long().view(-1,1))
                 each_tscore = torch.gather(soft_out,1,target.cpu().detach().long().view(-1,1))
@@ -255,6 +257,7 @@ def infer(valid_queue, model, criterion, multilabel=False, n_class=10,mode='test
     #table dic
     table_dic = {}
     table_dic[f'{mode}_output'] = (output_matrix / torch.clamp(output_matrix.sum(dim=1,keepdim=True),min=1e-9))
+    table_dic[f'{mode}_overall_output'] = overall_output / total
     table_dic[f'{mode}_confusion'] = confusion_matrix
     #class-wise
     targets_np = torch.cat(targets).numpy()
@@ -462,6 +465,8 @@ def noaug_select(noaug_reg,extra_criterions,noaug_lossw):
         if extra_criterions[0].reverse_w: #similar to 1/w
             noaug_lossw = noaug_lossw.max() / noaug_lossw
     elif noaug_reg=='careg':
+        print('Using NOAUG regularation ',noaug_reg)
+        use_noaug_reg = True
         noaug_lossw = torch.from_numpy(extra_criterions[0].class_perfrom_w).cuda()
     elif noaug_reg:
         print('Using NOAUG regularation ',noaug_reg)

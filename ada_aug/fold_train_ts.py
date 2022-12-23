@@ -28,7 +28,7 @@ from class_balanced_loss import ClassBalLoss,ClassDiffLoss,ClassDistLoss,make_cl
 from softaug import Soft_Criterion
 import wandb
 import copy
-from utils import plot_conf_wandb, select_output_source, select_embed_source, select_perfrom_source, stat_adapt
+from utils import plot_conf_wandb, select_output_source, select_embed_source, select_perfrom_source, stat_adapt, sigmoid_adapt
 import ray
 import ray.tune as tune
 from ray.tune.integration.wandb import WandbTrainableMixin
@@ -491,15 +491,21 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                     class_outw = 1.0 - class_outw
                     print('reverse weight to ',class_outw)
                 if args.adaptnoaug=='stat':
-                    adapt_noauga,adapt_noaugmax,_ = stat_adapt(class_outw)
+                    adapt_noauga,adapt_noaugmax,adapt_bias,_ = stat_adapt(class_outw)
                     self.adaaug.update_noaug(adapt_noauga,adapt_noaugmax)
+                elif args.adaptnoaug=='sigmoid':
+                    _,_,adapt_bias,adapt_way = sigmoid_adapt(class_outw,ovr_output)
+                    self.adaaug.update_noaug(noaug_bias=adapt_bias,noaug_way=adapt_way)
                 self.adaaug.update_alpha(class_outw)
             elif args.noaug_add=='cadd':
                 class_acc = np.array(select_perfrom_source('gf',gf_dic,{},{},ptype,self.n_class,self.class_noaug))
                 ovr_acc = gf_acc / 100.0
                 if args.adaptnoaug=='stat':
-                    adapt_noauga,adapt_noaugmax,_ = stat_adapt(class_acc)
+                    adapt_noauga,adapt_noaugmax,adapt_bias,_ = stat_adapt(class_acc)
                     self.adaaug.update_noaug(adapt_noauga,adapt_noaugmax)
+                elif args.adaptnoaug=='sigmoid':
+                    _,_,adapt_bias,adapt_way = sigmoid_adapt(class_outw,ovr_acc)
+                    self.adaaug.update_noaug(noaug_bias=adapt_bias,noaug_way=adapt_way)
                 class_noaugw = 1.0 - np.power(class_acc,args.noaug_pow)
                 print(f'Noaug add method {args.noaug_add} perfrom class: {class_acc} noaug power: {args.noaug_pow} noaug weight: {class_noaugw}')
                 self.adaaug.update_alpha(class_noaugw)

@@ -310,6 +310,7 @@ class AdaAug_TS(AdaAug):
         self.wide_delta = self.config.get('wide_delta',False)
         self.train_bn = train_bn
         self.noaug_way = ''
+        self.noaug_bias = 0
         if self.wide_delta:
             self.delta_func = perturb_param_wide
         else:
@@ -604,10 +605,11 @@ class AdaAug_TS(AdaAug):
         if self.noaug_way=='sigmoid':
             mean_w = class_w.mean()
             std_w = class_w.std()
-            norm_class_w = (class_w - mean_w) / std_w
+            norm_class_w = (class_w - mean_w) / std_w + self.noaug_bias
             self.alpha = torch.sigmoid(torch.tensor(norm_class_w)).view(1,-1).cuda()
         else:
-            self.alpha = self.noaug_alpha * torch.tensor(class_w).view(1,-1).cuda()
+            self.alpha = self.noaug_alpha * torch.tensor(class_w).view(1,-1).cuda() + self.noaug_bias
+            self.alpha = torch.clamp(self.alpha,min=0.0,max=1.0)
         #tmp disable
         if self.max_noaug_reduce > 0: #weight bigger noaug bigger
             self.multi_tensor = ((1.0 - self.max_noaug_reduce * torch.tensor(class_w).view(1,-1)) * torch.ones(1,self.n_class).float()).cuda()
@@ -615,8 +617,11 @@ class AdaAug_TS(AdaAug):
         print('new alpha for noaug cadd: ',self.alpha)
         print('new reduce magnitude multi for cadd: ',self.multi_tensor)
     
-    def update_noaug(self,noaug_alpha=None,noaug_max=None,noaug_way=''):
+    def update_noaug(self,noaug_alpha=None,noaug_max=None,noaug_bias=0,noaug_way=''):
         self.noaug_way = noaug_way
+        if noaug_bias!=0:
+            self.noaug_bias = noaug_bias
+            print('new noaug bias for noaug cadd: ',self.noaug_bias)
         if noaug_alpha!=None:
             self.noaug_alpha = noaug_alpha
             print('new noaug alpha for noaug cadd: ',self.noaug_alpha)

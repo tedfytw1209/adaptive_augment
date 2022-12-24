@@ -24,6 +24,7 @@ class BaseDataset(Dataset):
         self.input_data = None
         self.label = None
         self.max_len = 100
+        self.preprocessor = []
 
     def __len__(self):
         return self.input_data.shape[0]
@@ -50,6 +51,7 @@ class BaseDataset(Dataset):
             preprocessor.fit(np.vstack(self.input_data[indexs]).flatten()[:,np.newaxis].astype(float))
         else:
             preprocessor.fit(np.vstack(self.input_data).flatten()[:,np.newaxis].astype(float))
+        self.preprocessor = [preprocessor]
         return preprocessor
     def trans_preprocess(self,preprocessor):
         self.input_data = apply_standardizer(self.input_data,preprocessor)

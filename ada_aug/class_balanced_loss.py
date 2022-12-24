@@ -266,21 +266,41 @@ def confidence(c,class_output):
 def wasserstein_loss(y_true, y_pred): 
     #smaller when two distribution different, minus if need make distribution similar
     return torch.mean(y_true * y_pred)
-def wass_loss(logits,targets,target_pair,class_output):
-    soft_logits = logits.softmax(dim=1)
-    pairs_label = target_pair[targets.detach().cpu()] #(batch, k)
+def wass_loss(logits,targets,target_pair,class_output,sim_target=None,embed=False,policy=False):
     loss = 0
-    for e_k in range(pairs_label.shape[1]):
-        target_output = class_output[pairs_label[:,e_k].view(-1)].to(soft_logits.device) #(batch, n_class)
-        print(target_output.shape)
+    if torch.is_tensor(sim_target): #only for embed simliar class distance
+        each_loss = wasserstein_loss(sim_target,logits) #smaller more different
+        loss += each_loss
+    elif policy: #class_output: (n_class,policy)
+        bs, n_policy = logits.shape
+        n_class = class_output.shape[0]
+        soft_logits = logits
+        #target_output = class_output.view(1,n_policy).expand(bs, -1).to(soft_logits.device) #same for every sample (n_hidden) -> (bs, n_hidden)
+        target_output = ((class_output.sum(0).view(1,n_policy) - class_output[targets.detach().cpu()]) / (n_class-1)).to(soft_logits.device) #(bs, n_hidden)
+        #print('target ouput shape: ',target_output.shape) #!tmp
+        #print('soft logits sample: ',soft_logits[0]) #!tmp
+        #print('target logits sample: ',target_output[0]) #!tmp
         each_loss = wasserstein_loss(target_output,soft_logits) #smaller more different
         loss += each_loss
+    else:
+        if embed:
+            soft_logits = logits
+        else:
+            soft_logits = logits.softmax(dim=1)
+        #print('soft logits: ',soft_logits) #!tmp
+        pairs_label = target_pair[targets.detach().cpu()] #(batch, k)
+        #print(f'class {targets} pair with {pairs_label}') #!tmp
+        for e_k in range(pairs_label.shape[1]):
+            target_output = class_output[pairs_label[:,e_k].view(-1)].to(soft_logits.device) #(batch, n_class)
+            #print('target logits: ',target_output) #!tmp
+            each_loss = wasserstein_loss(target_output,soft_logits) #smaller more different
+            loss += each_loss
 
     return loss
-def confidence_loss(logits,targets,target_pair,class_output):
+def confidence_loss(logits,targets,target_pair,class_output,sim_target=None):
     n_class = class_output.shape[0]
     soft_logits = logits.softmax(dim=1) #(batch, n_class)
-    pairs_label = target_pair[targets.detach().cpu()].to(soft_logits.device) #(batch, k)
+    pairs_label = target_pair[targets.detach().cpu()].to(soft_logits.device) #(batch, k) #!!!may have bug
     mask = torch.zeros(*logits.size()).to(soft_logits.device) #(batch, n_class)
     mask.scatter_(1, pairs_label, 1)
     loss = 0
@@ -292,10 +312,23 @@ def confidence_loss(logits,targets,target_pair,class_output):
     return loss
 
 class ClassDistLoss(torch.nn.Module):
-    def __init__(self, distance_func='conf',loss_choose='conf',init_k=3,lamda=1.0):
+    def __init__(self, distance_func='conf',loss_choose='conf',similar=False,init_k=3,lamda=1.0,num_classes=10,use_loss=True,
+        noaug_target='se'):
         super().__init__()
-        self.distance_func = distance_func
-        self.loss_choose = loss_choose
+        self.loss_target = 'output' #['output','embed','policy']
+        if '_' in distance_func:
+            self.loss_target = distance_func.split('_')[0]
+            self.distance_func = distance_func.split('_')[1]
+        else:
+            self.distance_func = distance_func
+        if '_' in loss_choose:
+            self.loss_choose = loss_choose.split('_')[1]
+        else:
+            self.loss_choose = loss_choose
+        print('loss_target: ',self.loss_target)
+        print('distance_func: ',self.distance_func)
+        print('loss choose: ',self.loss_choose)
+        self.similar = similar
         self.class_output_mat = None
         self.classpair_dist = []
         self.class_pairs = None
@@ -303,6 +336,20 @@ class ClassDistLoss(torch.nn.Module):
         self.fill_value = 1e6
         self.updated = False
         self.lamda = lamda
+        self.num_classes = num_classes
+        self.use_loss = use_loss
+        #distance / weight init
+        self.classpair_dist = np.ones((num_classes,num_classes))
+        self.classweight_dist = np.ones((num_classes))
+        self.class_embed_mat = None
+        self.class_policy_mat = None
+        self.class_perfrom_w = np.ones((num_classes))
+        if '-' in noaug_target:
+            self.reverse_w = True
+            noaug_target = noaug_target.replace('-','')
+        else:
+            self.reverse_w = False
+        self.noaug_target = noaug_target
 
     def update_distance(self,class_output_mat): #(n_class,n_class)
         self.classpair_dist = []
@@ -313,6 +360,9 @@ class ClassDistLoss(torch.nn.Module):
             cuc_func = wass
         elif self.distance_func=='conf':
             cuc_func = confidence
+        else:
+            print('Unknown distance_func ',self.distance_func)
+            raise
         for c in range(n_class):
             if class_output_mat[c].sum()==0:
                 line = np.full(n_class, self.fill_value)
@@ -320,29 +370,93 @@ class ClassDistLoss(torch.nn.Module):
             self.classpair_dist.append(line)
         self.classpair_dist = np.array(self.classpair_dist)
         return self.classpair_dist
-    
+    #update embed
+    def update_embed(self,class_embed_mat):
+        self.class_embed_mat = class_embed_mat
+        print('Update embed shape: ',class_embed_mat.shape)
+        return self.class_embed_mat
+    #policy mat
+    def update_policy(self,class_policy_mat):
+        self.class_policy_mat = class_policy_mat
+        print('Update policy shape: ',class_policy_mat.shape, class_policy_mat)
+        return self.class_policy_mat
+    #for loss weight
+    def update_weight(self,class_output_mat):
+        '''
+        Add noaug regular weight for:
+        (1) self output low perfromance (s) (2) easy be predict (e)
+        '''
+        classweight_dist = []
+        n_class = class_output_mat.shape[0]
+        print(f'Class similar/noaug weight(more means more noaug) update')
+        for c in range(n_class):
+            c_output = class_output_mat[c,c] #0~1
+            c_been_output = (class_output_mat[:,c].sum() - c_output) + 1e-2 #0~1 + smooth
+            c_noaug_weight = 0
+            if 's' in self.noaug_target:
+                c_noaug_weight += 1.0-c_output
+            if 'e' in self.noaug_target:
+                c_noaug_weight += c_been_output
+            #c_noaug_weight = (1.0-c_output) + c_been_output
+            classweight_dist.append(c_noaug_weight)
+            print(f'Class {c} similar/noaug weight: c perfrom: {1.0-c_output}, c been output: {c_been_output}, total: {c_noaug_weight}')
+        self.classweight_dist = np.array(classweight_dist)
+        return self.classweight_dist
     def update_classpair(self,class_output_mat):
         n_class = class_output_mat.shape[0]
         self.update_distance(class_output_mat)
+        self.update_weight(class_output_mat)
         self.class_output_mat = class_output_mat
-        print(self.class_output_mat)
+        #print('### updating class distance pair ###')
+        #print(self.class_output_mat)
+        #print(self.classpair_dist)
+        #print(self.classweight_dist)
         #min distance
         class_pairs = np.zeros((n_class,self.k))
         for c in range(n_class): #tmp use min distance
             pair_dists = np.minimum(self.classpair_dist[c,:], self.classpair_dist[:,c])
             sorted_dist = np.argsort(pair_dists)
-            class_pairs[c] = sorted_dist[1:self.k+1] #top k
+            if self.k > 0:
+                class_pairs[c] = sorted_dist[1:self.k+1] #top k
+            else:
+                class_pairs[c] = sorted_dist[1:] #use all
         self.class_pairs = torch.from_numpy(class_pairs).long()
         self.updated = True
-        
-    def forward(self, logits, targets):
-        if not self.updated:
+    def update_classperfrom(self,class_acc):
+        print('Update class perfrom: ') #!
+        print('class ACC: ',class_acc) #!
+        self.class_perfrom_w = 1.0 - class_acc
+        print('self.class_perfrom_w: ',self.class_perfrom_w) #!
+    def forward(self, logits, targets, sim_targets=None):
+        if not self.updated or not self.use_loss:
             return 0
-        if self.distance_func=='wass':
+        #loss type
+        if self.loss_choose=='wass':
             loss_func = wass_loss
-        elif self.distance_func=='conf':
+        elif self.loss_choose=='conf':
             loss_func = confidence_loss
-        classdist_loss = loss_func(logits,targets,self.class_pairs,self.class_output_mat) * self.lamda
+        else:
+            print('Unknown loss_choose ',self.loss_choose)
+            raise
+        #output / embedding as matrix
+        add_kwargs = {}
+        if self.loss_target=='output':
+            class_out_mat = self.class_output_mat
+        elif self.loss_target=='embed':
+            class_out_mat = self.class_embed_mat
+            add_kwargs['embed'] = True
+        elif self.loss_target=='policy':
+            class_out_mat = self.class_policy_mat
+            add_kwargs['policy'] = True
+        else:
+            print('Unknown distance target choose ',self.loss_choose)
+            raise
+        #calculate
+        classdist_loss = loss_func(logits,targets,self.class_pairs,class_out_mat,**add_kwargs) * self.lamda
+        print('difference loss: ',classdist_loss) #!tmp
+        if self.similar and torch.is_tensor(sim_targets):
+            classdist_loss -= loss_func(logits,targets,self.class_pairs,class_out_mat,sim_target=sim_targets,**add_kwargs) * self.lamda
+            print('similar loss: ',classdist_loss) #!tmp
         return classdist_loss
 
 #train class weight loss

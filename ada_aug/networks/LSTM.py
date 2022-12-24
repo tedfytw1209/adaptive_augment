@@ -126,7 +126,7 @@ class LSTM_ptb(nn.Module): #LSTM for PTBXL
         
         if seq_lens!=None:
             packed_embedded = nn.utils.rnn.pack_padded_sequence(
-                x, seq_lens.cpu(), batch_first=True)  # seq_len:128 [0]: lenght of each sentence
+                x, seq_lens.cpu(), batch_first=True,enforce_sorted=False)  # seq_len:128 [0]: lenght of each sentence
         else:
             packed_embedded = x
         rnn_out, (hidden, cell) = self.lstm(

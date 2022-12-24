@@ -17,6 +17,73 @@ import wandb
 from sklearn.utils.class_weight import compute_sample_weight
 
 sns.set()
+
+def sigmoid_adapt(class_perfrom,overall_perfrom):
+    n_class = len(class_perfrom)
+    macro_perfrom = np.mean(class_perfrom)
+    adapt_add= np.clip(overall_perfrom - macro_perfrom,0,1) - 1.0
+    print('adapt_add: ',adapt_add) #!
+    adapt_nomax = None
+    adapt_alpha = None
+    noaug_way = 'sigmoid'
+    return adapt_alpha,adapt_nomax,adapt_add,noaug_way
+
+def stat_adapt(class_perfrom):
+    n_class = len(class_perfrom)
+    class_q1 = np.quantile(class_perfrom,0.25)
+    class_q9 = np.quantile(class_perfrom,0.75)
+    adapt_nomax = 1.0 - class_q1
+    adapt_alpha = class_q9 - class_q1
+    adapt_add = 0
+    noaug_way = ''
+    return adapt_alpha,adapt_nomax,adapt_add,noaug_way
+
+def select_perfrom_source(output_source,train_table,valid_table,search_table,ptype,n_class,class_noaug=False):
+    if output_source=='':
+        print('No specify output source, use train')
+        output_source = 'train'
+    mode = output_source
+    if output_source=='allsearch':
+        tmp_dic = search_table
+        mode = 'search'
+    else:
+        tmp_dic = {}
+        tmp_dic.update(train_table)
+        tmp_dic.update(valid_table)
+    print('out source: ',output_source,'out dic keys: ',sorted(tmp_dic))
+    overall_acc = tmp_dic[f'{mode}_{ptype}_avg']
+    class_acc = overall_acc / 100.0
+    if class_noaug: #use train perfromance as noaug reg
+        class_acc = [tmp_dic[f'{mode}_{ptype}_c{i}'] / 100.0 for i in range(n_class)]
+    
+    return class_acc
+
+def select_output_source(output_source,train_table,valid_table,search_table):
+    output = None
+    out_key = '%s_output'
+    if output_source=='allsearch':
+        output = search_table['search_output']
+    else:
+        tmp_dic = {}
+        tmp_dic.update(train_table)
+        tmp_dic.update(valid_table)
+        output = tmp_dic[out_key%output_source]
+    
+    return output
+
+def select_embed_source(output_source,train_table,valid_table,search_table):
+    output = None
+    out_key = '%s_embed'
+    if output_source=='allsearch':
+        output = search_table['search_embed']
+    else:
+        tmp_dic = {}
+        tmp_dic.update(train_table)
+        tmp_dic.update(valid_table)
+        output = tmp_dic[out_key%output_source]
+    
+    return output
+
 def plot_conf_wandb(confusion,title,class_names=None):
     n_classes = confusion.shape[0]
     if class_names==None:
@@ -76,9 +143,33 @@ def mAP_cw(targs, preds):
             ap[k] = average_precision_score(targets,scores)
     return 100 * ap
 
+def mixup_data(x, y, alpha=1.0, use_cuda=True):
+    '''Returns mixed inputs, pairs of targets, and lambda'''
+    if alpha > 0:
+        lam = np.random.beta(alpha, alpha)
+    else:
+        lam = 0.5
+    batch_size = x.size()[0]
+    if use_cuda:
+        index = torch.randperm(batch_size).cuda()
+    else:
+        index = torch.randperm(batch_size)
+    mixed_x = lam * x + (1 - lam) * x[index, :]
+    y_a, y_b = y, y[index]
+    return mixed_x, y_a, y_b, lam
+
+def mixup_aug(x_aug, x_ori, alpha=1.0):
+    '''Returns mixed inputs, pairs of targets, and lambda'''
+    if alpha > 0:
+        lam = np.random.beta(alpha, alpha)
+    else:
+        lam = 0.5
+    mixed_x = lam * x_aug + (1 - lam) * x_ori
+    return mixed_x
+
 def make_weights_for_balanced_classes(labels, nclasses,alpha=1.0):                        
     #np ways
-    count = np.array([np.count_nonzero(labels == i) for i in range(nclasses)]) + 1 #smooth
+    count = np.array([np.count_nonzero(labels == i) for i in range(nclasses)]) #11/9 del smooth
     weight_per_class = [0.] * nclasses                                      
     N = float(np.sum(count))
     for i in range(nclasses):
@@ -98,7 +189,7 @@ def make_weights_for_balanced_classes(labels, nclasses,alpha=1.0):
 
 def make_weights_for_balanced_classes_maxrel(labels, nclasses,alpha=1.0):                        
     #np ways
-    count = np.array([np.count_nonzero(labels == i) for i in range(nclasses)]) + 1 #smooth
+    count = np.array([np.count_nonzero(labels == i) for i in range(nclasses)]) #11/9 del smooth
     weight_per_class = [0.] * nclasses                                      
     N = np.max(count)
     for i in range(nclasses):
@@ -122,9 +213,19 @@ def save_ckpt(model, optimizer, scheduler, epoch, model_path):
                 'optimizer': optimizer.state_dict(), 
                 'scheduler': scheduler.state_dict()}, model_path)
 
+def save_pred(target, pred, model_path, col_names = ['target','predict']):
+    if len(target.shape)>1 and target.shape[1]>1: #multilabel
+        col_names = ['target_'+str(i) for i in range(target.shape[1])] + ['predict_'+str(i) for i in range(target.shape[1])]
+    else:
+        target = target.reshape((-1,1))
+        pred = pred.reshape((-1,1))
+    out_np = np.concatenate((target,pred),axis=1)
+    out_data = pd.DataFrame(out_np,columns=col_names)
+    out_data.to_csv(model_path)
 
 def restore_ckpt(model, optimizer, scheduler, model_path, location):
-    state = torch.load(model_path, map_location=f'cuda:{location}')
+    #state = torch.load(model_path, map_location=f'cuda:{location}')
+    state = torch.load(model_path)
     model.load_state_dict(state['model'], strict=True)
     optimizer.load_state_dict(state['optimizer'])
     scheduler.load_state_dict(state['scheduler'])
@@ -213,29 +314,29 @@ class PolicyHistory(object):
 
         frames = []
         for i, file in enumerate(mag_file_list):
-            df = pd.read_csv(file).dropna()
-            df['class'] = file.split('/')[-1][:-4].split('_')[0]
-            frames.append(df.tail(1))
+            df_mag = pd.read_csv(file).dropna()
+            df_mag['class'] = file.split('/')[-1][:-4].split('_')[0]
+            frames.append(df_mag.tail(1))
 
-        df = pd.concat(frames)
-        df.set_index('class').plot(ax=axes, kind='bar', stacked=True, legend=False, rot=90, fontsize=8)
+        df_mag = pd.concat(frames)
+        df_mag.set_index('class').plot(ax=axes, kind='bar', stacked=True, legend=False, rot=90, fontsize=8)
         axes.set_ylabel("magnitude")
         plt.savefig(f'{PATH}/policy/magnitude_by_class.png')
         
         f, axes = plt.subplots(1, 1, figsize=(7,5))
         frames = []
         for i, file in enumerate(weights_file_list):
-            df = pd.read_csv(file).dropna()
-            df['class'] = file.split('/')[-1][:-4].split('_')[0].split('(')[1][:-1]
-            frames.append(df.tail(1))
+            df_w = pd.read_csv(file).dropna()
+            df_w['class'] = file.split('/')[-1][:-4].split('_')[0].split('(')[1][:-1]
+            frames.append(df_w.tail(1))
 
-        df = pd.concat(frames)   
-        df.set_index('class').plot(ax=axes, kind='bar', stacked=True, legend=False, rot=90, fontsize=8)
+        df_w = pd.concat(frames)   
+        df_w.set_index('class').plot(ax=axes, kind='bar', stacked=True, legend=False, rot=90, fontsize=8)
         axes.set_ylabel("probability")
         axes.set_xlabel("")
         plt.savefig(f'{PATH}/policy/probability_by_class.png')
         
-        return f
+        return f, (df_mag, df_w)
 
 class PolicyHistoryKeep(object):
 
@@ -347,22 +448,22 @@ class PolicyHistoryKeep(object):
         f, axes = plt.subplots(1, 1, figsize=(7,5))
         frames = []
         for i, file in enumerate(mag_file_list):
-            df = pd.read_csv(file).dropna()
-            df['class'] = file.split('/')[-1][:-4].split('_')[0]
-            frames.append(df.tail(1))
-        df = pd.concat(frames)
-        df.set_index('class').plot(ax=axes, kind='bar', stacked=True, legend=False, rot=90, fontsize=8)
+            df_mag = pd.read_csv(file).dropna()
+            df_mag['class'] = file.split('/')[-1][:-4].split('_')[0]
+            frames.append(df_mag.tail(1))
+        df_mag = pd.concat(frames)
+        df_mag.set_index('class').plot(ax=axes, kind='bar', stacked=True, legend=False, rot=90, fontsize=8)
         axes.set_ylabel("magnitude")
         plt.savefig(f'{PATH}/policy/magnitude_by_class.png')
         #probability
         f, axes = plt.subplots(1, 1, figsize=(7,5))
         frames = []
         for i, file in enumerate(weights_file_list):
-            df = pd.read_csv(file).dropna()
-            df['class'] = file.split('/')[-1][:-4].split('_')[0].split('(')[1][:-1]
-            frames.append(df.tail(1))
-        df = pd.concat(frames)   
-        df.set_index('class').plot(ax=axes, kind='bar', stacked=True, legend=False, rot=90, fontsize=8)
+            df_w = pd.read_csv(file).dropna()
+            df_w['class'] = file.split('/')[-1][:-4].split('_')[0].split('(')[1][:-1]
+            frames.append(df_w.tail(1))
+        df_w = pd.concat(frames)   
+        df_w.set_index('class').plot(ax=axes, kind='bar', stacked=True, legend=False, rot=90, fontsize=8)
         axes.set_ylabel("probability")
         axes.set_xlabel("")
         plt.savefig(f'{PATH}/policy/probability_by_class.png')
@@ -370,11 +471,11 @@ class PolicyHistoryKeep(object):
         f, axes = plt.subplots(1, 1, figsize=(7,5))
         frames = []
         for i, file in enumerate(keeplens_file_list):
-            df = pd.read_csv(file).dropna()
-            df['class'] = file.split('/')[-1][:-4].split('_')[0].split('(')[1][:-1]
-            frames.append(df.tail(1))
-        df = pd.concat(frames)   
-        df.set_index('class').plot(ax=axes, kind='bar', stacked=True, legend=False, rot=90, fontsize=8)
+            df_klen = pd.read_csv(file).dropna()
+            df_klen['class'] = file.split('/')[-1][:-4].split('_')[0].split('(')[1][:-1]
+            frames.append(df_klen.tail(1))
+        df_klen = pd.concat(frames)   
+        df_klen.set_index('class').plot(ax=axes, kind='bar', stacked=True, legend=False, rot=90, fontsize=8)
         axes.set_ylabel("keeplen")
         axes.set_xlabel("")
         plt.savefig(f'{PATH}/policy/keeplen_by_class.png')
@@ -382,14 +483,14 @@ class PolicyHistoryKeep(object):
         f, axes = plt.subplots(1, 1, figsize=(7,5))
         frames = []
         for i, file in enumerate(keepthres_file_list):
-            df = pd.read_csv(file).dropna()
-            df['class'] = file.split('/')[-1][:-4].split('_')[0]
-            frames.append(df.tail(1))
-        df = pd.concat(frames)
-        df.set_index('class').plot(ax=axes, kind='bar', stacked=True, legend=False, rot=90, fontsize=8)
+            df_thre = pd.read_csv(file).dropna()
+            df_thre['class'] = file.split('/')[-1][:-4].split('_')[0]
+            frames.append(df_thre.tail(1))
+        df_thre = pd.concat(frames)
+        df_thre.set_index('class').plot(ax=axes, kind='bar', stacked=True, legend=False, rot=90, fontsize=8)
         axes.set_ylabel("keepthres")
         plt.savefig(f'{PATH}/policy/keepthres_by_class.png')
-        return f
+        return f , (df_mag,df_w,df_klen,df_thre)
 
 class AvgrageMeter(object):
 
@@ -472,6 +573,7 @@ def create_exp_dir(path, scripts_to_save=None):
 
 
 def reproducibility(seed):
+    #os.environ['PYTHONHASHSEED'] = str(seed)
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -479,4 +581,11 @@ def reproducibility(seed):
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
+    #torch.backends.cudnn.enabled = False
     torch.autograd.set_detect_anomaly(True)
+
+def seed_worker(worker_id): #for dataloader worker
+    worker_seed = torch.initial_seed() % 2**32
+    np.random.seed(worker_seed)
+    random.seed(worker_seed)
+

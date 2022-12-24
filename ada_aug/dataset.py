@@ -7,7 +7,7 @@ from torchvision import transforms
 from datasets import EDFX,PTBXL,Chapman,WISDM,ICBEB,Georgia
 import random
 from sklearn.preprocessing import StandardScaler
-from utils import make_weights_for_balanced_classes,make_weights_for_balanced_classes_maxrel
+from utils import make_weights_for_balanced_classes,make_weights_for_balanced_classes_maxrel,seed_worker
 
 _CIFAR_MEAN, _CIFAR_STD = (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)
 _SVHN_MEAN, _SVHN_STD = (0.43090966, 0.4302428, 0.44634357), (0.19652855, 0.19832038, 0.19942076)
@@ -307,7 +307,7 @@ def get_dataloaders(dataset, batch, num_workers, dataroot, cutout,
 def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
                     cutout_length, split=0.5, split_idx=0, target_lb=-1,
                     search=True, search_divider=1, search_size=0, test_size=0.2, multilabel=False,
-                    default_split=False,fold_assign=[], labelgroup='',
+                    default_split=False,fold_assign=[], labelgroup='',valid_search=False,
                     bal_ssampler='',bal_trsampler='',sampler_alpha=1.0):
     '''
     If search is True, dataloader will give batches of image without after_transforms,
@@ -349,7 +349,7 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
             kwargs['labelgroup']=labelgroup
     else:
         ValueError(f'Invalid dataset name={dataset}')
-    
+    ss = None
     if (not default_split or dataset_name=='chapman') and len(fold_assign)==0: #chapman didn't have default split now!!!
         dataset = dataset_func(dataroot,multilabel=multilabel,**kwargs)
         total = len(dataset)
@@ -399,16 +399,36 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
     counts_array = np.asarray((unique, counts)).T
     print(counts_array)
     #make search validation set by StratifiedShuffleSplit
+    too_minor_class = unique[counts < 2] #11/09 change for minor class
     total = len(search_trainset)
-    rd_idxs = [i for i in range(total)]
-    if search_size > 0:
-        if not multilabel and counts.min()>=2: #multilabel can't, label<2 can't
+    rd_idxs,too_minor_sample = [],[]
+    label_for_split = []
+    for i in range(total):
+        if search_trainset.label[i] in too_minor_class:
+            too_minor_sample.append(i)
+        else:
+            rd_idxs.append(i)
+            label_for_split.append(search_trainset.label[i])
+    #rd_idxs = [i for i in range(total)]
+    #valid as search
+    if valid_search:
+        print('Using valid set as search')
+        search_dataset = validset
+        total_trainset = search_trainset
+        print(f'Train len: {len(total_trainset)},Search len: {len(validset)}')
+    elif search_size > 0:
+        print(f'Split search set of {search_size} search_trainset')
+        if not multilabel: #multilabel can't, label<2 can't
             sss = StratifiedShuffleSplit(n_splits=5, test_size=search_size, random_state=0)
-            sss = sss.split(list(rd_idxs), search_trainset.label)
+            sss = sss.split(list(rd_idxs), label_for_split)
         else:
             sss = ShuffleSplit(n_splits=5, test_size=search_size, random_state=0)
             sss = sss.split(list(rd_idxs))
         tot_train_idx, search_idx = next(sss)
+        too_minor_sample = np.array(too_minor_sample).astype(int)
+        tot_train_idx = np.concatenate((tot_train_idx,too_minor_sample)).astype(int) #add back minor sample, 11/09
+        print(tot_train_idx)
+        print(search_idx)
         print(f'Train len: {len(tot_train_idx)},Search len: {len(search_idx)}')
         search_labels = np.array([search_trainset.label[idx] for idx in search_idx])
         search_dataset = Subset(search_trainset,search_idx)
@@ -419,10 +439,10 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
     else:
         search_dataset = None
         total_trainset = search_trainset
-            
+    
     #make train/valid split
     train_sampler = None
-    if split < 1.0 and validset==None: 
+    if split < 1.0 and validset==None:
         if not multilabel: #multilabel can't
             sss = StratifiedShuffleSplit(n_splits=5, test_size=1-split, random_state=0)
             sss = sss.split(list(range(len(total_trainset))), total_trainset.label)
@@ -452,12 +472,17 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
     if bal_trsampler=='weight':
         tr_weights = make_weights_for_balanced_classes(train_data.dataset.label,nclasses=num_class,alpha=sampler_alpha)
         train_sampler = torch.utils.data.sampler.WeightedRandomSampler(tr_weights, len(tr_weights))
-        print('train sampler: ',train_sampler) #!
+        print('train sampler with weight: ',tr_weights) #!
     elif bal_trsampler=='wmaxrel': #bal_ssampler=='wmaxrel':
         tr_weights = make_weights_for_balanced_classes_maxrel(train_data.dataset.label,nclasses=num_class,alpha=sampler_alpha)
         train_sampler = torch.utils.data.sampler.WeightedRandomSampler(tr_weights, len(tr_weights))
-        print('train sampler: ',train_sampler) #!
-    
+        print('train sampler with weight',tr_weights) #!
+    else:
+        print('normal train sampler')
+    #worker seed for multi worker 12/08
+    g = torch.Generator()
+    g.manual_seed(0)
+    #data loader
     if train_sampler is None:
         trainloader = torch.utils.data.DataLoader(
             train_data, batch_size=batch, shuffle=True,
@@ -470,7 +495,7 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
             pin_memory=True, num_workers=num_workers)
 
     validloader = torch.utils.data.DataLoader(
-        valid_data, batch_size=batch,
+        valid_data, batch_size=batch,shuffle=False,
         sampler=valid_sampler, drop_last=False,
         pin_memory=True, num_workers=num_workers)
 
@@ -480,15 +505,17 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
             se_sampler = torch.utils.data.sampler.WeightedRandomSampler(se_weights, len(se_weights))
             tr_weights = make_weights_for_balanced_classes(train_data.dataset.label,nclasses=num_class,alpha=sampler_alpha)
             tr_sampler = torch.utils.data.sampler.WeightedRandomSampler(tr_weights, len(tr_weights))
-            print('search sampler: ',se_sampler) #!
+            print('search sampler with weight: ',se_weights) #!
             shuffle_opt=False
         elif bal_ssampler=='wmaxrel':
             se_weights = make_weights_for_balanced_classes_maxrel(search_data.dataset.label,nclasses=num_class,alpha=sampler_alpha)
             se_sampler = torch.utils.data.sampler.WeightedRandomSampler(se_weights, len(se_weights))
             tr_weights = make_weights_for_balanced_classes_maxrel(train_data.dataset.label,nclasses=num_class,alpha=sampler_alpha)
             tr_sampler = torch.utils.data.sampler.WeightedRandomSampler(tr_weights, len(tr_weights))
+            print('search sampler with weight: ',se_weights) #!
             shuffle_opt=False
         else:
+            print('normal search sampler')
             se_sampler = None
             tr_sampler = None
             shuffle_opt=True
@@ -506,7 +533,7 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
         tr_searchloader = None
 
     testloader = torch.utils.data.DataLoader(
-        test_data, batch_size=batch,
+        test_data, batch_size=batch,shuffle=False,
         sampler=test_sampler, drop_last=False,
         pin_memory=True, num_workers=num_workers)
 
@@ -518,7 +545,7 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
     print(f'  |test: {len(testloader)*batch}')
     if search and search_dataset is not None:
         print(f'  |search: {len(searchloader)*search_divider}')
-    return trainloader, validloader, searchloader, testloader, tr_searchloader
+    return trainloader, validloader, searchloader, testloader, tr_searchloader, [ss]
 
 def unpickle(file):
     import pickle

@@ -138,3 +138,4 @@ dmypy.json
 .pyre/
 adaaug_learning_class_and_inst.pdf
 ADAAUG LEARNING CLASS AND INSTANCE ADAPTIVE DATA AUGMENTATION POLICIES.pdf
+*.csv

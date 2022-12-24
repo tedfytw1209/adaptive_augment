@@ -260,7 +260,7 @@ class AdaAug_TS(AdaAug):
     def __init__(self, after_transforms, n_class, gf_model, h_model, save_dir=None, visualize=False,
                     config=default_config,keepaug_config=default_config, multilabel=False, augselect='',class_adaptive=False,
                     sub_mix=1.0,search_temp=1.0,mag_search_temp=1.0,noaug_add=False,transfrom_dic={},preprocessors=[],
-                    noaug_config={},train_bn=False,seed=None):
+                    noaug_config={},train_bn=False,seed=None,fix_noaug_max=False):
         super(AdaAug_TS, self).__init__(after_transforms, n_class, gf_model, h_model, save_dir, config)
         #other already define in AdaAug
         self.generator = torch.Generator(device='cuda')
@@ -311,6 +311,7 @@ class AdaAug_TS(AdaAug):
         self.train_bn = train_bn
         self.noaug_way = ''
         self.noaug_bias = 0
+        self.fix_noaug_max = fix_noaug_max
         if self.wide_delta:
             self.delta_func = perturb_param_wide
         else:
@@ -632,7 +633,7 @@ class AdaAug_TS(AdaAug):
         if noaug_alpha!=None:
             self.noaug_alpha = noaug_alpha
             print('new noaug alpha for noaug cadd: ',self.noaug_alpha)
-        if noaug_max!=None:
+        if noaug_max!=None and not self.fix_noaug_max:
             self.noaug_max = noaug_max
             self.noaug_tensor = self.noaug_max * F.one_hot(torch.tensor([0]), num_classes=self.n_ops).float()
             print('new noaug max for cadd: ',self.noaug_max)
@@ -641,7 +642,7 @@ class AdaAugkeep_TS(AdaAug):
     def __init__(self, after_transforms, n_class, gf_model, h_model, save_dir=None, visualize=False,
                     config=default_config,keepaug_config=default_config, multilabel=False, augselect='',class_adaptive=False,ind_mix=False,
                     sub_mix=1.0,search_temp=1.0,mag_search_temp=1.0,noaug_add=False,transfrom_dic={},preprocessors=[],
-                    noaug_config={},train_bn=False,seed=None):
+                    noaug_config={},train_bn=False,seed=None,fix_noaug_max=False):
         super(AdaAugkeep_TS, self).__init__(after_transforms, n_class, gf_model, h_model, save_dir, config)
         #other already define in AdaAug
         self.generator = torch.Generator(device='cuda')
@@ -727,6 +728,9 @@ class AdaAugkeep_TS(AdaAug):
         self.mag_temp = config['mag_temp']
         self.preprocessors=preprocessors
         self.train_bn = train_bn
+        self.noaug_way = ''
+        self.noaug_bias = 0
+        self.fix_noaug_max = fix_noaug_max
         self.wide_delta = self.config.get('wide_delta',False)
         if self.wide_delta:
             self.delta_func = perturb_param_wide

@@ -28,12 +28,21 @@ def sigmoid_adapt(class_perfrom,overall_perfrom):
     noaug_way = 'sigmoid'
     return adapt_alpha,adapt_nomax,adapt_add,noaug_way
 
-def stat_adapt(class_perfrom):
+def stat_adapt(class_perfrom,percent=0.25):
     n_class = len(class_perfrom)
-    class_q1 = np.quantile(class_perfrom,0.25)
-    class_q9 = np.quantile(class_perfrom,0.75)
+    class_q1 = np.quantile(class_perfrom,percent)
+    class_q9 = np.quantile(class_perfrom,1.0-percent)
     adapt_nomax = 1.0 - class_q1
     adapt_alpha = class_q9 - class_q1
+    adapt_add = 0
+    noaug_way = ''
+    return adapt_alpha,adapt_nomax,adapt_add,noaug_way
+
+def imbalance_adapt(class_perfrom,overall_perfrom):
+    n_class = len(class_perfrom)
+    macro_perfrom = np.mean(class_perfrom)
+    adapt_nomax = 1.0 - macro_perfrom
+    adapt_alpha = np.clip(overall_perfrom - macro_perfrom,0,1)
     adapt_add = 0
     noaug_way = ''
     return adapt_alpha,adapt_nomax,adapt_add,noaug_way

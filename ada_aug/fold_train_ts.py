@@ -28,7 +28,7 @@ from class_balanced_loss import ClassBalLoss,ClassDiffLoss,ClassDistLoss,make_cl
 from softaug import Soft_Criterion
 import wandb
 import copy
-from utils import plot_conf_wandb, select_output_source, select_embed_source, select_perfrom_source, stat_adapt, sigmoid_adapt
+from utils import plot_conf_wandb, select_output_source, select_embed_source, select_perfrom_source, stat_adapt, sigmoid_adapt, imbalance_adapt
 import ray
 import ray.tune as tune
 from ray.tune.integration.wandb import WandbTrainableMixin
@@ -127,7 +127,8 @@ parser.add_argument('--output_source', type=str, default='', help='class output 
         choices=['train','valid','search','allsearch',''])
 parser.add_argument('--prevalid', action='store_true', default=False, help='use df model to valid first')
 parser.add_argument('--adaptnoaug', type=str, default='', help='class output source',
-        choices=['stat','sigmoid',''])
+        choices=['stat','stat2','imbalance','sigmoid',''])
+parser.add_argument('--adapt_nomax', action='store_true', default=False, help='adapt noaug max')
 #mixup
 parser.add_argument('--mixup', action='store_true', help='mixup benchmark')
 parser.add_argument('--mixup_alpha', type=float, default=1.0, help='mixup parameter')
@@ -386,6 +387,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         trans_config = {'sfreq':self.sfreq}
         noaugadd_config = {'add_method':args.noaug_add,'max_noaug_add':args.noaug_max,'max_noaug_reduce':args.reduce_mag,'noaug_alpha':args.noaug_alpha,
             'noaug_warmup':args.noaug_warmup}
+        fix_noaug_max = not args.adapt_nomax 
         if args.keep_mode=='adapt':
             keepaug_config['mode'] = 'auto'
             self.adaaug = AdaAugkeep_TS(after_transforms=after_transforms,
@@ -403,6 +405,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 noaug_config=noaugadd_config,
                 transfrom_dic=trans_config,
                 preprocessors=preprocessors,
+                fix_noaug_max=fix_noaug_max,
                 seed=args.seed)
         else:
             keepaug_config['length'] = keepaug_config['length'][0]
@@ -421,6 +424,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 noaug_config=noaugadd_config,
                 transfrom_dic=trans_config,
                 preprocessors=preprocessors,
+                fix_noaug_max=fix_noaug_max,
                 seed=args.seed)
         #to self
         self.n_channel = n_channel
@@ -494,6 +498,12 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 if args.adaptnoaug=='stat':
                     adapt_noauga,adapt_noaugmax,adapt_bias,_ = stat_adapt(class_outw)
                     self.adaaug.update_noaug(adapt_noauga,adapt_noaugmax)
+                elif args.adaptnoaug=='stat2':
+                    adapt_noauga,adapt_noaugmax,adapt_bias,_ = stat_adapt(class_outw,percent=0.2)
+                    self.adaaug.update_noaug(adapt_noauga,adapt_noaugmax)
+                elif args.adaptnoaug=='imbalance':
+                    adapt_noauga,adapt_noaugmax,adapt_bias,_ = imbalance_adapt(class_outw,ovr_output)
+                    self.adaaug.update_noaug(adapt_noauga,adapt_noaugmax)
                 elif args.adaptnoaug=='sigmoid':
                     _,_,adapt_bias,adapt_way = sigmoid_adapt(class_outw,ovr_output)
                     self.adaaug.update_noaug(noaug_bias=adapt_bias,noaug_way=adapt_way)
@@ -503,6 +513,12 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 ovr_acc = gf_acc / 100.0
                 if args.adaptnoaug=='stat':
                     adapt_noauga,adapt_noaugmax,adapt_bias,_ = stat_adapt(class_acc)
+                    self.adaaug.update_noaug(adapt_noauga,adapt_noaugmax)
+                elif args.adaptnoaug=='stat2':
+                    adapt_noauga,adapt_noaugmax,adapt_bias,_ = stat_adapt(class_outw,percent=0.2)
+                    self.adaaug.update_noaug(adapt_noauga,adapt_noaugmax)
+                elif args.adaptnoaug=='imbalance':
+                    adapt_noauga,adapt_noaugmax,adapt_bias,_ = imbalance_adapt(class_outw,ovr_output)
                     self.adaaug.update_noaug(adapt_noauga,adapt_noaugmax)
                 elif args.adaptnoaug=='sigmoid':
                     _,_,adapt_bias,adapt_way = sigmoid_adapt(class_acc,ovr_acc)

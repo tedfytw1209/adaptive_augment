@@ -1557,7 +1557,7 @@ class KeepAugment(object): #need fix
                         t_s_aug = augment(t_s_aug,i=i,k=k,ops_name=ops_name,seq_len=each_seq_len,**kwargs).to(t_s_tmp.device) #maybe some error!!!
                     else:
                         t_s_aug = t_s_tmp.clone().detach().cpu()
-                        t_s_tmp = augment(t_s_tmp,i=i,k=k,ops_name=ops_name,seq_len=each_seq_len,**kwargs) #some other augment if needed
+                        t_s_tmp = augment(t_s_tmp,i=i,k=k,ops_name=ops_name,seq_len=each_seq_len,**kwargs).to(t_s_tmp.device) #some other augment if needed
                     t_s_tmp[:, lead_select.to(t_s_tmp.device)] = t_s_aug[:,lead_select.to(t_s_tmp.device)].to(t_s_tmp.device)
                     aug_t_s_list.append(t_s_tmp)
                     continue

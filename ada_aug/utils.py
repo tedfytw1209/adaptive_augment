@@ -47,6 +47,15 @@ def imbalance_adapt(class_perfrom,overall_perfrom):
     noaug_way = ''
     return adapt_alpha,adapt_nomax,adapt_add,noaug_way
 
+def imbalance_adapt2(class_perfrom,overall_perfrom):
+    n_class = len(class_perfrom)
+    macro_perfrom = np.mean(class_perfrom)
+    adapt_nomax = 1.0 - macro_perfrom
+    adapt_alpha = 1.0 - np.clip(macro_perfrom / overall_perfrom,0,1)
+    adapt_add = 0
+    noaug_way = ''
+    return adapt_alpha,adapt_nomax,adapt_add,noaug_way
+
 def select_perfrom_source(output_source,train_table,valid_table,search_table,ptype,n_class,class_noaug=False):
     if output_source=='':
         print('No specify output source, use train')

@@ -515,10 +515,10 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                     adapt_noauga,adapt_noaugmax,adapt_bias,_ = stat_adapt(class_acc)
                     self.adaaug.update_noaug(adapt_noauga,adapt_noaugmax)
                 elif args.adaptnoaug=='stat2':
-                    adapt_noauga,adapt_noaugmax,adapt_bias,_ = stat_adapt(class_outw,percent=0.2)
+                    adapt_noauga,adapt_noaugmax,adapt_bias,_ = stat_adapt(class_acc,percent=0.2)
                     self.adaaug.update_noaug(adapt_noauga,adapt_noaugmax)
                 elif args.adaptnoaug=='imbalance':
-                    adapt_noauga,adapt_noaugmax,adapt_bias,_ = imbalance_adapt(class_outw,ovr_output)
+                    adapt_noauga,adapt_noaugmax,adapt_bias,_ = imbalance_adapt(class_acc,ovr_acc)
                     self.adaaug.update_noaug(adapt_noauga,adapt_noaugmax)
                 elif args.adaptnoaug=='sigmoid':
                     _,_,adapt_bias,adapt_way = sigmoid_adapt(class_acc,ovr_acc)

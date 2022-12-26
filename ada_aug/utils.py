@@ -56,6 +56,27 @@ def imbalance_adapt2(class_perfrom,overall_perfrom):
     noaug_way = ''
     return adapt_alpha,adapt_nomax,adapt_add,noaug_way
 
+def select_noaug_adapt(adaptnoaug,class_outw,ovr_output,adaaug):
+    if adaptnoaug=='stat':
+        adapt_noauga,adapt_noaugmax,adapt_bias,adapt_way = stat_adapt(class_outw)
+        adaaug.update_noaug(adapt_noauga,adapt_noaugmax)
+    elif adaptnoaug=='stat2':
+        adapt_noauga,adapt_noaugmax,adapt_bias,adapt_way = stat_adapt(class_outw,percent=0.2)
+        adaaug.update_noaug(adapt_noauga,adapt_noaugmax)
+    elif adaptnoaug=='imbalance':
+        adapt_noauga,adapt_noaugmax,adapt_bias,adapt_way = imbalance_adapt(class_outw,ovr_output)
+        adaaug.update_noaug(adapt_noauga,adapt_noaugmax)
+    elif adaptnoaug=='imbalance2':
+        adapt_noauga,adapt_noaugmax,adapt_bias,adapt_way = imbalance_adapt2(class_outw,ovr_output)
+        adaaug.update_noaug(adapt_noauga,adapt_noaugmax)
+    elif adaptnoaug=='sigmoid':
+        adapt_noauga,adapt_noaugmax,adapt_bias,adapt_way = sigmoid_adapt(class_outw,ovr_output)
+        adaaug.update_noaug(noaug_bias=adapt_bias,noaug_way=adapt_way)
+    else:
+        return
+    #print
+    print(f'Noaug Adapt {adaptnoaug} parameters : ', adapt_noauga,adapt_noaugmax,adapt_bias,adapt_way)
+
 def select_perfrom_source(output_source,train_table,valid_table,search_table,ptype,n_class,class_noaug=False):
     if output_source=='':
         print('No specify output source, use train')

@@ -28,7 +28,7 @@ from class_balanced_loss import ClassBalLoss,ClassDiffLoss,ClassDistLoss,make_cl
 from softaug import Soft_Criterion
 import wandb
 import copy
-from utils import plot_conf_wandb, select_output_source, select_embed_source, select_perfrom_source, stat_adapt, sigmoid_adapt, imbalance_adapt,imbalance_adapt2
+from utils import plot_conf_wandb, select_output_source, select_noaug_adapt, select_perfrom_source, stat_adapt, sigmoid_adapt, imbalance_adapt,imbalance_adapt2
 import ray
 import ray.tune as tune
 from ray.tune.integration.wandb import WandbTrainableMixin
@@ -474,7 +474,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             training = True
         #prevalid iteration per valid
         noaug_config={}
-        if args.prevalid and self._iteration==0:
+        if (args.prevalid or args.adaptnoaug) and self._iteration==0:
             print('### Pre Valid gf model for noaug add method:')
             if args.output_source=='train':
                 prevalid_queue = self.train_queue
@@ -495,7 +495,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 if self.class_criterion.reverse_w:
                     class_outw = 1.0 - class_outw
                     print('reverse weight to ',class_outw)
-                if args.adaptnoaug=='stat':
+                '''if args.adaptnoaug=='stat':
                     adapt_noauga,adapt_noaugmax,adapt_bias,_ = stat_adapt(class_outw)
                     self.adaaug.update_noaug(adapt_noauga,adapt_noaugmax)
                 elif args.adaptnoaug=='stat2':
@@ -509,12 +509,13 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                     self.adaaug.update_noaug(adapt_noauga,adapt_noaugmax)
                 elif args.adaptnoaug=='sigmoid':
                     _,_,adapt_bias,adapt_way = sigmoid_adapt(class_outw,ovr_output)
-                    self.adaaug.update_noaug(noaug_bias=adapt_bias,noaug_way=adapt_way)
-                noaug_config = self.adaaug.update_alpha(class_outw)
+                    self.adaaug.update_noaug(noaug_bias=adapt_bias,noaug_way=adapt_way)'''
+                select_noaug_adapt(args.adaptnoaug,class_outw,ovr_output,self.adaaug)
+                #noaug_config = self.adaaug.update_alpha(class_outw)
             elif args.noaug_add=='cadd':
                 class_acc = np.array(select_perfrom_source('gf',gf_dic,{},{},ptype,self.n_class,self.class_noaug))
                 ovr_acc = gf_acc / 100.0
-                if args.adaptnoaug=='stat':
+                '''if args.adaptnoaug=='stat':
                     adapt_noauga,adapt_noaugmax,adapt_bias,_ = stat_adapt(class_acc)
                     self.adaaug.update_noaug(adapt_noauga,adapt_noaugmax)
                 elif args.adaptnoaug=='stat2':
@@ -528,10 +529,12 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                     self.adaaug.update_noaug(adapt_noauga,adapt_noaugmax)
                 elif args.adaptnoaug=='sigmoid':
                     _,_,adapt_bias,adapt_way = sigmoid_adapt(class_acc,ovr_acc)
-                    self.adaaug.update_noaug(noaug_bias=adapt_bias,noaug_way=adapt_way)
-                class_noaugw = 1.0 - np.power(class_acc,args.noaug_pow)
+                    self.adaaug.update_noaug(noaug_bias=adapt_bias,noaug_way=adapt_way)'''
+                class_outw = 1.0 - np.power(class_acc,args.noaug_pow)
+                select_noaug_adapt(args.adaptnoaug,class_outw,ovr_acc,self.adaaug)
+            if args.prevalid:
                 print(f'Noaug add method {args.noaug_add} perfrom class: {class_acc} noaug power: {args.noaug_pow} noaug weight: {class_noaugw}')
-                noaug_config = self.adaaug.update_alpha(class_noaugw)
+                noaug_config = self.adaaug.update_alpha(class_outw)
         # training or evaluate training data
         train_acc, train_obj, train_dic, train_table = train(args,
                 self.train_queue, self.task_model, self.criterion, self.optimizer, self.scheduler, Curr_epoch, args.grad_clip, self.adaaug, 

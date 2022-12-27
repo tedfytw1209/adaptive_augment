@@ -340,8 +340,8 @@ class AdaAug_TS(AdaAug):
             weights = torch.nn.functional.softmax(weights/T, dim=-1)
         else: #all unifrom distribution when not using policy
             #print('Using random augments when warm up')
-            magnitudes = torch.ones(bs,self.n_ops) * 0.5 #!!!tmp change to mimic randaug
-            weights = torch.ones(bs,self.n_ops) / self.n_ops
+            magnitudes = torch.ones(bs,self.n_ops).cuda() * 0.5 #!!!tmp change to mimic randaug
+            weights = torch.ones(bs,self.n_ops).cuda() / self.n_ops
         if self.add_method=='fixadd': #add fix amount noaug
             weights[:,0] = self.noaug_max
             weights[:,1:] = (1.0 - self.noaug_max) * weights[:,1:] / torch.sum(weights[:,1:],dim=1, keepdim=True).detach()

@@ -533,7 +533,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 select_noaug_adapt(args.adaptnoaug,class_acc,ovr_acc,self.adaaug)
                 class_outw = 1.0 - np.power(class_acc,args.noaug_pow)
             if args.prevalid:
-                print(f'Noaug add method {args.noaug_add} perfrom class: {class_acc} noaug power: {args.noaug_pow} noaug weight: {class_noaugw}')
+                print(f'Noaug add method {args.noaug_add} perfrom class: {class_acc} noaug power: {args.noaug_pow} noaug weight: {class_outw}')
                 noaug_config = self.adaaug.update_alpha(class_outw)
         # training or evaluate training data
         train_acc, train_obj, train_dic, train_table = train(args,

@@ -516,16 +516,16 @@ class AdaAug_TS(AdaAug):
             idx_matrix =torch.full((bs,self.k_ops),op_idx)
             #print('idx_matrix: ',idx_matrix)
             augori_imgs,kaug_imgs,reg_idx = self.Augment_wrapper.Visualize_augment(images, model=self.gf_model,apply_func=self.get_training_aug_image,
-                    magnitudes=magnitudes,idx_matrix=idx_matrix,selective='paste',seq_len=seq_len,target=target).cpu()
+                    magnitudes=magnitudes,idx_matrix=idx_matrix,selective='paste',seq_len=seq_len,target=target)
         else:
             trans_images = []
             for i, image in enumerate(images):
                 pil_image = image.detach().cpu()
                 trans_image = self.after_transforms(pil_image)
                 trans_images.append(trans_image)
-            kaug_imgs = torch.stack(trans_images, dim=0).cpu()
+            kaug_imgs = torch.stack(trans_images, dim=0)
         #aug_imgs = torch.stack(trans_images, dim=0).cuda()
-        return augori_imgs,kaug_imgs,reg_idx, idx_matrix #(aug_imgs, keep region, operation use)
+        return augori_imgs.cpu(),kaug_imgs.cpu(),reg_idx, idx_matrix #(aug_imgs, keep region, operation use)
 
     def exploit(self, images, seq_len,y=None,policy_apply=True):
         if self.resize and 'lstm' not in self.config['gf_model_name']:

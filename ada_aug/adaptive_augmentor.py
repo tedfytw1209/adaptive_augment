@@ -500,12 +500,31 @@ class AdaAug_TS(AdaAug):
                 trans_images.append(trans_image)
             aug_imgs = torch.stack(trans_images, dim=0).cuda()
         #only apply transform on some class when applying, wait
-        
         #aug_imgs = torch.stack(trans_images, dim=0).cuda()
         if visualize:
             return aug_imgs.cuda(),reg_idx, idx_matrix #(aug_imgs, keep region, operation use)
         else:
             return aug_imgs.cuda() #(b, seq, ch)
+    
+    def get_visualize_aug_images(self, images, magnitudes, weights, seq_len=None,visualize=True,target=None,op_idx=0):
+        # visualization
+        #weights: (bs,n_ops)
+        print('get_visualize_aug_images, op_idx: ',op_idx)
+        bs, n_ops = weights.shape
+        if self.k_ops > 0:
+            idx_matrix =torch.full((bs,self.k_ops),op_idx)
+            #print('idx_matrix: ',idx_matrix)
+            augori_imgs,kaug_imgs,reg_idx = self.Augment_wrapper.Visualize_augment(images, model=self.gf_model,apply_func=self.get_training_aug_image,
+                    magnitudes=magnitudes,idx_matrix=idx_matrix,selective='paste',seq_len=seq_len,target=target).cpu()
+        else:
+            trans_images = []
+            for i, image in enumerate(images):
+                pil_image = image.detach().cpu()
+                trans_image = self.after_transforms(pil_image)
+                trans_images.append(trans_image)
+            kaug_imgs = torch.stack(trans_images, dim=0).cpu()
+        #aug_imgs = torch.stack(trans_images, dim=0).cuda()
+        return augori_imgs,kaug_imgs,reg_idx, idx_matrix #(aug_imgs, keep region, operation use)
 
     def exploit(self, images, seq_len,y=None,policy_apply=True):
         if self.resize and 'lstm' not in self.config['gf_model_name']:
@@ -535,13 +554,15 @@ class AdaAug_TS(AdaAug):
         target = y.detach().cpu()
         #resize_imgs = F.interpolate(images, size=self.search_d) if self.resize else images
         magnitudes, weights = self.predict_aug_params(resize_imgs, seq_len, 'exploit',y=policy_y)
-        aug_imgs, info_region, ops_idx = self.get_training_aug_images(images, magnitudes, weights,seq_len=seq_len,visualize=True,target=policy_y)
+        augori_imgs, aug_imgs, info_region, ops_idx = self.get_visualize_aug_images(images, magnitudes, weights,seq_len=seq_len,visualize=True,target=policy_y
+                ,op_idx=0)
         if self.use_keepaug:
             slc_out,slc_ch = self.Augment_wrapper.visualize_slc(images, model=self.gf_model)
         print('Visualize for Debug')
         print(slc_ch)
         self.print_imgs(imgs=images,label=target,title='id',slc=slc_out,info_reg=info_region,ops_idx=ops_idx)
-        self.print_imgs(imgs=aug_imgs,label=target,title='aug',slc=slc_out,info_reg=info_region,ops_idx=ops_idx)
+        self.print_imgs(imgs=augori_imgs,label=target,title='aug',slc=slc_out,info_reg=info_region,ops_idx=ops_idx)
+        self.print_imgs(imgs=aug_imgs,label=target,title='keepaug',slc=slc_out,info_reg=info_region,ops_idx=ops_idx)
         #identify check
         '''for idx,(img,aug_img) in enumerate(zip(images,aug_imgs)):
             if ops_idx[idx][0]==0: #identity

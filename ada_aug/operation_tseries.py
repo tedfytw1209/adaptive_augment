@@ -1611,6 +1611,119 @@ class KeepAugment(object): #need fix
                 param.requires_grad = True
         return torch.stack(aug_t_s_list, dim=0) #(b*ops,seq,ch)
 
+    #for visualize
+    def Visualize_augment(self, t_series, model=None,selective='paste', apply_func=None, seq_len=None,target=None,visualize=False, **kwargs):
+        b,w,c = t_series.shape
+        augment, selective = self.get_augment(apply_func,selective)
+        slc_,slc_ch, t_series_ = self.get_slc(t_series,model,target=target) #slc_:(bs,seqlen), slc_ch:(bs,chs)
+        info_aug, compare_func, info_bound, bound_func = self.get_selective(selective)
+        #windowed_slc = self.m_pool(slc_.view(b,1,w)).view(b,-1)
+        apply_keep = self.rng.random((b,)) #prob for apply keep
+        #select a segment number
+        #n_keep_lead = np.random.choice(self.keep_leads)
+        n_keep_lead = self.keep_leads[self.rng.integers(len(self.keep_leads))]
+        lead_quant = min(info_aug,1.0 - n_keep_lead / 12.0)
+        #seg_number = np.random.choice(self.possible_segment)
+        seg_number = self.possible_segment[self.rng.integers(len(self.possible_segment))]
+        seg_len = int(w / seg_number)
+        if self.fix_points:
+            info_len = min(int(self.length * 12 /(seg_number*n_keep_lead)),w)
+            #print(f'keep len={info_len}, keeplead={n_keep_lead}')
+        else:
+            info_len = int(self.length/seg_number)
+        #11/09 add, better on edge case
+        windowed_slc = torch.nn.functional.avg_pool1d(slc_.view(b,1,w),kernel_size=info_len, 
+            stride=1, padding=info_len//2,count_include_pad=False).view(b,-1)[:,:w]
+        windowed_w = windowed_slc.shape[1]
+        windowed_len = int(windowed_w / seg_number)
+        #11/09 for quant with different lens not consider!!!
+        seg_accum, windowed_accum = self.get_seg(seg_number,seg_len,w,windowed_w,windowed_len)
+        #print(slc_)
+        t_series_ = t_series_.detach().cpu()
+        info_region_record = np.zeros((b,seg_number,2))
+        v_score_list = []
+        aug_t_s_list = []
+        augori_ts_list = []
+        start, end = 0,w
+        win_start, win_end = 0,windowed_w
+        for i,(t_s, slc,slc_ch_each, windowed_slc_each, each_seq_len) in enumerate(zip(t_series_, slc_,slc_ch, windowed_slc, seq_len)):
+            #keep lead select, not efficent
+            lead_select = self.lead_select_func(slc_ch_each,n_keep_lead,lead_quant,self.default_leads).detach()
+            #if only lead keep
+            if self.only_lead_keep:
+                #augment & paste back
+                if selective=='cut':
+                    t_s_aug = t_s.clone().detach().cpu()
+                    t_s_aug = augment(t_s_aug,i=i,seq_len=each_seq_len,**kwargs) #maybe some error!!!
+                else:
+                    t_s_aug = t_s.clone().detach().cpu()
+                    t_s = augment(t_s,i=i,seq_len=each_seq_len,**kwargs) #some other augment if needed
+                t_s[:, lead_select.to(t_s.device)] = t_s_aug[:,lead_select.to(t_s.device)].to(t_s.device)
+                aug_t_s_list.append(t_s)
+                continue
+            #find region for each segment
+            v_score = 0
+            region_list,inforegion_list = [],[]
+            for seg_idx in range(seg_number):
+                if self.grid_region:
+                    start, end = seg_accum[seg_idx], seg_accum[seg_idx+1]
+                    win_start, win_end = windowed_accum[seg_idx], windowed_accum[seg_idx+1]
+                else: #11/09 for quant with different lens with some bug when segment !!!
+                    end = min(each_seq_len,end)
+                    win_end = min(each_seq_len,win_end)
+                max_score = torch.max(windowed_slc_each[win_start:win_end])
+                quant_score = torch.quantile(windowed_slc_each[win_start:win_end],info_aug)
+                bound_score = torch.quantile(windowed_slc_each[win_start:win_end],info_bound)
+                while(True):
+                    #x = np.random.randint(start,end)
+                    x = self.rng.integers(start,end)
+                    x1 = np.clip(x - info_len // 2, 0, w)
+                    x2 = np.clip(x + info_len // 2, 0, w)
+                    reg_mean = slc[x1: x2].mean()
+                    if compare_func(reg_mean,quant_score) and bound_func(reg_mean,bound_score):
+                        region_list.append([x1,x2])
+                        v_score += reg_mean / max_score
+                        break
+                info_region = t_s[x1: x2,:].clone().detach().cpu()
+                inforegion_list.append(info_region)
+                info_region_record[i,seg_idx,:] = [x1,x2]
+            #augment & paste back
+            if selective=='cut':
+                t_s_aug = t_s.clone().detach().cpu()
+                t_s_aug = augment(t_s_aug,i=i,seq_len=each_seq_len,**kwargs) #maybe some error!!!
+                inforegion_list = [] #empty
+                for (x1,x2) in region_list:
+                    info_region = t_s_aug[x1: x2,:].clone().detach().cpu()
+                    inforegion_list.append(info_region)
+            else:
+                t_s = augment(t_s,i=i,seq_len=each_seq_len,**kwargs) #some other augment if needed
+            #fix keep prob
+            idx = int(kwargs['idx_matrix'][i,0].detach().cpu()) #ops used !!!tmp only use first ops
+            use_keep = self.keep_dict.get(idx,True)
+            #keep prob
+            if use_keep: #maybe not fast
+                aug_ts_ori = t_s.clone().detach()
+                for reg_i in range(len(inforegion_list)):
+                    x1, x2 = region_list[reg_i][0], region_list[reg_i][1]
+                    t_s[x1: x2, lead_select.to(t_s.device)] = inforegion_list[reg_i][:,lead_select]
+                    
+            else:
+                print(f'randam{apply_keep[i]}>{self.keep_prob}')
+                print(f'ops idx{idx} use keep {use_keep}')
+            augori_ts_list.append(aug_ts_ori)
+            aug_t_s_list.append(t_s)
+            v_score_list.append(v_score/seg_number)
+        #back
+        if self.mode=='auto':
+            model.train()
+            for param in model.parameters():
+                param.requires_grad = True
+        out = torch.stack(aug_t_s_list, dim=0)
+        augori_out = torch.stack(augori_ts_list, dim=0)
+        v_scores = torch.stack(v_score_list,dim=0)
+        info_region_record = torch.from_numpy(info_region_record).long()
+        return augori_out, out, info_region_record
+
     def get_saliency_score(self,preds,target):
         if self.saliency_target=='max':
             score, _ = torch.max(preds, 1) #predict class

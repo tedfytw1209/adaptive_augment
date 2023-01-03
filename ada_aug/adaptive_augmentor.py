@@ -16,6 +16,7 @@ from utils import PolicyHistory,PolicyHistoryKeep
 from config import OPS_NAMES,TS_OPS_NAMES
 from numpy.random import RandomState
 from numpy.random import default_rng
+import os
 
 default_config = {'sampling': 'prob',
                     'k_ops': 1,
@@ -553,16 +554,25 @@ class AdaAug_TS(AdaAug):
             resize_imgs = images
         target = y.detach().cpu()
         #resize_imgs = F.interpolate(images, size=self.search_d) if self.resize else images
+        '''
+        sub diag mlb/lb: [AMI, CLBBB, CRBBB, ILBBB, IMI, 
+        IRBBB, ISCA, ISCI, ISC_, IVCD,
+        LAFB/LPFB, LAO/LAE, LMI, LVH, NORM(14),
+        NST_, PMI, RAO/RAE, RVH, SEHYP, 
+        STTC(20), WPW, _AVB]
+        '''
+        select_label_index = [0,17,20]
         magnitudes, weights = self.predict_aug_params(resize_imgs, seq_len, 'exploit',y=policy_y)
-        augori_imgs, aug_imgs, info_region, ops_idx = self.get_visualize_aug_images(images, magnitudes, weights,seq_len=seq_len,visualize=True,target=policy_y
-                ,op_idx=0)
-        if self.use_keepaug:
-            slc_out,slc_ch = self.Augment_wrapper.visualize_slc(images, model=self.gf_model)
-        print('Visualize for Debug')
-        print(slc_ch)
-        self.print_imgs(imgs=images,label=target,title='id',slc=slc_out,info_reg=info_region,ops_idx=ops_idx)
-        self.print_imgs(imgs=augori_imgs,label=target,title='aug',slc=slc_out,info_reg=info_region,ops_idx=ops_idx)
-        self.print_imgs(imgs=aug_imgs,label=target,title='keepaug',slc=slc_out,info_reg=info_region,ops_idx=ops_idx)
+        for opidx in range(self.n_ops):
+            augori_imgs, aug_imgs, info_region, ops_idx = self.get_visualize_aug_images(images, magnitudes, weights,seq_len=seq_len,visualize=True,target=policy_y
+                    ,op_idx=opidx)
+            if self.use_keepaug:
+                slc_out,slc_ch = self.Augment_wrapper.visualize_slc(images, model=self.gf_model)
+            print('Visualize for Debug')
+            print(slc_ch)
+            self.print_imgs(imgs=images,label=target,title='id',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,select_labelidx=select_label_index)
+            self.print_imgs(imgs=augori_imgs,label=target,title='aug',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,select_labelidx=select_label_index)
+            self.print_imgs(imgs=aug_imgs,label=target,title='keepaug',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,select_labelidx=select_label_index)
         #identify check
         '''for idx,(img,aug_img) in enumerate(zip(images,aug_imgs)):
             if ops_idx[idx][0]==0: #identity
@@ -580,11 +590,17 @@ class AdaAug_TS(AdaAug):
         elif mode == 'inference':
             return images
     
-    def print_imgs(self,imgs,label,title='',slc=None,info_reg=None,ops_idx=None):
+    def print_imgs(self,imgs,label,title='',slc=None,info_reg=None,ops_idx=None,select_labelidx=[]):
         imgs = imgs.cpu().detach().numpy()
         t = np.linspace(0, 10, 1000)
+        if len(select_labelidx)>0:
+            selecting = True
+        else:
+            selecting = False
         for idx,(img,e_lb) in enumerate(zip(imgs,label)):
             plt.clf()
+            if selecting and int(e_lb) not in select_labelidx:
+                continue
             fig, (ax1, ax2) = plt.subplots(2, sharex=True, gridspec_kw={'height_ratios': [2, 1]})
             channel_num = img.shape[-1]
             for i in  range(channel_num):
@@ -602,9 +618,12 @@ class AdaAug_TS(AdaAug):
                 op_name = ''
             if title:
                 plt.title(f'{title}{op_name}_{e_lb}')
-            plt.savefig(f'{self.save_dir}/img{idx}_{title}{op_name}_{e_lb}.png')
+            save_path = os.path.join(self.save_dir,f'img_{e_lb}')
+            if not os.path.exists(save_path):
+                os.makedirs(save_path)
+            plt.savefig(os.path.join(save_path,f'img_{title}{op_name}_{e_lb}.png'))
             #plt one each
-            for i in  range(channel_num):
+            '''for i in  range(channel_num):
                 plt.clf()
                 fig, (ax1, ax2) = plt.subplots(2, sharex=True, gridspec_kw={'height_ratios': [2, 1]})
                 ax1.plot(t, img[:,i])
@@ -621,7 +640,7 @@ class AdaAug_TS(AdaAug):
                     op_name = ''
                 if title:
                     plt.title(f'{title}{op_name}_{e_lb}')
-                plt.savefig(f'{self.save_dir}/img{idx}ch{i}_{title}{op_name}_{e_lb}.png')
+                plt.savefig(f'{self.save_dir}/img{idx}ch{i}_{title}{op_name}_{e_lb}.png')'''
     
     def update_alpha(self,class_w):
         if self.noaug_way=='sigmoid':

@@ -601,6 +601,7 @@ class AdaAug_TS(AdaAug):
             plt.clf()
             if selecting and int(e_lb) not in select_labelidx:
                 continue
+            plt.figure(figsize=(8, 6), dpi=80)
             fig, (ax1, ax2) = plt.subplots(2, sharex=True, gridspec_kw={'height_ratios': [2, 1]})
             channel_num = img.shape[-1]
             for i in  range(channel_num):
@@ -618,10 +619,10 @@ class AdaAug_TS(AdaAug):
                 op_name = ''
             if title:
                 plt.title(f'{title}{op_name}_{e_lb}')
-            save_path = os.path.join(self.save_dir,f'img_{e_lb}')
+            save_path = os.path.join(self.save_dir,f'img{idx}_label{e_lb}')
             if not os.path.exists(save_path):
                 os.makedirs(save_path)
-            plt.savefig(os.path.join(save_path,f'img_{title}{op_name}_{e_lb}.png'))
+            plt.savefig(os.path.join(save_path,f'img{idx}_{title}{op_name}_{e_lb}.png'))
             #plt one each
             '''for i in  range(channel_num):
                 plt.clf()

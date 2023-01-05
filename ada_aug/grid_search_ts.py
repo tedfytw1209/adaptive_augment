@@ -26,6 +26,7 @@ from step_function import train,infer,search_train,search_infer,search_train_neu
 from non_saturating_loss import NonSaturatingLoss,Wasserstein_loss
 from class_balanced_loss import ClassBalLoss,ClassDiffLoss,ClassDistLoss,make_class_balance_count,make_class_weights,make_loss,make_class_weights_maxrel \
     ,make_class_weights_samples
+from softaug import Soft_Criterion
 import wandb
 from utils import plot_conf_wandb, select_output_source, select_embed_source, select_perfrom_source
 import copy
@@ -77,6 +78,7 @@ parser.add_argument('--cutout_length', type=int, default=16, help='cutout length
 parser.add_argument('--use_cuda', type=bool, default=True, help="use cuda default True")
 parser.add_argument('--use_parallel', type=bool, default=False, help="use data parallel default False")
 parser.add_argument('--model_name', type=str, default='wresnet40_2', help="mode _name")
+parser.add_argument('--seg_ways', type=str, default='fix', help="segment ways for transfromer",choices=['fix','rpeak'])
 parser.add_argument('--num_workers', type=int, default=0, help="num_workers")
 parser.add_argument('--k_ops', type=int, default=1, help="number of augmentation applied during training")
 parser.add_argument('--temperature', type=float, default=1.0, help="temperature")
@@ -123,7 +125,7 @@ parser.add_argument('--lambda_dist', type=float, default=1.0, help="class distan
 parser.add_argument('--class_sim', action='store_true', default=False, help='class distance use similar or not')
 parser.add_argument('--policy_dist', type=str, default='pwk', help='Assume mags:w,weights:p,(keeplen):k,(thres)')
 parser.add_argument('--noaug_reg', type=str, default='', help='add regular for noaugment ',
-        choices=['reg','creg','wreg','cwreg','pwreg','cpwreg','cdummy',''])
+        choices=['reg','creg','wreg','cwreg','pwreg','cpwreg','cdummy','careg',''])
 parser.add_argument('--noaug_add', type=str, default='', help='add regular for noaugment ',
         choices=['cadd','add','coadd','constadd',''])
 parser.add_argument('--noaug_max', type=float, default=0.5, help='max noaugment regular')
@@ -143,6 +145,7 @@ parser.add_argument('--loss_type', type=str, default='minus', help="loss type fo
         choices=['minus','minusdiff','minussample','relative','relativesample','relmixsample','relativediff','adv','embed'])
 parser.add_argument('--balance_loss', type=str, default='', help="loss type for model and policy training to acheive class balance")
 parser.add_argument('--policy_loss', type=str, default='', help="loss type for simular policy training")
+parser.add_argument('--soft_conf', type=float, default=1.0, help="confidence for soft augment")
 # info keep
 parser.add_argument('--keep_aug', action='store_true', default=False, help='info keep augment')
 parser.add_argument('--keep_prob', type=float, default=1, help='info keep probabilty')
@@ -176,7 +179,7 @@ parser.add_argument('--output_pred', action='store_true', default=False, help='o
 args = parser.parse_args()
 debug = True if args.save == "debug" else False
 if args.k_ops>0:
-    Aug_type = 'AdaAug'
+    Aug_type = 'AdaAug' + args.optim_type
 else:
     Aug_type = 'NOAUG'
 
@@ -283,9 +286,13 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             class_target_tensor = torch.tensor([args.class_target]).long()
             self.class_weight = nn.functional.one_hot(class_target_tensor,num_classes=n_class).view(n_class).float() # * n_class
             print('Single class weight for experiment: ',self.class_weight)
+        #addition model config
+        add_model_config = {}
+        add_model_config['seg_config'] = {'seg_ways':args.seg_ways, 'rr_method':'pan'}
         #  model settings
         self.gf_model = get_model_tseries(model_name=args.model_name, num_class=n_class,n_channel=n_channel,
-            use_cuda=True, data_parallel=False,dataset=args.dataset,max_len=max_len)
+            use_cuda=True, data_parallel=False,dataset=args.dataset,max_len=max_len,hz=self.sfreq,
+            addition_config=add_model_config)
         #EMA if needed
         self.ema_model = None
         if args.teach_aug:
@@ -362,7 +369,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         search_labels = self.search_queue.dataset.dataset.label
         default_criterion = make_loss(multilabel=multilabel)
         self.criterion = self.choose_criterion(train_labels,search_labels,multilabel,n_class,
-            loss_type=args.balance_loss,default=default_criterion)
+            loss_type=args.balance_loss,default=default_criterion,confidence=args.soft_conf)
         self.criterion = self.criterion.cuda()
         self.adv_criterion = None
         if args.loss_type=='adv':
@@ -379,7 +386,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         self.sim_criterion = None
         #bug!: can not with loss_mix
         self.sim_criterion = self.choose_criterion(train_labels,search_labels,multilabel,n_class,
-            loss_type=args.policy_loss,mix_type=args.mix_type)
+            loss_type=args.policy_loss,mix_type=args.mix_type,confidence=args.soft_conf)
         self.extra_losses = []
         #class distance or use as noaug regular class weight
         self.class_criterion = None
@@ -554,6 +561,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         if args.class_dist or 'c' in args.noaug_reg or args.noaug_add=='coadd':
             select_output = select_output_source(args.output_source,table_dic,valid_table,search_table)
             self.class_criterion.update_classpair(select_output)
+            class_acc = np.array(select_perfrom_source(args.output_source,train_dic,valid_dic,search_dic,ptype,self.n_class,True))
+            self.class_criterion.update_classperfrom(class_acc)
             if 'embed' in args.class_dist:
                 select_embed = select_embed_source(args.output_source,table_dic,valid_table,search_table)
                 self.class_criterion.update_embed(select_embed)
@@ -688,7 +697,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         self.config = new_config
         return True
     
-    def choose_criterion(self,train_labels,search_labels,multilabel,n_class,loss_type='',mix_type='',default=None):
+    def choose_criterion(self,train_labels,search_labels,multilabel,n_class,loss_type='',mix_type='',
+            default=None,confidence=1):
         if loss_type=='classbal': 
             out_criterion = make_class_balance_count(train_labels,search_labels,multilabel,n_class)
         elif loss_type=='classdiff':
@@ -705,6 +715,8 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             class_weights = make_class_weights_maxrel(train_labels,n_class,search_labels)
             class_weights = torch.from_numpy(class_weights).float()
             out_criterion = make_loss(multilabel=multilabel,weight=class_weights).cuda()
+        elif loss_type=='softkl':
+            out_criterion = Soft_Criterion(confidence=confidence)
         elif mix_type=='loss' or 'sample' in loss_type: #loss mix or sample-wise relative
             if not multilabel:
                 out_criterion = nn.CrossEntropyLoss(reduction='none').cuda()
@@ -742,8 +754,10 @@ def main():
     #for grid search params ###important###
     print(hparams)
     #hparams['search_freq'] = tune.grid_search([3,5]) #tune.grid_search(hparams['search_freq'])
-    hparams['search_round'] = tune.grid_search([4,16]) #tune.grid_search(hparams['search_round'])
-    hparams['proj_learning_rate'] = tune.grid_search([0.0003,0.001])
+    #hparams['search_round'] = tune.grid_search([4,16]) #tune.grid_search(hparams['search_round'])
+    hparams['epochs'] = tune.grid_search([50,100])
+    hparams['learning_rate'] = tune.grid_search([0.001,0.003,0.01,0.03,0.1])
+    hparams['proj_learning_rate'] = tune.grid_search([0.0001,0.0003,0.001])
     #hparams['k_ops'] = tune.grid_search([1,2])
     #hparams['lambda_aug'] = tune.quniform(hparams['lambda_aug'][0],hparams['lambda_aug'][1],0.01)
     #hparams['lambda_sim'] = tune.quniform(hparams['lambda_sim'][0],hparams['lambda_sim'][1],0.01)
@@ -755,19 +769,19 @@ def main():
     #hparams['sear_temp'] = tune.grid_search([1,3])
     #hparams['temperature'] = tune.grid_search([1,3])
     #hparams['sear_magtemp'] = tune.grid_search([1,3])
-    hparams['sear_magtemp'] = tune.grid_search([1,2])
-    hparams['mag_temperature'] = tune.grid_search([3])
+    #hparams['sear_magtemp'] = tune.grid_search([1,2])
+    #hparams['mag_temperature'] = tune.grid_search([3])
     #hparams['diff_aug'] = tune.grid_search([True,False])
     #hparams['lambda_noaug'] = tune.grid_search([1,10,50])
     #hparams['noaug_reg'] = tune.grid_search(['creg','cpwreg'])
     #hparams['lambda_dist'] = tune.grid_search([1,10,50])
     #hparams['class_dist'] = tune.grid_search(['wass','embed_wass']) #tmp
     #hparams['output_source'] = tune.grid_search(['allsearch'])
-    hparams['n_embed'] = tune.grid_search([64,128])
-    hparams['feature_mask'] = tune.grid_search([''])
+    #hparams['n_embed'] = tune.grid_search([64,128])
+    #hparams['feature_mask'] = tune.grid_search([''])
     #hparams['grid_target'] = ['noaug_reg','lambda_noaug','feature_mask']
     #hparams['grid_target'] = ['noaug_reg','lambda_noaug','class_dist','lambda_dist']
-    hparams['grid_target'] = ['proj_learning_rate','search_round','n_embed','sear_magtemp','mag_temperature']
+    hparams['grid_target'] = ['learning_rate','proj_learning_rate','epochs']
     print(hparams)
     #wandb
     wandb_config = {

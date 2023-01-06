@@ -129,7 +129,9 @@ def get_num_class(dataset,labelgroup=''):
         'ptbxlrhythm':12,
         'wisdm': 18,
         'chapman': 12,
+        'chapmands': 12,
         'chapmanyuall':12,
+        'chapmandsyuall':12,
         'chapmanall':11,
         'chapmanrhythm':6,
         'chapmansuperrhythm':4,
@@ -139,7 +141,6 @@ def get_num_class(dataset,labelgroup=''):
         'georgiaall' : 22, #!!! unknown now
     }
     return dataset_dic[dataset+labelgroup]
-
 
 def get_num_channel(dataset):
     return {
@@ -151,6 +152,7 @@ def get_num_channel(dataset):
         'ptbxl': 12,
         'wisdm': 3,
         'chapman': 12,
+        'chapmands':12,
         'icbeb' : 12,
         'georgia' : 12,
     }[dataset]
@@ -326,6 +328,7 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
             #transforms.Normalize(_SVHN_MEAN, _SVHN_STD), assume already normalize
         ])
     num_class = get_num_class(dataset_name,labelgroup)
+    down_sample = False
     kwargs = {}
     if dataset_name == 'ptbxl':
         dataset_func = PTBXL
@@ -336,6 +339,11 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
     elif dataset_name == 'edfx':
         dataset_func = EDFX
     elif dataset_name == 'chapman':
+        dataset_func = Chapman
+        if labelgroup:
+            kwargs['labelgroup']=labelgroup
+    elif dataset_name == 'chapmands':
+        down_sample = True
         dataset_func = Chapman
         if labelgroup:
             kwargs['labelgroup']=labelgroup
@@ -364,6 +372,11 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
         search_trainset = dataset_func(dataroot,mode=fold_assign[0],multilabel=multilabel,**kwargs)
         validset = dataset_func(dataroot,mode=fold_assign[1],multilabel=multilabel,**kwargs)
         testset = dataset_func(dataroot,mode=fold_assign[2],multilabel=multilabel,**kwargs)
+        #down sample to 100 Hz if needed
+        if down_sample:
+            search_trainset.down_sample(100)
+            validset.down_sample(100)
+            testset.down_sample(100)
         #preprocess
         ss = StandardScaler()
         print(f'Before dataset {search_trainset.input_data.shape} sample 0:')
@@ -557,6 +570,7 @@ Freq_dict = {
     'ptbxl' : 100,
     'wisdm' : 20,
     'chapman' : 500,
+    'chapmands' : 100,
     'icbeb' : 100,
     'georgia' : 500,
 }
@@ -565,6 +579,7 @@ TimeS_dict = {
     'ptbxl' : 10,
     'wisdm' : 10,
     'chapman' : 10,
+    'chapmands' : 10,
     'icbeb' : 60,
     'georgia' : 10,
 }
@@ -578,6 +593,7 @@ def get_dataset_dimension(dset):
             'ptbxl':1000,
             'wisdm':200,
             'chapman':5000,
+            'chapmands':1000,
             'icbeb' : 6000,
             'georgia' : 5000,
             }[dset]

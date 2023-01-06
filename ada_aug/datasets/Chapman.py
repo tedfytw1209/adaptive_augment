@@ -1,7 +1,7 @@
 from cProfile import label
 import os
 import pickle
-from scipy import stats
+from scipy import stats,signal
 from scipy.io import loadmat
 import pandas as pd
 import numpy as np
@@ -89,6 +89,22 @@ class Chapman(BaseDataset):
             self.input_data = self.input_data[select_idxs]
             self.label = self.label[select_idxs]
         
+    def down_sample(self,new_Hz):
+        bs,seq_len,ch = self.input_data.shape
+        second = int(seq_len/self.Hz)
+        new_len = second * new_Hz
+        #need (seq_len,ch)
+        print('old data shape: ')
+        print(self.input_data.shape)
+        X_tmp = []
+        for x in self.input_data:
+            x_tmp = signal.resample(x,new_len)
+            X_tmp.append(x_tmp)
+        self.input_data = np.array(X_tmp)
+        print('new data shape: ')
+        print(self.input_data.shape)
+        #
+        self.Hz = new_Hz
 
     def process_data(self):
         print('Process data')

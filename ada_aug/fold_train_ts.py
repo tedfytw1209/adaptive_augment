@@ -303,7 +303,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         self.gf_model = get_model_tseries(model_name=args.gf_model_name,
                             num_class=search_n_class,n_channel=n_channel,
                             use_cuda=True, data_parallel=False,dataset=args.dataset,
-                            hz=self.sfreq,addition_config=add_model_config)
+                            max_len=max_len,hz=self.sfreq,addition_config=add_model_config)
         h_input = self.gf_model.fc.in_features
         label_num,label_embed =0,0
         if args.class_adapt and args.class_embed:

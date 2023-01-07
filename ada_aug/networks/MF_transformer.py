@@ -44,6 +44,7 @@ class LastPoolRNN(nn.Module):
 class PositionalEncoding(nn.Module):
     #assume x=(bs,seq_len,ch)
     def __init__(self, d_model, dropout, max_len=5000):
+        print('Position Encode max len: ',max_len)
         super(PositionalEncoding, self).__init__()
         self.dropout = nn.Dropout(p=dropout)
         pe = torch.zeros(max_len, d_model) #(max_len,d_model)
@@ -194,12 +195,13 @@ class MF_Transformer(nn.Module): #LSTM for time series
         h = config['n_head']
         drop_p = config['rnn_drop']
         d_ff = config['n_dff']
-        max_len = config['max_len']
+        ori_max_len = config['max_len']
         attn = MultiHeadedAttention(h,d_model)
         ff = PositionwiseFeedForward(d_model,d_ff,drop_p)
         #model: input_embed, pos_embed, atten_model, fc
         seg_config = config['seg_config']
-        self.segmentation = Segmentation(**seg_config)
+        self.segmentation = Segmentation(**seg_config,origin_max_len=ori_max_len)
+        max_len = self.segmentation.max_len
         self.input_embed = nn.Linear(n_input, n_embed,bias=False) #linear as embed
         self.position = PositionalEncoding(d_model,drop_p,max_len=max_len)
         self.atten_encoder = Encoder(EncoderLayer(d_model,c(attn),c(ff),drop_p),N)
@@ -327,7 +329,7 @@ class LSTM_ptb(nn.Module): #LSTM for PTBXL
         return self.classify(x)
 
 class Segmentation(nn.Module): #segment data for Transfromer
-    def __init__(self, seg_ways='fix', rr_method='pan',pw_len=0.4,tw_len=0.6,hz=100):
+    def __init__(self, seg_ways='fix', rr_method='pan',pw_len=0.4,tw_len=0.6,hz=100,origin_max_len=5000):
         #rr_method: fix, rpeak
         super().__init__()
         self.seg_ways = seg_ways
@@ -343,6 +345,8 @@ class Segmentation(nn.Module): #segment data for Transfromer
                 self.detect_func = self.detectors.pan_tompkins_detector
         elif self.seg_ways=='fix':
             self.detect_func = None
+        self.origin_max_len = origin_max_len
+        self.max_len = self.origin_max_len / self.hz
     
     def forward(self,x, seq_lens=None):
         bs, slen, ch = x.shape

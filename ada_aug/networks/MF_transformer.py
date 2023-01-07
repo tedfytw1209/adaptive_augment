@@ -346,7 +346,7 @@ class Segmentation(nn.Module): #segment data for Transfromer
         elif self.seg_ways=='fix':
             self.detect_func = None
         self.origin_max_len = origin_max_len
-        self.max_len = self.origin_max_len / self.hz
+        self.max_len = int(self.origin_max_len / self.hz)
     
     def forward(self,x, seq_lens=None):
         bs, slen, ch = x.shape

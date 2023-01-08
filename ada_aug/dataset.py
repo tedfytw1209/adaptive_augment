@@ -374,9 +374,11 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
         testset = dataset_func(dataroot,mode=fold_assign[2],multilabel=multilabel,**kwargs)
         #down sample to 100 Hz if needed
         if down_sample:
+            print(f'Before down sample {search_trainset.input_data.shape}')
             search_trainset.down_sample(100)
             validset.down_sample(100)
             testset.down_sample(100)
+            print(f'After down sample {search_trainset.input_data.shape}')
         #preprocess
         ss = StandardScaler()
         print(f'Before dataset {search_trainset.input_data.shape} sample 0:')

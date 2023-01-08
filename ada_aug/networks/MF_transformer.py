@@ -230,7 +230,7 @@ class MF_Transformer(nn.Module): #LSTM for time series
             x = x.transpose(1, 2) #(bs,ch,len) -> (bs, len, ch)
         bs, slen, ch = x.shape #x=(bs,len,n_hidden)
         if seq_lens==None:
-            seq_lens = torch.full((bs),slen).long()
+            seq_lens = torch.full((bs,),slen).long()
         #packed_embedded = nn.utils.rnn.pack_padded_sequence(
         #    x, seq_lens.cpu(), batch_first=True)  # seq_len:128 [0]: lenght of each sentence
         seg_x,seg_len = self.segmentation(x,seq_lens)

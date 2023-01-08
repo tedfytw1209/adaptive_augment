@@ -62,7 +62,7 @@ parser.add_argument('--grad_clip', type=float, default=5, help='gradient clippin
 parser.add_argument('--multilabel', action='store_true', default=False, help='using multilabel default False')
 parser.add_argument('--train_portion', type=float, default=1, help='portion of training data')
 parser.add_argument('--default_split', action='store_true', help='use dataset deault split')
-parser.add_argument('--kfold', type=int, default=0, help='use kfold cross validation')
+parser.add_argument('--kfold', type=int, default=-1, help='use kfold cross validation')
 parser.add_argument('--not_save', action='store_true', default=False, help='not to save model')
 #policy
 parser.add_argument('--proj_learning_rate', type=float, default=1e-2, help='learning rate for h')
@@ -220,8 +220,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         #os.environ['WANDB_START_METHOD'] = 'thread' #tmp disable
         #args = self.config['args']
         args = argparse.Namespace(**copy.deepcopy(self.config)) #for grid search
-        #random seed setting
-        utils.reproducibility(args.seed)
+        utils.reproducibility(args.seed) #for reproduce
         #  dataset settings for search
         n_channel = get_num_channel(args.dataset)
         n_class = get_num_class(args.dataset,args.labelgroup)

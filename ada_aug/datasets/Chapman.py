@@ -115,6 +115,7 @@ class Chapman(BaseDataset):
         select = None
         trans_dic = None
         outlabel = None
+        filter_data = True
         if self.labelgroup=='rhythm':
             select = rhythm_classes_cinc
             trans_dic = None
@@ -129,6 +130,10 @@ class Chapman(BaseDataset):
             cinc_sel = True
         elif self.labelgroup=='yuall':
             cinc_sel = False
+        elif self.labelgroup=='mlall':
+            cinc_sel = False
+            filter_data = False
+            assert self.multilabel #only can use in multilabel
         else:
             print('label group error')
             exit()
@@ -180,7 +185,7 @@ class Chapman(BaseDataset):
         for col in df.columns:
             if col in fixed_col: continue
             yes_cnt = df[col].value_counts()[1]
-            if yes_cnt < 300: 
+            if filter_data and yes_cnt < 300: 
                 df = df.drop(columns=col)
             else:
                 cols.append(col)

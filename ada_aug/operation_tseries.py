@@ -1804,18 +1804,23 @@ class KeepAugment(object): #need fix
 #segment gradient
 def stop_gradient_keep(trans_image, magnitude, keep_thre, region_list):
     x1, x2 = region_list[0][0], region_list[0][1]
+    seqlen, ch = trans_image.shape
     images = trans_image #(seq, ch)
     adds = 0
     images = images - magnitude
     adds = adds + magnitude
+    keep_len_sum = 0
+    for (x1,x2) in region_list:
+        keep_len_sum += int(abs(x2-x1))
+    keep_thres_mul = seqlen / keep_len_sum
     for (x1,x2) in region_list:
         info_part = images[x1:x2,:]
-        info_part = info_part - keep_thre
+        info_part = info_part - keep_thre * keep_thres_mul
     #add gradient
     images = images.detach() + adds
     for (x1,x2) in region_list:
         info_part = images[x1:x2,:]
-        info_part = info_part + keep_thre
+        info_part = info_part + keep_thre * keep_thres_mul
     return images
 class AdaKeepAugment(KeepAugment): #
     def __init__(self, mode, length,thres=0.6,transfrom=None,default_select=None, early=False, low = False,

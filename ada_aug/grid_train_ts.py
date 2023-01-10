@@ -743,7 +743,9 @@ def main():
     #grid search
     #hparams['search_freq'] = tune.grid_search([5,10]) #tune.grid_search(hparams['search_freq'])
     #hparams['search_round'] = tune.grid_search([4,8,16]) #tune.grid_search(hparams['search_round'])
-    #hparams['proj_learning_rate'] = tune.grid_search([1e-12,0.00003,0.0001,0.0003,0.001,0.003,0.01])
+    hparams['epochs'] = tune.grid_search([50,100])
+    hparams['learning_rate'] = tune.grid_search([0.001,0.003,0.01,0.03,0.1])
+    hparams['weight_decay'] = tune.grid_search([0.001,0.003,0.01])
     #hparams['k_ops'] = tune.grid_search([1,2])
     #hparams['lambda_aug'] = tune.quniform(hparams['lambda_aug'][0],hparams['lambda_aug'][1],0.01)
     #hparams['lambda_sim'] = tune.quniform(hparams['lambda_sim'][0],hparams['lambda_sim'][1],0.01)
@@ -756,13 +758,13 @@ def main():
     #hparams['diff_aug'] = tune.grid_search([True,False])
     #hparams['lambda_noaug'] = tune.grid_search([1,10,50])
     #hparams['noaug_add'] = tune.grid_search(['cadd','coadd'])
-    hparams['noaug_add'] = tune.grid_search(['coadd'])
-    hparams['noaug_target'] = tune.grid_search(['s','e','se'])
-    hparams['noaug_max'] = tune.grid_search([0.1,0.3,0.5,0.7])
-    hparams['reduce_mag'] = tune.grid_search([0,0.2])
-    hparams['output_source'] = tune.grid_search(['train','valid'])
+    #hparams['noaug_add'] = tune.grid_search(['coadd'])
+    #hparams['noaug_target'] = tune.grid_search(['s','e','se'])
+    #hparams['noaug_max'] = tune.grid_search([0.1,0.3,0.5,0.7])
+    #hparams['reduce_mag'] = tune.grid_search([0,0.2])
+    #hparams['output_source'] = tune.grid_search(['train','valid'])
     #hparams['feature_mask'] = tune.grid_search(['','select','classonly'])
-    hparams['grid_target'] = ['noaug_add','noaug_target','output_source','noaug_max','reduce_mag']
+    hparams['grid_target'] = ['epochs','learning_rate','weight_decay']
     print(hparams)
     #wandb
     wandb_config = {

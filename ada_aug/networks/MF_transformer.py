@@ -258,76 +258,6 @@ class MF_Transformer(nn.Module): #LSTM for time series
         x = self.extract_features(x, seq_lens)
         return self.classify(x)
 
-class LSTM_ptb(nn.Module): #LSTM for PTBXL
-    '''
-    LSTM Module
-    for self-supervised ECG: 2 layers and 256 hidden units
-    concat-pooling layer, which concatenates the max/mean of all LSTM outputs
-    single hidden layer with 128 units including batch normalization and dropout
-    '''
-    def __init__(self, config):
-        super().__init__()
-        # params: "n_" means dimension
-        self.input_channels = config['n_embed']
-        self.z_dim = config['n_hidden']
-        self.num_classes = config['n_output']
-        self.n_layers = config['n_layers']   # number of layers
-        self.bidir_factor = 1 + int(config['b_dir'])
-        self.config = config
-        self.lstm = nn.LSTM(config['n_embed'], 2*config['n_hidden'], num_layers=config['n_layers']
-                , bidirectional=config['b_dir'], batch_first=True)
-        self.concat_pool = config.get('concat_pool',False)
-        if self.concat_pool:
-            mult_factor = 3
-            self.pool = AdaptiveConcatPoolRNN(config['b_dir'])
-        else:
-            mult_factor = 1
-            self.pool = LastPoolRNN(config['b_dir'])
-        self.concat_fc = nn.Sequential(*[
-                nn.BatchNorm1d(self.bidir_factor * mult_factor * 2*config['n_hidden']),
-                nn.Dropout(config['rnn_drop']),
-                nn.Linear(self.bidir_factor * mult_factor * 2*config['n_hidden'], config['n_hidden']),
-                nn.ReLU(),])
-        self.fc = nn.Sequential(*[
-                nn.BatchNorm1d(config['n_hidden']),
-                nn.Dropout(config['fc_drop']),
-                nn.Linear(config['n_hidden'], config['n_output'])])
-        self.fc.in_features = config['n_hidden']
-
-    def extract_features(self, x, seq_lens=None, pool=True):
-        x_shape = x.shape
-        if self.input_channels == x_shape[1]:
-            x = x.transpose(1, 2) #(bs,ch,len) -> (bs, len, ch)
-        
-        if seq_lens!=None:
-            packed_embedded = nn.utils.rnn.pack_padded_sequence(
-                x, seq_lens.cpu(), batch_first=True,enforce_sorted=False)  # seq_len:128 [0]: lenght of each sentence
-        else:
-            packed_embedded = x
-        rnn_out, (hidden, cell) = self.lstm(
-            packed_embedded)  # bs X len X n_hidden
-        if seq_lens!=None:
-            out_pad, _out_len = rnn_utils.pad_packed_sequence(rnn_out, batch_first=True)
-        else:
-            out_pad = rnn_out
-        features = out_pad.transpose(1, 2) # bs, n_hidden, len
-        if pool:
-            features = self.pool(features) #bs, ch * (1+b_dir) * concat pool
-            features = self.concat_fc(features) #bs, ch
-        return features
-    def pool_features(self, features):
-        features = self.pool(features) #bs, ch * (1+b_dir) * concat pool
-        features = self.concat_fc(features) #bs, ch
-        return features
-    
-    def classify(self, features):
-        fc_out = self.fc(features)  # bs x d_out
-        return fc_out
-
-    def forward(self, x, seq_lens=None):
-        x = self.extract_features(x, seq_lens)
-        return self.classify(x)
-
 class Segmentation(nn.Module): #segment data for Transfromer
     def __init__(self, seg_ways='fix', rr_method='pan',pw_len=0.4,tw_len=0.6,hz=100,origin_max_len=5000):
         #rr_method: fix, rpeak
@@ -360,6 +290,7 @@ class Segmentation(nn.Module): #segment data for Transfromer
             new_seq_lens = (seq_lens / self.hz).long() #real len after transform
         else:
             print('x shape: ',x.shape) #!tmp
+            new_len = int(slen / (self.hz*0.6)) #max rpeaks
             x_single = x[:,:,self.detect_lead].detach().cpu().numpy()
             new_seq_lens = torch.zeros(bs)
             tmp_x = []
@@ -368,6 +299,8 @@ class Segmentation(nn.Module): #segment data for Transfromer
                 new_seq_lens[i] = len(rpeaks_array)
                 new_x = torch.zeros(new_len,new_ch)
                 for p,peak in enumerate(rpeaks_array):
+                    if p==new_len:
+                        break #break if too long
                     x1 = np.clip(peak - self.pw_len , 0, slen)
                     x2 = np.clip(peak + self.tw_len , 0, slen)
                     new_x[p] = x_each[x1:x2,:].reshape(-1)

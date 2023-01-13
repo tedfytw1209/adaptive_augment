@@ -81,6 +81,18 @@ def get_model_tseries(model_name='lstm', num_class=10, n_channel=3, use_cuda=Tru
                   'rnn_drop': 0.1,
                   'fc_drop': 0.5}
         net = MF_Transformer
+    elif model_name == 'mf_trans2':
+        n_hidden = 512
+        model_config = {
+                  'n_hidden': n_hidden,
+                  'n_layers': 5,
+                  'n_head': 8, #tmp params
+                  'n_dff': n_hidden*2, #tmp params
+                  'b_dir': False,
+                  'concat_pool': True,
+                  'rnn_drop': 0.1,
+                  'fc_drop': 0.5}
+        net = MF_Transformer
     elif model_name == 'lstm_atten':
         n_hidden = 512
         model_config = {

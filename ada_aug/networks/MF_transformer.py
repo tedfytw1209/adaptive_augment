@@ -298,11 +298,11 @@ class Segmentation(nn.Module): #segment data for Transfromer
                 rpeaks_array = self.detect_func(x_each[:slen_each])
                 new_seq_lens[i] = len(rpeaks_array)
                 new_x = torch.zeros(new_len,new_ch)
-                for p,peak in enumerate(rpeaks_array):
+                for (p,peak) in enumerate(rpeaks_array):
                     if p==new_len:
                         break #break if too long
-                    x1 = np.clip(peak - self.pw_len , 0, slen)
-                    x2 = np.clip(peak + self.tw_len , 0, slen)
+                    x1 = int(np.clip(peak - self.pw_len , 0, slen))
+                    x2 = int(np.clip(peak + self.tw_len , 0, slen))
                     new_x[p] = x_each[x1:x2,:].reshape(-1)
                 tmp_x.append(new_x)
             tmp_x = torch.stack(tmp_x, dim=0).to(x.device)

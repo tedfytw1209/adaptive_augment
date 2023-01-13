@@ -243,6 +243,7 @@ class MF_Transformer(nn.Module): #LSTM for time series
         features = x_encoded.transpose(1, 2) #change to input shape bs, ch, ts
         if pool:
             features = self.pool_features(features) #bs, ch * (1+b_dir) * concat pool
+        #print('feature embed shape: ',features.shape)
         return features
 
     def pool_features(self, features):
@@ -268,15 +269,16 @@ class Segmentation(nn.Module): #segment data for Transfromer
         self.tw_len = tw_len * hz
         self.hz = hz
         self.detect_lead = 1 #normal use lead II
+        self.origin_max_len = origin_max_len
         if self.seg_ways=='rpeak':
             self.detectors = Detectors(self.hz) #need input ecg: (seq_len)
+            self.max_len = int(self.origin_max_len / (self.hz*0.6))
             #detector
             if rr_method=='pan':
                 self.detect_func = self.detectors.pan_tompkins_detector
         elif self.seg_ways=='fix':
             self.detect_func = None
-        self.origin_max_len = origin_max_len
-        self.max_len = int(self.origin_max_len / self.hz)
+            self.max_len = int(self.origin_max_len / self.hz)
     
     def forward(self,x, seq_lens=None):
         bs, slen, ch = x.shape
@@ -284,12 +286,15 @@ class Segmentation(nn.Module): #segment data for Transfromer
         new_ch = ch * self.hz
         if seq_lens==None:
             seq_lens = torch.full((bs),slen).long()
+        elif len(seq_lens) < bs:
+            multi = int(bs / len(seq_lens))
+            seq_lens = seq_lens.reshape(-1,1).expand(-1, multi).reshape(-1)
         
         if self.detect_func==None:
             tmp_x = x.reshape(bs,new_len,new_ch)
             new_seq_lens = (seq_lens / self.hz).long() #real len after transform
         else:
-            print('x shape: ',x.shape) #!tmp
+            #print('x shape: ',x.shape) #!tmp
             new_len = int(slen / (self.hz*0.6)) #max rpeaks
             x_single = x[:,:,self.detect_lead].detach().cpu().numpy()
             new_seq_lens = torch.zeros(bs)
@@ -303,9 +308,10 @@ class Segmentation(nn.Module): #segment data for Transfromer
                         break #break if too long
                     x1 = int(np.clip(peak - self.pw_len , 0, slen))
                     x2 = int(np.clip(peak + self.tw_len , 0, slen))
-                    new_x[p] = x_chs_each[x1:x2,:].reshape(-1)
+                    f_len = x2 - x1
+                    new_x[p,0:f_len*ch] = x_chs_each[x1:x2,:].reshape(-1)
                 tmp_x.append(new_x)
             tmp_x = torch.stack(tmp_x, dim=0).to(x.device)
-            print('segmented shape: ',tmp_x.shape) #!tmp
+            #print('segmented shape: ',tmp_x.shape) #!tmp
         
         return tmp_x, new_seq_lens

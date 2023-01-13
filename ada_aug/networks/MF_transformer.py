@@ -294,7 +294,7 @@ class Segmentation(nn.Module): #segment data for Transfromer
             x_single = x[:,:,self.detect_lead].detach().cpu().numpy()
             new_seq_lens = torch.zeros(bs)
             tmp_x = []
-            for i,(x_each,slen_each) in enumerate(zip(x_single,seq_lens)): #each x = (seq_len)
+            for i,(x_chs_each,x_each,slen_each) in enumerate(zip(x,x_single,seq_lens)): #each x = (seq_len)
                 rpeaks_array = self.detect_func(x_each[:slen_each])
                 new_seq_lens[i] = len(rpeaks_array)
                 new_x = torch.zeros(new_len,new_ch)
@@ -303,7 +303,7 @@ class Segmentation(nn.Module): #segment data for Transfromer
                         break #break if too long
                     x1 = np.clip(peak - self.pw_len , 0, slen)
                     x2 = np.clip(peak + self.tw_len , 0, slen)
-                    new_x[p] = x_each[x1:x2,:].reshape(-1)
+                    new_x[p] = x_chs_each[x1:x2,:].reshape(-1)
                 tmp_x.append(new_x)
             tmp_x = torch.stack(tmp_x, dim=0).to(x.device)
             print('segmented shape: ',tmp_x.shape) #!tmp

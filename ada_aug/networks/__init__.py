@@ -70,7 +70,7 @@ def get_model_tseries(model_name='lstm', num_class=10, n_channel=3, use_cuda=Tru
                   'fc_drop': 0.5}
         net = LSTM_ptb
     elif model_name == 'mf_trans':
-        n_hidden = 128 #1/17 tmp change
+        n_hidden = 256 # old mf_trans before 1/17=128, new mf_trans=256
         model_config = {
                   'n_hidden': n_hidden,
                   'n_layers': 5,

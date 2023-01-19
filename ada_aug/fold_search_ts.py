@@ -755,6 +755,8 @@ def main():
         proj_name = 'AdaAug_ml'
     elif args.model_name=='lstm_prb':
         proj_name = 'AdaAug_LSTM-Other'
+    elif args.model_name=='mf_trans' or args.model_name=='mf_trans2':
+        proj_name = 'AdaAug_LSTM-Other'
     else:
         proj_name = 'AdaAug'
     #wandb

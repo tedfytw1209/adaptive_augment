@@ -166,6 +166,8 @@ class XResNet1d(nn.Module):
                  widen=1.0, sa=False, act_cls=nn.ReLU, lin_ftrs_head=None, ps_head=0.5, bn_final_head=False, bn_head=True, act_head="relu", concat_pooling=True, **kwargs):
         super().__init__()
         store_attr(self, 'block,expansion,act_cls')
+        self.input_channels = input_channels
+        self.num_classes = num_classes
         stem_szs = [input_channels, *stem_szs]
         stem = [ConvLayer(stem_szs[i], stem_szs[i+1], ks=kernel_size_stem, stride=2 if i==0 else 1, act_cls=act_cls, ndim=1)
                 for i in range(3)]
@@ -177,7 +179,10 @@ class XResNet1d(nn.Module):
                                    stride=1 if i==0 else 2, kernel_size=kernel_size, sa=sa and i==len(layers)-4, ndim=1, **kwargs)
                   for i,l in enumerate(layers)]
         self.pool = create_pool(concat_pooling=concat_pooling)
-        self.fc = create_head1d(block_szs[-1]*expansion, nc=num_classes, lin_ftrs=lin_ftrs_head, ps=ps_head, bn_final=bn_final_head, bn=bn_head, act=act_head, concat_pooling=concat_pooling)
+        nf = block_szs[-1] * block.expansion
+        self.fc = create_head1d(nf, nc=num_classes, lin_ftrs=lin_ftrs_head, ps=ps_head, bn_final=bn_final_head, bn=bn_head, act=act_head, concat_pooling=concat_pooling)
+        self.fc.in_features = 2*nf if concat_pooling else nf
+        self.z_dim = 2*nf if concat_pooling else nf
         self.feature_extractor = nn.Sequential( *stem, nn.MaxPool1d(kernel_size=3, stride=2, padding=1)
             , *blocks,)
         '''super().__init__(
@@ -202,13 +207,17 @@ class XResNet1d(nn.Module):
     def set_output_layer(self,x):
         self[-1][-1]=x
     
-    def extract_features(self, x, seq_len=None):
+    def extract_features(self, x, seq_len=None, pool=True):
         #convert to 1dcnn ways (bs,len,ch) -> (bs,ch,len)
-        x = x.transpose(1, 2) #(bs,len,ch) -> (bs, ch, len)
+        x_shape = x.shape
+        if self.input_channels == x_shape[2]:
+            x = x.transpose(1, 2) #(bs,len,ch) -> (bs, ch, len)
         x = self.feature_extractor(x)
-        x = self.pool(x)
+        if pool:
+            x = self.pool(x)
         return x
-    
+    def pool_features(self, x):
+        return self.pool(x)
     def classify(self, features):
         return self.fc(features)
 

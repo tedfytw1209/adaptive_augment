@@ -10,7 +10,8 @@ from .wideresnet import WideResNet
 from .LSTM import LSTM_ecg,LSTM_modal,LSTM_ptb
 from .LSTM_attention import LSTM_attention
 from .Sleep_stager import SleepStagerChambon2018
-from .resnet1d import resnet1d_wang
+from .resnet1d import resnet1d_wang,resnet1d101
+from .xresnet1d import xresnet1d101
 from .MF_transformer import MF_Transformer
 
 def count_parameters(model):
@@ -103,6 +104,53 @@ def get_model_tseries(model_name='lstm', num_class=10, n_channel=3, use_cuda=Tru
                   'fc_drop': 0.5}
         net = LSTM_attention
     elif model_name == 'resnet_wang':
+        n_hidden = 128
+        config = {
+                  'input_channels': n_channel,
+                  'inplanes': n_hidden,
+                  'num_classes': num_class,
+                  'kernel_size': 5,
+                  'lin_ftrs_head': [n_hidden], #8/17 add
+                  'ps_head': 0.5}
+        model_config = {}
+        net = resnet1d_wang
+    elif model_name == 'resnet101':
+        n_hidden = 128
+        config = {
+                  'input_channels': n_channel,
+                  'inplanes': n_hidden,
+                  'num_classes': num_class,
+                  'kernel_size': 5,
+                  'lin_ftrs_head': [n_hidden], #8/17 add
+                  'ps_head': 0.5}
+        model_config = {}
+        net = resnet1d101
+    elif model_name == 'xresnet101':
+        #conf_fastai_xresnet1d101 = {'modelname':'fastai_xresnet1d101', 'modeltype':'fastai_model', 'parameters':dict()}
+        #elif(self.name.startswith("fastai_xresnet1d101")):
+        #    model = xresnet1d101(num_classes=num_classes,input_channels=self.input_channels,kernel_size=self.kernel_size,ps_head=self.ps_head,lin_ftrs_head=self.lin_ftrs_head)
+        n_hidden = 128
+        config = {
+                  'input_channels': n_channel,
+                  'inplanes': n_hidden,
+                  'num_classes': num_class,
+                  'kernel_size': 5,
+                  'lin_ftrs_head': [n_hidden], #8/17 add
+                  'ps_head': 0.5}
+        model_config = {}
+        net = xresnet1d101
+    elif model_name == 'inception':
+        n_hidden = 128
+        config = {
+                  'input_channels': n_channel,
+                  'inplanes': n_hidden,
+                  'num_classes': num_class,
+                  'kernel_size': 5,
+                  'lin_ftrs_head': [n_hidden], #8/17 add
+                  'ps_head': 0.5}
+        model_config = {}
+        net = resnet1d_wang
+    elif model_name == 'fcn_wang':
         n_hidden = 128
         config = {
                   'input_channels': n_channel,

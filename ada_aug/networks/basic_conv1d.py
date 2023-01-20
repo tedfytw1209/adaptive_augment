@@ -103,6 +103,9 @@ def create_head1d(nf:int, nc:int, lin_ftrs=None, ps=0.5, bn_final:bool=False, bn
     if len(ps)==1: ps = [ps[0]/2] * (len(lin_ftrs)-2) + ps
     actns = [nn.ReLU(inplace=True) if act=="relu" else nn.ELU(inplace=True)] * (len(lin_ftrs)-2) + [nn.Identity()]
     #layers = [AdaptiveConcatPool1d() if concat_pooling else nn.MaxPool1d(2), Flatten()]
+    print('fc layers')
+    print(lin_ftrs[:-1])
+    print(lin_ftrs[1:])
     layers = []
     for ni,no,p,actn in zip(lin_ftrs[:-1],lin_ftrs[1:],ps,actns):
         layers += [
@@ -117,7 +120,10 @@ def create_head1d(nf:int, nc:int, lin_ftrs=None, ps=0.5, bn_final:bool=False, bn
 
 class basic_conv1d(nn.Module):
     '''basic conv1d'''
-    def __init__(self, filters=[128,128,128,128],kernel_size=3, stride=2, dilation=1, pool=0, pool_stride=1, squeeze_excite_reduction=0, num_classes=2, input_channels=8, act="relu", bn=True, headless=False,split_first_layer=False,drop_p=0.,lin_ftrs_head=None, ps_head=0.5, bn_final_head=False, bn_head=True, act_head="relu", concat_pooling=True):
+    def __init__(self, filters=[128,128,128,128],kernel_size=3, stride=2, dilation=1, pool=0, pool_stride=1, 
+            squeeze_excite_reduction=0, num_classes=2, input_channels=8, act="relu", bn=True, headless=False,
+            split_first_layer=False,drop_p=0.,lin_ftrs_head=None, ps_head=0.5, bn_final_head=False, bn_head=True,
+            act_head="relu", concat_pooling=True):
         super().__init__()
         self.input_channels = input_channels
         self.num_classes = num_classes

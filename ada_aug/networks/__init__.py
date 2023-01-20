@@ -12,7 +12,7 @@ from .LSTM_attention import LSTM_attention
 from .Sleep_stager import SleepStagerChambon2018
 from .resnet1d import resnet1d_wang,resnet1d101
 from .xresnet1d import xresnet1d101
-from .basic_conv1d import fcn_wang
+from .basic_conv1d import make_fcn_wang
 from .inception1d import make_inception1d
 from .MF_transformer import MF_Transformer
 
@@ -156,12 +156,12 @@ def get_model_tseries(model_name='lstm', num_class=10, n_channel=3, use_cuda=Tru
         n_hidden = 128
         config = {
                   'input_channels': n_channel,
-                  'inplanes': n_hidden,
+                  #'inplanes': n_hidden,
                   'num_classes': num_class,
                   'lin_ftrs_head': [n_hidden], #8/17 add
                   'ps_head': 0.5}
         model_config = {}
-        net = fcn_wang
+        net = make_fcn_wang
     elif model_name == 'cnn_sleep': #with problems!!!
         model_config = {
                   'dataset': dataset,

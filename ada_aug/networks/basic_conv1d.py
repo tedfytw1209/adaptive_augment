@@ -104,8 +104,7 @@ def create_head1d(nf:int, nc:int, lin_ftrs=None, ps=0.5, bn_final:bool=False, bn
     actns = [nn.ReLU(inplace=True) if act=="relu" else nn.ELU(inplace=True)] * (len(lin_ftrs)-2) + [nn.Identity()]
     #layers = [AdaptiveConcatPool1d() if concat_pooling else nn.MaxPool1d(2), Flatten()]
     print('fc layers')
-    print(lin_ftrs[:-1])
-    print(lin_ftrs[1:])
+    print(lin_ftrs)
     layers = []
     for ni,no,p,actn in zip(lin_ftrs[:-1],lin_ftrs[1:],ps,actns):
         layers += [
@@ -196,6 +195,8 @@ def fcn(filters=[128]*5,num_classes=2,input_channels=8):
     filters_in = filters + [num_classes]
     return basic_conv1d(filters=filters_in,kernel_size=3,stride=1,pool=2,pool_stride=2,input_channels=input_channels,act="relu",bn=True,headless=True)
 
+def make_fcn_wang(kwargs):
+    return fcn_wang(**kwargs)
 def fcn_wang(num_classes=2,input_channels=8,lin_ftrs_head=None, ps_head=0.5, bn_final_head=False, bn_head=True, act_head="relu", concat_pooling=True):
     return basic_conv1d(filters=[128,256,128],kernel_size=[8,5,3],stride=1,pool=0,pool_stride=2, num_classes=num_classes,input_channels=input_channels,act="relu",bn=True,lin_ftrs_head=lin_ftrs_head, ps_head=ps_head, bn_final_head=bn_final_head, bn_head=bn_head, act_head=act_head, concat_pooling=concat_pooling)
 

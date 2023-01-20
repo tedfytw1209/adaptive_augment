@@ -119,7 +119,7 @@ class Inception1d(nn.Module):
     def set_output_layer(self,x):
         self.layers[-1][-1] = x
     
-def make_inception1d(**kwargs):
+def make_inception1d(kwargs):
     """Constructs an Inception model
     """
     return Inception1d(**kwargs)

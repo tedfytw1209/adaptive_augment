@@ -134,7 +134,7 @@ def get_model_tseries(model_name='lstm', num_class=10, n_channel=3, use_cuda=Tru
         n_hidden = 128
         config = {
                   'input_channels': n_channel,
-                  'inplanes': n_hidden,
+                  #'inplanes': n_hidden,
                   'num_classes': num_class,
                   'kernel_size': 5,
                   'lin_ftrs_head': [n_hidden], #8/17 add
@@ -145,7 +145,7 @@ def get_model_tseries(model_name='lstm', num_class=10, n_channel=3, use_cuda=Tru
         n_hidden = 128
         config = {
                   'input_channels': n_channel,
-                  'inplanes': n_hidden,
+                  #'inplanes': n_hidden,
                   'num_classes': num_class,
                   'kernel_size': 5 * 8, # 8 * self.kernel size 
                   'lin_ftrs_head': [n_hidden], #8/17 add

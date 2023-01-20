@@ -22,9 +22,9 @@ def create_pool(concat_pooling=True):
 def create_head1d(nf:int, nc:int, lin_ftrs=None, ps=0.5, bn_final:bool=False, bn:bool=True, act="relu", concat_pooling=True):
     "Model head that takes `nf` features, runs through `lin_ftrs`, and about `nc` classes; added bn and act here"
     lin_ftrs = [2*nf if concat_pooling else nf, nc] if lin_ftrs is None else [2*nf if concat_pooling else nf] + lin_ftrs + [nc] #was [nf, 256,nc]
-    ps = list(ps)
+    ps = list([ps])
     if len(ps)==1: ps = [ps[0]/2] * (len(lin_ftrs)-2) + ps
-    actns = [nn.ReLU(inplace=True) if act=="relu" else nn.ELU(inplace=True)] * (len(lin_ftrs)-2) + [None]
+    actns = [nn.ReLU(inplace=True) if act=="relu" else nn.ELU(inplace=True)] * (len(lin_ftrs)-2) + [nn.Identity()]
     #layers = [AdaptiveConcatPool1d() if concat_pooling else nn.MaxPool1d(2), Flatten()]
     layers = []
     for ni,no,p,actn in zip(lin_ftrs[:-1],lin_ftrs[1:],ps,actns):
@@ -179,7 +179,7 @@ class XResNet1d(nn.Module):
                                    stride=1 if i==0 else 2, kernel_size=kernel_size, sa=sa and i==len(layers)-4, ndim=1, **kwargs)
                   for i,l in enumerate(layers)]
         self.pool = create_pool(concat_pooling=concat_pooling)
-        nf = block_szs[-1] * block.expansion
+        nf = block_szs[-1] * expansion
         self.fc = create_head1d(nf, nc=num_classes, lin_ftrs=lin_ftrs_head, ps=ps_head, bn_final=bn_final_head, bn=bn_head, act=act_head, concat_pooling=concat_pooling)
         self.fc.in_features = 2*nf if concat_pooling else nf
         self.z_dim = 2*nf if concat_pooling else nf

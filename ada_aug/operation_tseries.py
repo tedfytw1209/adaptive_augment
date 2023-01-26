@@ -1753,18 +1753,26 @@ class KeepAugment(object): #need fix
         else:
             model.eval()
         b, seq_len , c = x.shape
-        if self.early: #early not allow now
-            preds = model(x,early=True)
+        if self.saliency_target=='atten':
+            slc_,slc_ch = 0,0
+            atten_sc = model.get_attention(x) #(bs,len,len(softed))
+            atten_sc_sum = torch.sum(atten_sc,dim=1) #(bs,len)
+            slc_, _ = torch.max(torch.abs(atten_sc_sum), dim=2) #max of channel
+            slc_ch = torch.mean(torch.abs(atten_sc_sum), dim=1) #mean of len, 10/29
+            slc_ = normal_slc(slc_)
+            slc_ch = normal_slc(slc_ch)
         else:
-            preds = model(x)
-
-        #score, _ = torch.max(preds, 1) #predict class
-        score = self.get_saliency_score(preds,target)
-        score.mean().backward() #among batch mean
-        slc_, _ = torch.max(torch.abs(x.grad), dim=2) #max of channel
-        slc_ch = torch.mean(torch.abs(x.grad), dim=1) #mean of len, 10/29
-        slc_ = normal_slc(slc_)
-        slc_ch = normal_slc(slc_ch)
+            if self.early: #early not allow now
+                preds = model(x,early=True)
+            else:
+                preds = model(x)
+            #score, _ = torch.max(preds, 1) #predict class
+            score = self.get_saliency_score(preds,target)
+            score.mean().backward() #among batch mean
+            slc_, _ = torch.max(torch.abs(x.grad), dim=2) #max of channel
+            slc_ch = torch.mean(torch.abs(x.grad), dim=1) #mean of len, 10/29
+            slc_ = normal_slc(slc_)
+            slc_ch = normal_slc(slc_ch)
         if hasattr(model, 'lstm'):
             activate_bn_track_running_stats(model)
         return slc_,slc_ch

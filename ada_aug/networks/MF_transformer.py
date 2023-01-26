@@ -72,6 +72,10 @@ class Encoder(nn.Module):
         for (i,layer) in enumerate(self.layers):
             x = layer(x, mask)
         return self.norm(x)
+    def get_attention(self, x, seq_lens=None):
+        #!!!tmp, only use first attention
+        out_x = self.layers[0].get_attention(x, seq_lens)
+        return out_x
 
 class LayerNorm(nn.Module):
     "Construct a layernorm module (See citation for details)."
@@ -111,18 +115,21 @@ class EncoderLayer(nn.Module):
         "Follow Figure 1 (left) for connections."
         x = self.sublayer[0](x, lambda x: self.self_attn(x, x, x, mask))
         return self.sublayer[1](x, self.feed_forward)
+    def get_attention(self, x, seq_lens=None):
+        out_x = self.self_attn.get_attention(x, seq_lens)
+        return out_x
 
 #atten
 def attention(query, key, value, mask=None, dropout=None):
     "Compute 'Scaled Dot Product Attention'"
     d_k = query.size(-1)
-    scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(d_k)
+    scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(d_k) #(bs,len,ch)x(bs,ch,len)=>(bs,len,len)
     if mask is not None:
         scores = scores.masked_fill(mask == 0, -1e9)
-    p_attn = scores.softmax(dim=-1)
+    p_attn = scores.softmax(dim=-1) #(bs,len,len)
     if dropout is not None:
         p_attn = dropout(p_attn)
-    return torch.matmul(p_attn, value), p_attn
+    return torch.matmul(p_attn, value), p_attn #out: (bs,len,len) x (bs,len,ch)=(bs,len,ch)
 #multi-head atten
 class MultiHeadedAttention(nn.Module):
     def __init__(self, h, d_model, dropout=0.1):
@@ -160,6 +167,22 @@ class MultiHeadedAttention(nn.Module):
         del key
         del value
         return self.linears[-1](x)
+    def get_attention(self, x, seq_lens=None,mask=None):
+        query, key, value = x, x, x
+        if mask is not None:
+            # Same mask applied to all h heads.
+            mask = mask.unsqueeze(1)
+        nbatches = query.size(0)
+        # 1) Do all the linear projections in batch from d_model => h x d_k
+        query, key, value = [
+            lin(x).view(nbatches, -1, self.h, self.d_k).transpose(1, 2)
+            for lin, x in zip(self.linears, (query, key, value))
+        ]
+        # 2) Apply attention on all the projected vectors in batch.
+        out_x, attn = attention(
+            query, key, value, mask=mask, dropout=self.dropout
+        )
+        return attn #need (bs,seq_len)
 class PositionwiseFeedForward(nn.Module):
     "Implements FFN equation."
     def __init__(self, d_model, d_ff, dropout=0.1):
@@ -258,6 +281,10 @@ class MF_Transformer(nn.Module): #LSTM for time series
     def forward(self, x, seq_lens=None):
         x = self.extract_features(x, seq_lens)
         return self.classify(x)
+    
+    def get_attention(self, x, seq_lens=None):
+        out_atten = self.atten_encoder.get_attention(x,seq_lens=seq_lens)
+        return out_atten 
 
 class Segmentation(nn.Module): #segment data for Transfromer
     def __init__(self, seg_ways='fix', rr_method='pan',pw_len=0.4,tw_len=0.6,hz=100,origin_max_len=5000):

@@ -138,7 +138,7 @@ parser.add_argument('--soft_conf', type=float, default=1.0, help="confidence for
 #info keep
 parser.add_argument('--keep_aug', action='store_true', default=False, help='info keep augment')
 parser.add_argument('--keep_mode', type=str, default='auto', help='info keep mode',choices=['auto','adapt','b','p','t','rand'])
-parser.add_argument('--saliency', type=str, default='max', help='saliency map score target',choices=['pred','target','max'])
+parser.add_argument('--saliency', type=str, default='max', help='saliency map score target',choices=['pred','target','max','atten'])
 parser.add_argument('--keep_prob', type=float, default=1, help='info keep probabilty')
 parser.add_argument('--keep_mix', action='store_true', default=False, help='mixup type of keep')
 parser.add_argument('--adapt_target', type=str, default='len', help='info keep mode',

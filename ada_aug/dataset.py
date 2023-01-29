@@ -431,6 +431,29 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
         search_dataset = validset
         total_trainset = search_trainset
         print(f'Train len: {len(total_trainset)},Search len: {len(validset)}')
+    elif search_size > 1:
+        total_len = len(search_trainset)
+        print(f'Split search set of {total_len - search_size} smaples')
+        print(f'Split train set of {search_size} smaples')
+        if not multilabel: #multilabel can't, label<2 can't
+            sss = StratifiedShuffleSplit(n_splits=5, test_size=total_len - search_size, random_state=0)
+            sss = sss.split(list(rd_idxs), label_for_split)
+        else:
+            too_minor_len = len(too_minor_sample)
+            sss = ShuffleSplit(n_splits=5, test_size=total_len - search_size + too_minor_len, random_state=0)
+            sss = sss.split(list(rd_idxs))
+        tot_train_idx, search_idx = next(sss)
+        too_minor_sample = np.array(too_minor_sample).astype(int)
+        tot_train_idx = np.concatenate((tot_train_idx,too_minor_sample)).astype(int) #add back minor sample, 11/09
+        print(tot_train_idx)
+        print(search_idx)
+        print(f'Train len: {len(tot_train_idx)},Search len: {len(search_idx)}')
+        search_labels = np.array([search_trainset.label[idx] for idx in search_idx])
+        search_dataset = Subset(search_trainset,search_idx)
+        search_dataset.label = search_labels
+        train_labels = np.array([search_trainset.label[idx] for idx in tot_train_idx])
+        total_trainset = Subset(search_trainset,tot_train_idx)
+        total_trainset.label = train_labels
     elif search_size > 0:
         print(f'Split search set of {search_size} search_trainset')
         if not multilabel: #multilabel can't, label<2 can't

@@ -453,8 +453,6 @@ class AdaAug_TS(AdaAug):
             ops_mask_idx = None
         a_imgs = self.get_aug_valid_imgs(images, magnitudes,seq_len=seq_len, mask_idx=ops_mask_idx,target=y)
         seq_len = seq_len.reshape(-1,1).expand(-1,self.n_ops).reshape(-1)
-        print('a_imgs shape: ',a_imgs.shape)
-        print('seq_len shape:',seq_len.shape)
         #a_imgs = self.Augment_wrapper(images, model=self.gf_model,apply_func=self.get_aug_valid_imgs,magnitudes=magnitudes,selective='paste')
         #a_features = self.gf_model.extract_features(a_imgs, a_seq_len)
         self.gf_model.eval() #11/09 add !!!why here!!!
@@ -462,7 +460,6 @@ class AdaAug_TS(AdaAug):
             self.gf_model.lstm.train() #!!!maybe for bn is better
         self.h_model.train()
         a_features = self.gf_model.extract_features(a_imgs,seq_len, pool=True)
-        print('a_features shape: ',a_features.shape)
         ba_features = a_features.reshape(len(images), n_ops_sub, -1) # batch, n_ops(sub), n_hidden
         if mix_feature: #weights with select
             mixed_features = [w.matmul(feat) for w, feat in zip(weights_subset, ba_features)]

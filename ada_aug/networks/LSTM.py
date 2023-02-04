@@ -118,7 +118,6 @@ class LSTM_ptb(nn.Module): #LSTM for PTBXL
                 nn.Dropout(config['fc_drop']),
                 nn.Linear(config['n_hidden'], config['n_output'])])
         self.fc.in_features = config['n_hidden']
-        self.z_dim = config['n_hidden']
 
     def extract_features(self, x, seq_lens=None, pool=True):
         x_shape = x.shape

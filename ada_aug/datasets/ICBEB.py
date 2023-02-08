@@ -19,7 +19,7 @@ def input_resizeing(raw_data,ratio=1):
     seq_lens = np.zeros(len(raw_data))
     for idx, data in enumerate(raw_data):
         input_data[idx,:data.shape[0],:data.shape[1]] = tools.normalize(data[0:int(MAX_LENGTH*ratio),:])['signal']
-        seq_lens[idx] = data.shape[0]
+        seq_lens[idx] = min(data.shape[0],int(MAX_LENGTH*ratio))
     return input_data, seq_lens
 
 def make_split_indices(test_k,each_lens,sub_tr_ratio):

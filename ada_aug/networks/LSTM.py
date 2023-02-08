@@ -132,7 +132,7 @@ class LSTM_ptb(nn.Module): #LSTM for PTBXL
         rnn_out, (hidden, cell) = self.lstm(
             packed_embedded)  # bs X len X n_hidden
         if seq_lens!=None:
-            out_pad, _out_len = rnn_utils.pad_packed_sequence(rnn_out, batch_first=True)
+            out_pad, _out_len = rnn_utils.pad_packed_sequence(rnn_out, batch_first=True, total_length=x_shape[1])
         else:
             out_pad = rnn_out
         features = out_pad.transpose(1, 2) # bs, n_hidden, len

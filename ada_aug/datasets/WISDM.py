@@ -15,7 +15,7 @@ activity_code = {'A': 'walking', 'B': 'jogging', 'C': 'stairs', 'D': 'sitting', 
                  'F': 'typing', 'G': 'teeth', 'H': 'soup', 'I': 'chips', 'J': 'pasta',
                  'K': 'drinking', 'L': 'sandwich', 'M': 'kicking', 'O': 'catch', 'P': 'dribbling',
                  'Q': 'writing', 'R': 'clapping', 'S': 'folding'}
-
+LABEL_GROUPS = {"all":18}
 
 class_name = [
     i for i in range(18)
@@ -34,14 +34,22 @@ subject_id = [
 
 class WISDM(BaseDataset):
     Hz = 20
-    def __init__(self,data_dir,mode='all', sensor="accel", device="phone",**_kwargs):
+    def __init__(self,data_dir,labelgroup='all',mode='all',seed=42, sensor="accel", device="phone",**_kwargs):
         super(WISDM,self).__init__(**_kwargs)
         assert sensor in ["accel", "gyro"]
         assert device in ["phone", "watch"]
         self.data_dir = data_dir
+        self.max_len = MAX_LENGTH
+        self.num_class = LABEL_GROUPS[labelgroup]
+        self.multilabel = False
+        self.channel = 3
+        self.labelgroup = labelgroup
+        self.sub_tr_ratio = 1.0
+        self.Hz = 20
         self.loc = os.path.join(data_dir,"raw/", device, sensor)
         if not self.checkProcessed():
             self.process(sensor, device)
+        #get data
         if mode=='all':
             input_datas , labels = [], []
             data_modes = ['train','valid','test']
@@ -49,6 +57,12 @@ class WISDM(BaseDataset):
                 input_data,label = self._get_data(data_modes[i])
                 input_datas.extend(input_data)
                 labels.extend(label)
+        elif isinstance(mode,list):
+            select_idxs = np.array([])
+            for fold in mode: # fold:1~10, fold_indices:0~9
+                select_idxs = np.concatenate([select_idxs,self.fold_indices[fold-1]],axis=0).astype(int)
+            self.input_data = self.input_data[select_idxs]
+            self.label = self.label[select_idxs]
         elif mode=='tottrain':
             input_datas , labels = [], []
             data_modes = ['train','valid']

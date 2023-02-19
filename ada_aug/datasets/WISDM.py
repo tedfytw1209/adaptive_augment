@@ -7,6 +7,7 @@ from sklearn.model_selection import train_test_split
 import torch
 from torch.utils.data import Dataset
 from .base import BaseDataset
+from sklearn.model_selection import StratifiedKFold,KFold
 
 BASE_PATH = "/mnt/data2/teddy"
 MAX_LENGTH = 200
@@ -57,12 +58,35 @@ class WISDM(BaseDataset):
                 input_data,label = self._get_data(data_modes[i])
                 input_datas.extend(input_data)
                 labels.extend(label)
+            self.input_data = input_datas
+            self.label = labels
         elif isinstance(mode,list):
+            input_datas , labels = [], []
+            data_modes = ['train','valid','test']
+            for i in range(3):
+                input_data,label = self._get_data(data_modes[i])
+                input_datas.extend(input_data)
+                labels.extend(label)
+            input_datas = np.array(input_datas)
+            labels = np.array(labels).astype(int)
+            #make fold
+            all_indices = np.arange(len(labels))
+            n_fold = 10
+            if not self.multilabel:
+                skf = StratifiedKFold(n_splits=n_fold,random_state=seed, shuffle=True)
+            else:
+                skf = KFold(n_splits=n_fold,random_state=seed, shuffle=True)
+            tot_len = 0
+            for index in skf.split(all_indices):
+                self.fold_indices.append(index) #give fold indexs
+                tot_len += len(index)
+            assert tot_len==len(self.label)
+            #select fold
             select_idxs = np.array([])
             for fold in mode: # fold:1~10, fold_indices:0~9
                 select_idxs = np.concatenate([select_idxs,self.fold_indices[fold-1]],axis=0).astype(int)
-            self.input_data = self.input_data[select_idxs]
-            self.label = self.label[select_idxs]
+            self.input_data = input_datas[select_idxs]
+            self.label = labels[select_idxs]
         elif mode=='tottrain':
             input_datas , labels = [], []
             data_modes = ['train','valid']
@@ -70,12 +94,15 @@ class WISDM(BaseDataset):
                 input_data,label = self._get_data(data_modes[i])
                 input_datas.extend(input_data)
                 labels.extend(label)
+            self.input_data = input_datas
+            self.label = labels
         else:
             input_datas,labels = self._get_data(mode=mode)
-        print(len(input_datas))
-        print(len(labels))
-        self.input_data = input_datas
-        self.label = labels
+            self.input_data = input_datas
+            self.label = labels
+        print('Data and Label len:')
+        print(len(self.input_data))
+        print(len(self.label))
         self.num_class = len(class_name)
         self.channel = 3
         self.max_len = MAX_LENGTH

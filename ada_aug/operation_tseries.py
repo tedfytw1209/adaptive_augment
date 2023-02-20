@@ -1756,7 +1756,7 @@ class KeepAugment(object): #need fix
         if self.saliency_target=='atten':
             slc_,slc_ch = 0,0
             atten_sc = model.get_attention(x) #(bs,len,len(softed))
-            atten_sc_sum = torch.sum(atten_sc,dim=1) #(bs,len)
+            atten_sc_sum = torch.sum(atten_sc,dim=1).unsqueeze(dim=2) #(bs,len)->(bs,len,1)
             slc_, _ = torch.max(torch.abs(atten_sc_sum), dim=2) #max of channel
             slc_ch = torch.mean(torch.abs(atten_sc_sum), dim=1) #mean of len, 10/29
             slc_ = normal_slc(slc_)

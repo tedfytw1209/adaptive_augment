@@ -182,7 +182,7 @@ class MultiHeadedAttention(nn.Module):
         out_x, attn = attention(
             query, key, value, mask=mask, dropout=self.dropout
         )
-        return attn #need (bs,seq_len)
+        return attn #need (bs,seq_len,seq_len(soft))
 class PositionwiseFeedForward(nn.Module):
     "Implements FFN equation."
     def __init__(self, d_model, d_ff, dropout=0.1):

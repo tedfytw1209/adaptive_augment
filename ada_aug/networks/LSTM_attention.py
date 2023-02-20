@@ -72,5 +72,12 @@ class LSTM_attention(nn.Module):
     def forward(self, x, seq_lens):
         x = self.extract_features(x, seq_lens)
         return self.classify(x)
+    
+    def get_attention(self, x, seq_lens=None):
+        sequence_pack = rnn_utils.pack_padded_sequence(x, seq_lens.cpu(), batch_first=True)
+        lstm_out, (h, c) = self.lstm(sequence_pack)
+        out_pad, _out_len = rnn_utils.pad_packed_sequence(lstm_out, batch_first=True)
+        atten_out, alpha = self.attention_net_with_w(out_pad)
+        return alpha #(bs,1,seq_len)
 
 

@@ -769,11 +769,11 @@ class AdaAugkeep_TS(AdaAug):
         self.mag_search_temp = mag_search_temp
         self.mag_temp = config['mag_temp']
         self.preprocessors=preprocessors
+        self.wide_delta = self.config.get('wide_delta',False)
         self.train_bn = train_bn
         self.noaug_way = ''
         self.noaug_bias = 0
         self.fix_noaug_max = fix_noaug_max
-        self.wide_delta = self.config.get('wide_delta',False)
         if self.wide_delta:
             self.delta_func = perturb_param_wide
         else:
@@ -806,16 +806,22 @@ class AdaAugkeep_TS(AdaAug):
             magnitudes = torch.rand(bs,self.n_ops)
             weights = torch.ones(bs,self.n_ops) / self.n_ops
             keeplen_ws = torch.ones(bs,self.adapt_len) / self.adapt_len
+        #threshold
         if self.thres_adapt:
             keep_thres = torch.sigmoid(keep_thres/MAG_T)
         else: #fix thres break gradient
             keep_thres = torch.full(keep_thres.shape,self.keepaug_config['thres'],device=keep_thres.device)
-        if self.noaug_add: #add noaug reweights
+        #noaug add
+        if self.add_method=='fixadd': #add fix amount noaug
+            weights[:,0] = self.noaug_max
+            weights[:,1:] = (1.0 - self.noaug_max) * weights[:,1:] / torch.sum(weights[:,1:],dim=1, keepdim=True).detach()
+            #print('weight[0]: ',weights[0])
+        elif self.noaug_add: #add noaug reweights
             if self.class_adaptive: #alpha: (1,n_class), y: (batch_szie,n_class)=>(batch_size,1) one hotted
                 batch_alpha = torch.sum(self.alpha * y,dim=-1,keepdim=True) / torch.sum(y,dim=-1,keepdim=True)
             else:
                 batch_alpha = self.alpha.view(-1)
-            weights = batch_alpha * weights + (1.0-batch_alpha) * \
+            weights = (1.0-batch_alpha) * weights + batch_alpha * \
                 (self.noaug_tensor.cuda() + weights * (1.0-self.noaug_max))
         if self.max_noaug_reduce > 0:
             if self.class_adaptive: #multi_tensor: (1,n_class), y: (batch_szie,n_class)=>(batch_size,1) one hotted
@@ -848,7 +854,7 @@ class AdaAugkeep_TS(AdaAug):
         trans_image = self.after_transforms(trans_image)
         #trans_image = stop_gradient_keep(trans_image.cuda(), magnitudes[i][k], keep_thres[i]) #add keep thres
         return trans_image
-    def get_aug_valid_imgs(self, images, magnitudes,weights, keeplen_ws, keep_thres, seq_len=None,mask_idx=None):
+    def get_aug_valid_imgs(self, images, magnitudes,weights, keeplen_ws, keep_thres, seq_len=None,mask_idx=None,target=None):
         """Return the mixed latent feature
         Args:
             images ([Tensor]): [description]
@@ -866,10 +872,11 @@ class AdaAugkeep_TS(AdaAug):
             elif stage_name=='keep':
                 fix_idx = idx_matrix
             aug_imgs = self.Search_wrapper(images, model=self.gf_model,apply_func=self.get_aug_valid_img, keep_thres=keep_thres,
-                magnitudes=magnitudes,ops_names=self.ops_names,fix_idx=fix_idx,selective='paste',seq_len=seq_len,mask_idx=mask_idx)
+                magnitudes=magnitudes,ops_names=self.ops_names,fix_idx=fix_idx,selective='paste',seq_len=seq_len,mask_idx=mask_idx,
+                target=target)
         else:
             aug_imgs = self.Search_wrapper(images, model=self.gf_model,apply_func=self.get_aug_valid_img, keep_thres=keep_thres,
-                magnitudes=magnitudes,ops_names=self.ops_names,selective='paste',seq_len=seq_len,mask_idx=mask_idx)
+                magnitudes=magnitudes,ops_names=self.ops_names,selective='paste',seq_len=seq_len,mask_idx=mask_idx,target=target)
         #(b*lens*ops,seq,ch) or 
         return aug_imgs.cuda()
     def explore(self, images, seq_len, mix_feature=True,y=None,update_w=True):
@@ -894,8 +901,9 @@ class AdaAugkeep_TS(AdaAug):
             mag_subset = magnitudes
             n_ops_sub = self.n_ops
             ops_mask_idx = None
-        a_imgs = self.get_aug_valid_imgs(images, magnitudes,weights, keeplen_ws, keep_thres,seq_len=seq_len,mask_idx=ops_mask_idx) #(b*lens*ops,seq,ch)
-        a_features = self.gf_model.extract_features(a_imgs) #(b*keep_len*n_ops, n_hidden)
+        a_imgs = self.get_aug_valid_imgs(images, magnitudes,weights, keeplen_ws, keep_thres,seq_len=seq_len,mask_idx=ops_mask_idx,target=y) #(b*lens*ops,seq,ch)
+        seq_len = seq_len.reshape(-1,1).expand(-1,self.n_ops).reshape(-1)
+        a_features = self.gf_model.extract_features(a_imgs,seq_len,pool=True) #(b*keep_len*n_ops, n_hidden)
         stage_name = self.Augment_wrapper.all_stages[self.Augment_wrapper.stage] #
         self.gf_model.eval() #11/09 add
         if hasattr(self.gf_model, 'lstm'):
@@ -952,21 +960,21 @@ class AdaAugkeep_TS(AdaAug):
             image = apply_augment(image, self.ops_names[idx], m_pi,rd_seed=self.aug_rng
                 ,seq_len=seq_len,preprocessor=self.preprocessors[0],aug_dict=self.aug_dict,**self.transfrom_dic)
         return self.after_transforms(image)
-    def get_training_aug_images(self, images, magnitudes, weights, keeplen_ws, keep_thres, seq_len=None,visualize=False):
+    def get_training_aug_images(self, images, magnitudes, weights, keeplen_ws, keep_thres, seq_len=None,visualize=False,target=None):
         # visualization
         if self.k_ops > 0:
             trans_images = []
             idx_matrix,len_idx = self.select_params(weights,keeplen_ws)
             keep_thres = keep_thres.view(-1).detach().cpu().numpy()
             aug_imgs, reg_idx = self.Augment_wrapper(images, model=self.gf_model,apply_func=self.get_training_aug_image,magnitudes=magnitudes,
-            idx_matrix=idx_matrix,len_idx=len_idx,keep_thres=keep_thres,selective='paste',seq_len=seq_len)
+            idx_matrix=idx_matrix,len_idx=len_idx,keep_thres=keep_thres,selective='paste',seq_len=seq_len,target=target)
         else:
             trans_images = []
             for i, image in enumerate(images):
                 pil_image = image.detach().cpu()
                 trans_image = self.after_transforms(pil_image)
                 trans_images.append(trans_image)
-            aug_imgs = torch.stack(trans_images, dim=0)
+            aug_imgs = torch.stack(trans_images, dim=0).cuda()
         #aug_imgs = torch.stack(trans_images, dim=0).cuda()
         if visualize:
             return aug_imgs.cuda(),reg_idx, idx_matrix #(aug_imgs, keep region, operation use)
@@ -980,7 +988,7 @@ class AdaAugkeep_TS(AdaAug):
         #resize_imgs = F.interpolate(images, size=self.search_d) if self.resize else images
         magnitudes, weights, keeplen_ws, keep_thres = self.predict_aug_params(resize_imgs, seq_len, 'exploit',y=y,policy_apply=policy_apply)
         #print(magnitudes.shape, weights.shape, keeplen_ws.shape, keep_thres.shape)
-        aug_imgs = self.get_training_aug_images(images, magnitudes, weights, keeplen_ws, keep_thres,seq_len=seq_len)
+        aug_imgs = self.get_training_aug_images(images, magnitudes, weights, keeplen_ws, keep_thres,seq_len=seq_len,target=y) #!!! bug when not use class_embed
         if self.visualize:
             print('Visualize for Debug')
             self.print_imgs(imgs=images,title='id')
@@ -991,7 +999,7 @@ class AdaAugkeep_TS(AdaAug):
             self.h_model.train()
         else:
             self.h_model.eval()
-        return aug_imgs
+        return aug_imgs, [magnitudes, weights, keeplen_ws, keep_thres]
     def visualize_result(self, images, seq_len,policy_y=None,y=None):
         if self.resize and 'lstm' not in self.config['gf_model_name']:
             resize_imgs = F.interpolate(images, size=self.search_d)

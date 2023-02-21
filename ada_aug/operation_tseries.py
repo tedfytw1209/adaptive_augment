@@ -1835,7 +1835,8 @@ def stop_gradient_keep(trans_image, magnitude, keep_thre, region_list):
 class AdaKeepAugment(KeepAugment): #
     def __init__(self, mode, length,thres=0.6,transfrom=None,default_select=None, early=False, low = False,
         possible_segment=[1],keep_leads=[12],grid_region=False, reverse=False,info_upper = 0.0, thres_adapt=True, adapt_target='len',save_dir='./',
-        sfreq=100,pw_len=0.2,tw_len=0.4,keep_prob=1,keep_back='',lead_sel='thres',keep_mixup=False,seed=None,**_kwargs):
+        sfreq=100,pw_len=0.2,tw_len=0.4,keep_prob=1,keep_back='',lead_sel='thres',keep_mixup=False,saliency_target='pred',
+        multilabel=False,seed=None,**_kwargs):
         assert mode in ['auto','b','p','t','rand'] #auto: all, b: heart beat(-0.2,0.4), p: p-wave(-0.2,0), t: t-wave(0,0.4)
         self.mode = mode
         if self.mode=='p':
@@ -1905,15 +1906,17 @@ class AdaKeepAugment(KeepAugment): #
             self.keep_func = keep_mix
         else:
             self.keep_func = keep_nomix
+        self.saliency_target = saliency_target
+        self.multilabel = multilabel
         self.rng = default_rng(seed)
         #'torch.nn.functional.avg_pool1d' use this for segment
         print(f'Apply InfoKeep Augment: mode={self.mode},target={self.adapt_target}, threshold={self.thres}, \
             transfrom={self.trans}, mixup={self.keep_mixup}')
     #kwargs for apply_func, batch_inputs
-    def __call__(self, t_series, model=None,selective='paste', apply_func=None,len_idx=None, keep_thres=None, seq_len=None, target=None, **kwargs):
+    def __call__(self, t_series, model=None,selective='paste', apply_func=None,len_idx=None, keep_thres=None, seq_len=None, target=None,visualize=False, **kwargs):
         b,w,c = t_series.shape
         augment, selective = self.get_augment(apply_func,selective)
-        slc_,slc_ch, t_series_ = self.get_slc(t_series,model,target)
+        slc_,slc_ch, t_series_ = self.get_slc(t_series,model,target=target)
         #windowed_slc = self.m_pool(slc_.view(b,1,w)).view(b,-1)
         #select a segment number
         n_keep_lead = self.keep_leads[self.rng.integers(len(self.keep_leads))]
@@ -2067,7 +2070,7 @@ class AdaKeepAugment(KeepAugment): #
             mask_idx=None, target=None, **kwargs):
         b,w,c = t_series.shape
         augment, selective = self.get_augment(apply_func,selective)
-        slc_,slc_ch, t_series_ = self.get_slc(t_series,model)
+        slc_,slc_ch, t_series_ = self.get_slc(t_series,model,target=target)
         magnitudes = kwargs['magnitudes']
         t_series_ = t_series_.detach().cpu()
         aug_t_s_list = []

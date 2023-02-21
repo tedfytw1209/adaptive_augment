@@ -82,7 +82,7 @@ class WISDM(BaseDataset):
             for lb,index in skf.split(all_indices,labels):
                 self.fold_indices.append(index) #give fold indexs
                 tot_len += len(index)
-            assert tot_len==len(self.label)
+            assert tot_len==len(labels)
             for test_k in range(n_fold):
                 tr_idx,valid_idx,test_idx = np.array([]),None,None
                 for i in range(n_fold):

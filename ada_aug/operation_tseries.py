@@ -258,6 +258,8 @@ def random_bandstop(X, bandwidth, max_freq=50, sfreq=100, random_state=None, *ar
     rng = check_random_state(random_state)
     transformed_X = X #.clone() 
     # Prevents transitions from going below 0 and above max_freq
+    if max_freq > sfreq/2: #change
+        max_freq = sfreq/2
     notched_freqs = rng.uniform(
         low=1 + 2 * bandwidth,
         high=max_freq - 1 - 2 * bandwidth,

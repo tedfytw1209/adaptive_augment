@@ -47,6 +47,8 @@ class WISDM(BaseDataset):
         self.labelgroup = labelgroup
         self.sub_tr_ratio = 1.0
         self.Hz = 20
+        self.split_indices = []
+        self.fold_indices = [] # fold_idx : indices
         self.loc = os.path.join(data_dir,"raw/", device, sensor)
         if not self.checkProcessed():
             self.process(sensor, device)
@@ -77,10 +79,21 @@ class WISDM(BaseDataset):
             else:
                 skf = KFold(n_splits=n_fold,random_state=seed, shuffle=True)
             tot_len = 0
-            for index in skf.split(all_indices):
+            for lb,index in skf.split(all_indices,labels):
                 self.fold_indices.append(index) #give fold indexs
                 tot_len += len(index)
             assert tot_len==len(self.label)
+            for test_k in range(n_fold):
+                tr_idx,valid_idx,test_idx = np.array([]),None,None
+                for i in range(n_fold):
+                    fold_idx = self.fold_indices[i]
+                    if i==test_k:
+                        test_idx = fold_idx
+                    elif i==(test_k-1+10)%10:
+                        valid_idx = fold_idx
+                    else:
+                        tr_idx = np.concatenate([tr_idx,fold_idx],axis=0).astype(int)
+                self.split_indices.append([test_k, self.sub_tr_ratio, tr_idx, valid_idx, test_idx])
             #select fold
             select_idxs = np.array([])
             for fold in mode: # fold:1~10, fold_indices:0~9
@@ -160,6 +173,8 @@ class WISDM(BaseDataset):
         input_datas = pickle.load(open(self.loc.replace("raw", "processed") + f"/{mode}_input", "rb"))
         labels = pickle.load(open(self.loc.replace("raw", "processed") + f"/{mode}_label", "rb"))
         return input_datas,labels
+    def get_split_indices(self):
+        return self.split_indices
 
 
 if __name__ == "__main__":

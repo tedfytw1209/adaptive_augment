@@ -1259,6 +1259,8 @@ class KeepAugment(object): #need fix
         self.default_select = default_select
         self.thres = thres
         self.possible_segment = possible_segment
+        if max(keep_leads)>num_ch:
+            keep_leads = [num_ch]
         self.keep_leads = keep_leads
         self.leads_multi = [int(num_ch/n) for n in keep_leads]
         self.grid_region = grid_region
@@ -1863,6 +1865,8 @@ class AdaKeepAugment(KeepAugment): #
         self.thres = thres
         self.thres_adapt=thres_adapt
         self.possible_segment = possible_segment
+        if max(keep_leads)>num_ch:
+            keep_leads = [num_ch]
         self.keep_leads = keep_leads
         self.leads_multi = [int(l / np.min(self.length)) for l in self.length]
         self.default_leads = torch.arange(num_ch).long()

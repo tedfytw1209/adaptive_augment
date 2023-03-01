@@ -382,7 +382,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         keepaug_config = {'keep_aug':args.keep_aug,'mode':args.keep_mode,'thres':args.keep_thres,'length':args.keep_len,'thres_adapt':args.thres_adapt,
             'grid_region':args.keep_grid, 'possible_segment': args.keep_seg, 'info_upper': args.keep_bound, 'sfreq':self.sfreq,
             'adapt_target':args.adapt_target,'keep_leads':args.keep_lead,'keep_prob':args.keep_prob,'keep_back':args.keep_back,'lead_sel':args.lead_sel,
-            'keep_mixup':args.keep_mix,'saliency_target':args.saliency,'seed':args.seed}
+            'keep_mixup':args.keep_mix,'saliency_target':args.saliency,'seed':args.seed,'num_ch':n_channel}
         trans_config = {'sfreq':self.sfreq}
         noaugadd_config = {'add_method':args.noaug_add,'max_noaug_add':args.noaug_max,'max_noaug_reduce':args.reduce_mag,'noaug_alpha':args.noaug_alpha,
             'noaug_warmup':args.noaug_warmup}

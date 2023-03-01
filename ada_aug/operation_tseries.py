@@ -1175,7 +1175,7 @@ LEADS_ECG_NOISE_DICT = {k:(Leads_Warpper(v[0]),v[1],v[2]) for (k,v) in ECG_NOISE
 LEADS_GOOD_ECG_DICT = {k:(Leads_Warpper(v[0]),v[1],v[2]) for (k,v) in GOOD_ECG_DICT.items()}
 #12leads: (1,2,3,aVL,aVR,aVF),v1~v6
 def leads_group_select(slc_ch_each,n_keep_lead,lead_quant,default_leads):
-    if n_keep_lead==12:
+    if n_keep_lead==len(default_leads):
         lead_select = default_leads
     elif n_keep_lead>6:
         lead_sorted, lead_idx = torch.sort(slc_ch_each[6:],descending=True) #high to low v1~v6
@@ -1194,7 +1194,7 @@ def leads_group_select(slc_ch_each,n_keep_lead,lead_quant,default_leads):
     return lead_select
 #topk select, multinomial select
 def leads_topk_select(slc_ch_each,n_keep_lead,lead_quant,default_leads):
-    if n_keep_lead==12:
+    if n_keep_lead==len(default_leads):
         lead_select = default_leads
     else:
         lead_sorted, lead_idx = torch.topk(slc_ch_each,n_keep_lead,sorted=False)
@@ -1204,7 +1204,7 @@ def leads_topk_select(slc_ch_each,n_keep_lead,lead_quant,default_leads):
     print(f'n_leads: {n_keep_lead}, lead select: {lead_select}') #!tmp
     return lead_select
 def leads_multinomial_select(slc_ch_each,n_keep_lead,lead_quant,default_leads):
-    if n_keep_lead==12:
+    if n_keep_lead==len(default_leads):
         lead_select = default_leads
     else:
         lead_sorted, lead_idx = torch.sort(torch.multinomial(slc_ch_each,n_keep_lead))[0]
@@ -1214,7 +1214,7 @@ def leads_multinomial_select(slc_ch_each,n_keep_lead,lead_quant,default_leads):
     print(f'n_leads: {n_keep_lead}, lead select: {lead_select}') #!tmp
     return lead_select
 def leads_threshold_select(slc_ch_each,n_keep_lead,lead_quant,default_leads):
-    if n_keep_lead!=12: 
+    if n_keep_lead!=len(default_leads): 
         quant_lead_sc = torch.quantile(slc_ch_each,lead_quant)
         lead_possible = torch.nonzero(slc_ch_each.ge(quant_lead_sc), as_tuple=True)[0]
         lead_potential = slc_ch_each[lead_possible]
@@ -1240,7 +1240,7 @@ class KeepAugment(object): #need fix
     def __init__(self, mode, length,thres=0.6,transfrom=None,default_select=None, early=False, low = False,adapt_target='len',
         possible_segment=[1],keep_leads=[12],grid_region=False, reverse=False,info_upper = 0.0, visualize=False,save_dir='./',
         sfreq=100,pw_len=0.2,tw_len=0.4,keep_prob=1,keep_back='',lead_sel='thres',keep_mixup=False,saliency_target='pred',
-        multilabel=False,seed=None,**_kwargs):
+        multilabel=False,seed=None,num_ch=12,**_kwargs):
         assert mode in ['auto','b','p','t','rand'] #auto: all, b: heart beat(-0.2,0.4), p: p-wave(-0.2,0), t: t-wave(0,0.4)
         self.mode = mode
         if self.mode=='p':
@@ -1260,7 +1260,7 @@ class KeepAugment(object): #need fix
         self.thres = thres
         self.possible_segment = possible_segment
         self.keep_leads = keep_leads
-        self.leads_multi = [int(12/n) for n in keep_leads]
+        self.leads_multi = [int(num_ch/n) for n in keep_leads]
         self.grid_region = grid_region
         # normal, paste=> paste back important score higher then, cut=> not augment important region
         # when reverse, paste=> paste back important score lower then, cut=> augment important region
@@ -1273,7 +1273,7 @@ class KeepAugment(object): #need fix
         self.selective = None
         self.only_lead_keep = False
         self.fix_points = False
-        self.default_leads = torch.arange(12).long()
+        self.default_leads = torch.arange(num_ch).long()
         self.leads_sel = lead_sel
         #['max','prob','thres','group']
         if lead_sel=='max':
@@ -1295,12 +1295,12 @@ class KeepAugment(object): #need fix
                 self.reverse = True
             else:
                 self.reverse = False
-        elif adapt_target=='fea' and self.keep_leads!=[12]: #adapt len
+        elif adapt_target=='fea' and self.keep_leads!=[num_ch]: #adapt len
             print(f'Keep len {self.length} with lead {self.keep_leads} with fix points keep')
             self.fix_points = True
-        elif adapt_target=='len' and self.keep_leads!=[12]: #adapt len
+        elif adapt_target=='len' and self.keep_leads!=[num_ch]: #adapt len
             print(f'Keep len {self.length} with lead {self.keep_leads}')
-        elif adapt_target=='ch' and self.keep_leads!=[12]: #adapt leads
+        elif adapt_target=='ch' and self.keep_leads!=[num_ch]: #adapt leads
             print(f'Using keep leads {self.keep_leads}')
             self.only_lead_keep = True
         self.keep_dict = {}
@@ -1322,6 +1322,7 @@ class KeepAugment(object): #need fix
         self.saliency_target = saliency_target
         self.multilabel = multilabel
         self.rng = default_rng(seed)
+        self.n_channel = num_ch
         #'torch.nn.functional.avg_pool1d' use this for segment
         ##self.m_pool = torch.nn.AvgPool1d(kernel_size=self.length, stride=1, padding=0) #for winodow sum
         print(f'Apply InfoKeep Augment: mode={self.mode}, threshold={self.thres}, transfrom={self.trans}, mixup={self.keep_mixup}, saliency target {self.saliency_target}')
@@ -1402,7 +1403,7 @@ class KeepAugment(object): #need fix
         #select a segment number
         #n_keep_lead = np.random.choice(self.keep_leads)
         n_keep_lead = self.keep_leads[self.rng.integers(len(self.keep_leads))]
-        lead_quant = min(info_aug,1.0 - n_keep_lead / 12.0)
+        lead_quant = min(info_aug,1.0 - n_keep_lead / self.n_channel)
         '''if n_keep_lead!=12: #next step opt speed
             #keep lead select
             lead_quant = min(info_aug,1.0 - n_keep_lead / 12.0)
@@ -1414,7 +1415,7 @@ class KeepAugment(object): #need fix
         seg_number = self.possible_segment[self.rng.integers(len(self.possible_segment))]
         seg_len = int(w / seg_number)
         if self.fix_points:
-            info_len = min(int(self.length * 12 /(seg_number*n_keep_lead)),w)
+            info_len = min(int(self.length * self.n_channel /(seg_number*n_keep_lead)),w)
             #print(f'keep len={info_len}, keeplead={n_keep_lead}')
         else:
             info_len = int(self.length/seg_number)
@@ -1518,12 +1519,12 @@ class KeepAugment(object): #need fix
         #select a segment number
         #n_keep_lead = np.random.choice(self.keep_leads)
         n_keep_lead = self.keep_leads[self.rng.integers(len(self.keep_leads))]
-        lead_quant = min(info_aug,1.0 - n_keep_lead / 12.0)
+        lead_quant = min(info_aug,1.0 - n_keep_lead / self.n_channel)
         #seg_number = np.random.choice(self.possible_segment)
         seg_number = self.possible_segment[self.rng.integers(len(self.possible_segment))]
         seg_len = int(w / seg_number)
         if self.fix_points:
-            info_len = min(int(self.length * 12 /(seg_number*n_keep_lead)),w)
+            info_len = min(int(self.length * self.n_channel /(seg_number*n_keep_lead)),w)
             print(f'keep len={self.length}, keeplead={n_keep_lead}')
         else:
             info_len = int(self.length/seg_number)
@@ -1624,12 +1625,12 @@ class KeepAugment(object): #need fix
         #select a segment number
         #n_keep_lead = np.random.choice(self.keep_leads)
         n_keep_lead = self.keep_leads[self.rng.integers(len(self.keep_leads))]
-        lead_quant = min(info_aug,1.0 - n_keep_lead / 12.0)
+        lead_quant = min(info_aug,1.0 - n_keep_lead / self.n_channel)
         #seg_number = np.random.choice(self.possible_segment)
         seg_number = self.possible_segment[self.rng.integers(len(self.possible_segment))]
         seg_len = int(w / seg_number)
         if self.fix_points:
-            info_len = min(int(self.length * 12 /(seg_number*n_keep_lead)),w)
+            info_len = min(int(self.length * self.n_channel /(seg_number*n_keep_lead)),w)
             #print(f'keep len={info_len}, keeplead={n_keep_lead}')
         else:
             info_len = int(self.length/seg_number)
@@ -1836,7 +1837,7 @@ class AdaKeepAugment(KeepAugment): #
     def __init__(self, mode, length,thres=0.6,transfrom=None,default_select=None, early=False, low = False,
         possible_segment=[1],keep_leads=[12],grid_region=False, reverse=False,info_upper = 0.0, thres_adapt=True, adapt_target='len',save_dir='./',
         sfreq=100,pw_len=0.2,tw_len=0.4,keep_prob=1,keep_back='',lead_sel='thres',keep_mixup=False,saliency_target='pred',
-        multilabel=False,seed=None,**_kwargs):
+        multilabel=False,seed=None,num_ch=12,**_kwargs):
         assert mode in ['auto','b','p','t','rand'] #auto: all, b: heart beat(-0.2,0.4), p: p-wave(-0.2,0), t: t-wave(0,0.4)
         self.mode = mode
         if self.mode=='p':
@@ -1864,7 +1865,7 @@ class AdaKeepAugment(KeepAugment): #
         self.possible_segment = possible_segment
         self.keep_leads = keep_leads
         self.leads_multi = [int(l / np.min(self.length)) for l in self.length]
-        self.default_leads = torch.arange(12).long()
+        self.default_leads = torch.arange(num_ch).long()
         self.leads_sel = lead_sel
         #['max','prob','thres','group']
         if lead_sel=='max':
@@ -1875,13 +1876,13 @@ class AdaKeepAugment(KeepAugment): #
             self.lead_select_func = leads_group_select
         else:
             self.lead_select_func = leads_threshold_select
-        if adapt_target=='len' and self.keep_leads!=[12]: #adapt len
+        if adapt_target=='len' and self.keep_leads!=[num_ch]: #adapt len
             print(f'Keep len {self.length} with lead {self.keep_leads}')
         elif adapt_target=='fea': #adapt len
             print(f'Keep len {self.length} with correspond lead')
             print(f'Possible leads not used: ',self.keep_leads)
             print(f'Multipler for each length: ',self.leads_multi)
-        elif adapt_target=='ch' and self.keep_leads!=[12]: #adapt leads
+        elif adapt_target=='ch' and self.keep_leads!=[num_ch]: #adapt leads
             print(f'Using keep leads {self.keep_leads}')
         self.grid_region = grid_region
         self.reverse = reverse
@@ -1909,6 +1910,7 @@ class AdaKeepAugment(KeepAugment): #
         self.saliency_target = saliency_target
         self.multilabel = multilabel
         self.rng = default_rng(seed)
+        self.n_channel = num_ch
         #'torch.nn.functional.avg_pool1d' use this for segment
         print(f'Apply InfoKeep Augment: mode={self.mode},target={self.adapt_target}, threshold={self.thres}, \
             transfrom={self.trans}, mixup={self.keep_mixup}')
@@ -1966,7 +1968,7 @@ class AdaKeepAugment(KeepAugment): #
             windowed_slc_each = windowed_slc[0]
             win_start, win_end = 0,windowed_w
             #keep lead select
-            lead_quant = min(info_aug,1.0 - n_keep_lead_n / 12.0)
+            lead_quant = min(info_aug,1.0 - n_keep_lead_n / self.n_channel)
             lead_select = self.lead_select_func(slc_ch_each,n_keep_lead_n,lead_quant,self.default_leads).detach()
             #print('lead select: ',lead_select) #!tmp
             #find region for each segment
@@ -2104,7 +2106,7 @@ class AdaKeepAugment(KeepAugment): #
                 windowed_slc_each = windowed_slc[0]
                 win_start, win_end = 0,windowed_w
                 #keep lead select
-                lead_quant = min(info_aug,1.0 - each_n_lead / 12.0)
+                lead_quant = min(info_aug,1.0 - each_n_lead / self.n_channel)
                 lead_select = self.lead_select_func(slc_ch_each,each_n_lead,lead_quant,self.default_leads).detach()
                 #print('lead select: ',lead_select) #!tmp
                 #find region
@@ -2218,7 +2220,7 @@ class AdaKeepAugment(KeepAugment): #
                 windowed_slc_each = windowed_slc[0]
                 win_start, win_end = 0,windowed_w
                 #keep lead select
-                lead_quant = min(info_aug,1.0 - each_n_lead / 12.0)
+                lead_quant = min(info_aug,1.0 - each_n_lead / self.n_channel)
                 lead_select = self.lead_select_func(slc_ch_each,each_n_lead,lead_quant,self.default_leads).detach()
                 #find region
                 if stage_name=='keep': #from all possible to a fix number

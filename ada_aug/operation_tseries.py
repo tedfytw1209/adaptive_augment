@@ -256,7 +256,7 @@ def info_time_mask(X, mask_len_samples,start,end,
 def random_bandstop(X, bandwidth, max_freq=50, sfreq=100, random_state=None, *args,
                     **kwargs):
     rng = check_random_state(random_state)
-    transformed_X = X #.clone() 
+    transformed_X = X.clone()
     # Prevents transitions from going below 0 and above max_freq
     if max_freq > sfreq/2: #change
         max_freq = sfreq/2
@@ -853,7 +853,7 @@ def le(a,b):
 class ToTensor:
     def __init__(self) -> None:
         pass
-    def __call__(self, img):
+    def __call__(self, img, **kwargs):
         return torch.tensor(img).float()
 
 class RandAugment:

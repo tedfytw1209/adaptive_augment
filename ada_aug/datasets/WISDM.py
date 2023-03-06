@@ -69,7 +69,7 @@ class WISDM(BaseDataset):
                 input_data,label = self._get_data(data_modes[i])
                 input_datas.extend(input_data)
                 labels.extend(label)
-            print(input_datas)
+            print('data len: ',len(input_datas))
             input_datas = np.array(input_datas)
             labels = np.array(labels).astype(int)
             #make fold

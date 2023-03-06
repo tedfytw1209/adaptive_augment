@@ -70,8 +70,11 @@ class WISDM(BaseDataset):
                 input_datas.extend(input_data)
                 labels.extend(label)
             print('data len: ',len(input_datas))
-            input_datas = np.array(input_datas)
+            print('data[0] shape: ',input_datas[0].shape)
+            input_datas = np.stack(input_datas)
             labels = np.array(labels).astype(int)
+            print('input_datas shape: ',input_datas.shape)
+            print('labels shape: ',labels.shape)
             #make fold
             all_indices = np.arange(len(labels))
             n_fold = 10

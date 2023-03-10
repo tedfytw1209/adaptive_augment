@@ -1463,7 +1463,7 @@ class KeepAugment(object): #need fix
                 max_score = torch.max(windowed_slc_each[win_start:win_end])
                 quant_score = torch.quantile(windowed_slc_each[win_start:win_end],info_aug)
                 bound_score = torch.quantile(windowed_slc_each[win_start:win_end],info_bound)
-                while(True):
+                while(True): #3/10 need change to avoid infinite loop
                     #x = np.random.randint(start,end)
                     x = self.rng.integers(start,end)
                     x1 = np.clip(x - info_len // 2, 0, w)
@@ -1576,7 +1576,7 @@ class KeepAugment(object): #need fix
                         win_end = min(each_seq_len,win_end)
                     quant_score = torch.quantile(windowed_slc_each[win_start: win_end],info_aug)
                     bound_score = torch.quantile(windowed_slc_each[win_start:win_end],info_bound)
-                    while(True):
+                    while(True): #3/10 need change to avoid infinite loop
                         #x = np.random.randint(start,end)
                         x = self.rng.integers(start,end)
                         x1 = np.clip(x - info_len // 2, 0, w)

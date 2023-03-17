@@ -117,6 +117,7 @@ def _get_split_indices(
         targets = np.array([y for _, y, _ in windows_dataset])
 
     splits_proportions = list()
+    fold_indices = []
     for k, fold in enumerate(
         cv.split(windows_dataset, groups=groups),
         start=1
@@ -147,21 +148,36 @@ def _get_split_indices(
             splits_proportions.append(
                 (k, ratio, sub_tr_idx, valid_idx, test_idx)
             )
-    return splits_proportions
+            fold_indices.append(test_idx) #index of each fold
+    return splits_proportions, fold_indices
 
 class EDFX(BaseDataset):
     Hz = 100
-    def __init__(self, dataset_path,transfroms=[],augmentations=[],label_transfroms=[],**_kwargs):
+    def __init__(self, dataset_path,mode='all',transfroms=[],augmentations=[],label_transfroms=[],n_folds=5,seed=42,**_kwargs):
         super(EDFX,self).__init__(transfroms=transfroms,augmentations=augmentations,label_transfroms=label_transfroms)
         self.dataset_path = dataset_path
         self.max_len = MAX_LENGTH
         self.dataset = None
         self.multilabel = False
         self.channel = 2
+        self.sub_tr_ratio = 1.0
         self.num_class = 5
-        self.n_folds = 5
-        self.prep_physionet_dataset(mne_data_path=dataset_path,n_subj=81,recording_ids=[1],preload=True)
+        self.max_len = 3000
+        self.n_folds = n_folds
         self.Hz = 100
+        self.prep_physionet_dataset(mne_data_path=dataset_path,n_subj=81,recording_ids=[1],preload=True)
+        if mode=='all':
+            print("Using origin data format")
+        elif isinstance(mode,list): #make split indice
+            train_ovr = (self.n_folds - 2)
+            splits_proportions,fold_indices = self.CV_split_indices(train_ovr,random_state=seed)
+            self.split_indices = splits_proportions
+            self.fold_indices = fold_indices
+            select_idxs = np.array([])
+            for fold in mode: # fold:1~10, fold_indices:0~9
+                select_idxs = np.concatenate([select_idxs,self.fold_indices[fold-1]],axis=0).astype(int)
+            self.dataset = self.dataset[select_idxs]
+            # no self.label
     
     def prep_physionet_dataset(
         self,
@@ -291,7 +307,7 @@ class EDFX(BaseDataset):
     def CV_split_indices(self, train_size_over_valid=0.5, data_ratios=None, max_ratios=None, grouped_subset=True, random_state=29):
         kf = GroupKFold(n_splits=self.n_folds)
         groups = get_groups(self.dataset)
-        splits_proportions = _get_split_indices(cv=kf,
+        splits_proportions,fold_indices = _get_split_indices(cv=kf,
                 windows_dataset=self.dataset,
                 groups=groups,
                 train_size_over_valid=train_size_over_valid,
@@ -299,4 +315,4 @@ class EDFX(BaseDataset):
                 max_ratios=max_ratios,
                 grouped_subset=grouped_subset,
                 random_state=random_state)
-        return splits_proportions #(k, ratio, sub_tr_idx, valid_idx, test_idx) * 5
+        return splits_proportions,fold_indices #(k, ratio, sub_tr_idx, valid_idx, test_idx) * 5

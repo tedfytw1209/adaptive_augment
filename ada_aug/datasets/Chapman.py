@@ -18,7 +18,7 @@ rhythm_classes_ori = ['SB', 'SR', 'AFIB', 'ST', 'AF', 'SI', 'SVT', 'AT', 'AVNRT'
 rhythm_sup = ['AFIB','GSVT','SB','SR']
 rhythm_sup_dic = {'SB':'SB', 'SR':'SR', 'AFIB':'AFIB', 'ST':'GSVT', 'AF':'AFIB', 'SI':'SR', 'SVT':'GSVT', 'AT':'GSVT', 'AVNRT':'GSVT', 'SAAWR':'GSVT'}
 rhythm_dic = {k:v for (k,v) in zip(rhythm_classes_cinc,rhythm_classes_ori)}
-LABEL_GROUPS = {"yuall":12,"all":11, "rhythm":6, 'superrhythm':4}
+LABEL_GROUPS = {"yuall":12,"all":11,"all2":11, "rhythm":6, 'superrhythm':4}
 
 class Chapman(BaseDataset):
     Hz = 500

@@ -133,8 +133,8 @@ def get_num_class(dataset,labelgroup=''):
         'chapmands': 12,
         'chapmanyuall':12,
         'chapmandsyuall':12,
-        'chapmanall2':12, #need change
-        'chapmandsall2':12, #need change
+        'chapmanall2':6,
+        'chapmandsall2':6,
         'chapmanall':11,
         'chapmanrhythm':6,
         'chapmansuperrhythm':4,

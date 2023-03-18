@@ -79,7 +79,8 @@ class SleepStagerChambon2018(nn.Module):
             n_channels, input_size, max_pool_size, n_conv_chs)
         self.len_last_layer = len_last_layer
         print('CNN last layer len:', self.len_last_layer)
-
+        self.fc.in_features = len_last_layer
+        self.z_dim = len_last_layer
         if n_channels > 1:
             self.spatial_conv = nn.Conv2d(1, n_channels, (n_channels, 1))
         batch_norm = nn.BatchNorm2d if apply_batch_norm else nn.Identity
@@ -94,8 +95,9 @@ class SleepStagerChambon2018(nn.Module):
                 padding=(0, pad_size)),
             batch_norm(n_conv_chs),
             nn.ReLU(),
-            nn.MaxPool2d((1, max_pool_size))
+            #nn.MaxPool2d((1, max_pool_size))
         )
+        self.pool = nn.MaxPool2d(1, max_pool_size)
         self.fc = nn.Sequential(
             nn.Dropout(dropout),
             nn.Linear(len_last_layer, n_classes)
@@ -105,15 +107,20 @@ class SleepStagerChambon2018(nn.Module):
     def _len_last_layer(n_channels, input_size, max_pool_size, n_conv_chs):
         return n_channels * (input_size // (max_pool_size ** 2)) * n_conv_chs
 
-    def extract_features(self, x, seq_len=None):
+    def extract_features(self, x, seq_len=None, pool=True):
         x = x.transpose(1, 2) #(bs,len,ch) -> (bs, ch, len)
         x = x.unsqueeze(1) # (batch_size, 1, n_channels, n_times)
         if self.n_channels > 1:
             x = self.spatial_conv(x) # (batch_size, n_channels, 1, n_times)
             x = x.transpose(1, 2) # (batch_size, 1, n_channels, n_times)
         x = self.feature_extractor(x)
-        x = x.flatten(start_dim=1)
+        if pool:
+            x = self.pool(x)
+            x = x.flatten(start_dim=1)
         return x
+    
+    def pool_features(self, x):
+        return self.pool(x)
     
     def classify(self, features):
         return self.fc(features)

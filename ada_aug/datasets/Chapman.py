@@ -116,6 +116,7 @@ class Chapman(BaseDataset):
         trans_dic = None
         outlabel = None
         filter_data = True
+        occurance = 300
         if self.labelgroup=='rhythm':
             select = rhythm_classes_cinc
             trans_dic = None
@@ -128,6 +129,9 @@ class Chapman(BaseDataset):
             cinc_sel = True
         elif self.labelgroup=='all':
             cinc_sel = True
+        elif self.labelgroup=='all2':
+            cinc_sel = True
+            occurance = 600
         elif self.labelgroup=='yuall':
             cinc_sel = False
         elif self.labelgroup=='mlall':
@@ -185,7 +189,7 @@ class Chapman(BaseDataset):
         for col in df.columns:
             if col in fixed_col: continue
             yes_cnt = df[col].value_counts()[1]
-            if filter_data and yes_cnt < 300: 
+            if filter_data and yes_cnt < occurance: 
                 df = df.drop(columns=col)
             else:
                 cols.append(col)

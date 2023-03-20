@@ -314,7 +314,7 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
                     cutout_length, split=0.5, split_idx=0, target_lb=-1,
                     search=True, search_divider=1, search_size=0, test_size=0.2, multilabel=False,
                     default_split=False,fold_assign=[], labelgroup='',valid_search=False,
-                    bal_ssampler='',bal_trsampler='',sampler_alpha=1.0):
+                    bal_ssampler='',bal_trsampler='',sampler_alpha=1.0,max_folds = 10):
     '''
     If search is True, dataloader will give batches of image without after_transforms,
     the transform will be done by augment agent
@@ -342,7 +342,7 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
         dataset_func = WISDM
     elif dataset_name == 'edfx':
         dataset_func = EDFX
-        kwargs['n_folds'] = 10
+        kwargs['max_folds'] = max_folds
     elif dataset_name == 'chapman':
         dataset_func = Chapman
         if labelgroup:

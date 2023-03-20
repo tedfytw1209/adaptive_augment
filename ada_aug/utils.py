@@ -15,8 +15,36 @@ from torch.autograd import Variable
 from sklearn.metrics import average_precision_score,roc_auc_score
 import wandb
 from sklearn.utils.class_weight import compute_sample_weight
-
+from ray.tune import Stopper
 sns.set()
+
+class MaxStopper(Stopper):
+    def __init__(self,metric="valid_acc", mode="max",patience=30):
+        self.metric = metric
+        self.mode = mode
+        self.patience = patience
+        self.p_count = 0
+        if mode == 'max':
+            self.best_metric = -1e6
+        elif mode == 'min':
+            self.best_metric = 1e6
+        else:
+            print('Error')
+            exit()
+
+    def __call__(self, trial_id, result):
+        new_metric = result[self.metric]
+        if self.mode == 'max' and self.best_metric>=new_metric:
+            self.p_count += 1
+        elif self.mode == 'min' and self.best_metric<=new_metric:
+            self.p_count += 1
+        else:
+            self.best_metric = new_metric
+            self.p_count = 0
+        return self.p_count >= self.patience
+
+    def stop_all(self):
+        return False
 
 def sigmoid_adapt(class_perfrom,overall_perfrom):
     n_class = len(class_perfrom)

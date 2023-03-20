@@ -153,7 +153,7 @@ def _get_split_indices(
 
 class EDFX(BaseDataset):
     Hz = 100
-    def __init__(self, dataset_path,mode='all',transfroms=[],augmentations=[],label_transfroms=[],n_folds=5,seed=42,**_kwargs):
+    def __init__(self, dataset_path,mode='all',transfroms=[],augmentations=[],label_transfroms=[],seed=42,max_folds = 5,**_kwargs):
         super(EDFX,self).__init__(transfroms=transfroms,augmentations=augmentations,label_transfroms=label_transfroms)
         self.dataset_path = dataset_path
         self.max_len = MAX_LENGTH
@@ -163,7 +163,7 @@ class EDFX(BaseDataset):
         self.sub_tr_ratio = 1.0
         self.num_class = 5
         self.max_len = 3000
-        self.n_folds = n_folds
+        self.n_folds = max_folds
         self.Hz = 100
         if not self._check_data():
             self.prep_physionet_dataset(mne_data_path=dataset_path,n_subj=81,recording_ids=[1],preload=True)

@@ -64,6 +64,7 @@ parser.add_argument('--multilabel', action='store_true', default=False, help='us
 parser.add_argument('--train_portion', type=float, default=1, help='portion of training data')
 parser.add_argument('--default_split', action='store_true', help='use dataset deault split')
 parser.add_argument('--kfold', type=int, default=-1, help='use kfold cross validation')
+parser.add_argument('--maxfold', type=int, default=10, help='max folds')
 parser.add_argument('--not_save', action='store_true', default=False, help='not to save model')
 # policy
 parser.add_argument('--proj_learning_rate', type=float, default=1e-2, help='learning rate for h')
@@ -253,15 +254,16 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             self.noaug_add = True
         if 'c' in args.noaug_reg:
             self.use_class_w = True
+        max_folds = self.config['maxfold']
         test_fold_idx = self.config['kfold']
         train_val_test_folds = []
-        if test_fold_idx>=0 and test_fold_idx<=9:
+        if test_fold_idx>=0 and test_fold_idx<=max_folds-1:
             train_val_test_folds = [[],[],[]] #train,valid,test
-            for i in range(10):
-                curr_fold = (i+test_fold_idx)%10 +1 #fold is 1~10
+            for i in range(max_folds):
+                curr_fold = (i+test_fold_idx)%max_folds +1 #fold is 1~10
                 if i==0:
                     train_val_test_folds[2].append(curr_fold)
-                elif i==9:
+                elif i==max_folds-1:
                     train_val_test_folds[1].append(curr_fold)
                 else:
                     train_val_test_folds[0].append(curr_fold)
@@ -277,7 +279,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             search=True, search_divider=sdiv,search_size=args.search_size,
             test_size=args.test_size,multilabel=args.multilabel,default_split=args.default_split,valid_search=args.valid_search,
             fold_assign=train_val_test_folds,labelgroup=args.labelgroup,bal_ssampler=args.search_sampler,bal_trsampler=args.train_sampler,
-            sampler_alpha=args.alpha)
+            sampler_alpha=args.alpha,max_folds=max_folds)
         #single class weight
         self.class_weight = None
         if args.class_target >= 0:
@@ -746,7 +748,7 @@ def main():
     hparams = dict(vars(args)) #copy args
     hparams['args'] = args
     hparams['BASE_PATH'] = args.base_path
-    if args.kfold==10:
+    if args.kfold==args.maxfold:
         hparams['kfold'] = tune.grid_search([i for i in range(args.kfold)])
     else:
         hparams['kfold'] = tune.grid_search([args.kfold]) #for some fold
@@ -778,7 +780,7 @@ def main():
     #     train_spec["restore"] = FLAGS.restore
 
     ray.init()
-    print(f'Run {args.kfold} folds experiment')
+    print(f'Run {args.maxfold} folds experiment')
     #tune_scheduler = ASHAScheduler(metric="valid_acc", mode="max",max_t=hparams['num_epochs'],grace_period=10,
     #    reduction_factor=3,brackets=1)1
     tune_scheduler = None

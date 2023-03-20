@@ -28,10 +28,11 @@ from class_balanced_loss import ClassBalLoss,ClassDiffLoss,ClassDistLoss,make_cl
 from softaug import Soft_Criterion
 import wandb
 import copy
-from utils import plot_conf_wandb, select_output_source, select_noaug_adapt, select_perfrom_source, stat_adapt, sigmoid_adapt, imbalance_adapt,imbalance_adapt2
+from utils import plot_conf_wandb, select_output_source, select_noaug_adapt, select_perfrom_source, stat_adapt, sigmoid_adapt, imbalance_adapt,imbalance_adapt2,MaxStopper
 import ray
 import ray.tune as tune
 from ray.tune.integration.wandb import WandbTrainableMixin
+from ray.tune.stopper import ExperimentPlateauStopper
 
 os.environ['WANDB_START_METHOD'] = 'thread'
 RAY_DIR = './ray_results'
@@ -55,6 +56,7 @@ parser.add_argument('--cpu', type=float, default=4, help='Allocated by Ray')
 parser.add_argument('--gpu', type=float, default=0.12, help='Allocated by Ray')
 ### dataset & params
 parser.add_argument('--epochs', type=int, default=20, help='number of training epochs')
+parser.add_argument('--patience', type=int, default=0, help='number of patience epochs')
 parser.add_argument('--model_path', type=str, default='saved_models', help='path to save the model')
 parser.add_argument('--save', type=str, default='EXP', help='experiment name')
 parser.add_argument('--seed', type=int, default=42, help='seed')
@@ -63,6 +65,7 @@ parser.add_argument('--multilabel', action='store_true', default=False, help='us
 parser.add_argument('--train_portion', type=float, default=1, help='portion of training data')
 parser.add_argument('--default_split', action='store_true', help='use dataset deault split')
 parser.add_argument('--kfold', type=int, default=-1, help='use kfold cross validation')
+parser.add_argument('--maxfold', type=int, default=10, help='max folds')
 parser.add_argument('--not_save', action='store_true', default=False, help='not to save model')
 #policy
 parser.add_argument('--proj_learning_rate', type=float, default=1e-2, help='learning rate for h')
@@ -245,14 +248,14 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             elif args.noaug_add=='add':
                 self.adapt_add = True
             #other add no need to adapt change
-        
+        max_folds = self.config['maxfold']
         test_fold_idx = self.config['kfold']
         train_val_test_folds = [[],[],[]] #train,valid,test
-        for i in range(10):
-            curr_fold = (i+test_fold_idx)%10 +1 #fold is 1~10
+        for i in range(max_folds):
+            curr_fold = (i+test_fold_idx)%max_folds +1 #fold is 1~10
             if i==0:
                 train_val_test_folds[2].append(curr_fold)
-            elif i==9:
+            elif i==max_folds-1:
                 train_val_test_folds[1].append(curr_fold)
             else:
                 train_val_test_folds[0].append(curr_fold)
@@ -263,7 +266,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             split=args.train_portion, split_idx=0, target_lb=-1,search_size=args.search_size, #!use search size to reduce training dataset
             search=False,test_size=args.test_size,multilabel=args.multilabel,default_split=args.default_split,
             fold_assign=train_val_test_folds,labelgroup=args.labelgroup,bal_trsampler=args.train_sampler,
-            sampler_alpha=args.alpha)
+            sampler_alpha=args.alpha,max_folds=max_folds)
         #addition model config
         add_model_config = {}
         add_model_config['seg_config'] = {'seg_ways':args.seg_ways, 'rr_method':'pan'}
@@ -735,7 +738,7 @@ def main():
     #hparams
     hparams = dict(vars(args)) #copy args
     hparams['args'] = args
-    if args.kfold==10:
+    if args.kfold==args.maxfold:
         hparams['kfold'] = tune.grid_search([i for i in range(args.kfold)])
     else:
         hparams['kfold'] = tune.grid_search([args.kfold]) #for some fold
@@ -767,10 +770,14 @@ def main():
     #     train_spec["restore"] = FLAGS.restore
 
     ray.init()
-    print(f'Run {args.kfold} folds experiment')
+    print(f'Run {args.maxfold} folds experiment')
     #tune_scheduler = ASHAScheduler(metric="valid_acc", mode="max",max_t=hparams['num_epochs'],grace_period=10,
     #    reduction_factor=3,brackets=1)1
     tune_scheduler = None
+    if args.patience>0:
+        stopper = MaxStopper(metric="valid_acc", mode="max",patience=args.patience)
+    else:
+        stopper = None
     analysis = tune.run(
         RayModel,
         name=hparams['ray_name'],
@@ -786,6 +793,7 @@ def main():
         config=hparams,
         local_dir=args.ray_dir,
         num_samples=1, #grid search no need
+        stop = stopper
     )
     #clean up 12/13
     ray.shutdown()

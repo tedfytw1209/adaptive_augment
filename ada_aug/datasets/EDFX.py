@@ -165,7 +165,23 @@ class EDFX(BaseDataset):
         self.max_len = 3000
         self.n_folds = n_folds
         self.Hz = 100
-        self.prep_physionet_dataset(mne_data_path=dataset_path,n_subj=81,recording_ids=[1],preload=True)
+        if not self._check_data():
+            self.prep_physionet_dataset(mne_data_path=dataset_path,n_subj=81,recording_ids=[1],preload=True)
+        self._get_data(mode=mode,seed=seed)
+    
+    def _check_data(self):
+        return os.path.isfile(os.path.join(self.dataset_path,f'X_data.npy')) and \
+                os.path.isfile(os.path.join(self.dataset_path,f'y_data.npy'))
+    
+    def _get_data(self,mode='all',seed=42):
+        self.input_data = None
+        self.label = None
+        self.input_data = np.load(os.path.join(self.dataset_path,f'X_{self.labelgroup}data_{self.lb}.npy'),allow_pickle=True)
+        self.label = np.load(os.path.join(self.dataset_path,f'y_{self.labelgroup}data_{self.lb}.npy'),allow_pickle=True)
+        print('Label counts:')
+        unique, counts = np.unique(self.label, return_counts=True)
+        counts_array = np.asarray((unique, counts)).T
+        print(counts_array)
         if mode=='all':
             print("Using origin data format")
         elif isinstance(mode,list): #make split indice
@@ -176,8 +192,9 @@ class EDFX(BaseDataset):
             select_idxs = np.array([])
             for fold in mode: # fold:1~10, fold_indices:0~9
                 select_idxs = np.concatenate([select_idxs,self.fold_indices[fold-1]],axis=0).astype(int)
-            self.dataset = self.dataset[select_idxs]
-            # no self.label
+            self.input_data = self.input_data[select_idxs]
+            self.label = self.label[select_idxs]
+            
     
     def prep_physionet_dataset(
         self,
@@ -277,21 +294,30 @@ class EDFX(BaseDataset):
         )
         if should_normalize:
             preprocess(windows_dataset, [MNEPreproc(fn=zscore)])
-        '''print(len(windows_dataset))
+        print(len(windows_dataset))
         sample = windows_dataset[0]
         print(sample[0])
         print(sample[0].shape)
         print(sample[1])
-        print(sample[2])'''
-        self.dataset = windows_dataset
-        #return windows_dataset, ['Fpz', 'Pz'], 100
+        print(sample[2])
+        #self.dataset = windows_dataset
+        input_data = []
+        labels = []
+        for sample in windows_dataset:
+            input_data.append(sample[0])
+            labels.append(sample[1])
+        input_data = np.array(input_data)
+        labels = np.array(labels)
+        np.save(os.path.join(self.dataset_path,f'X_data.npy'),input_data)
+        np.save(os.path.join(self.dataset_path,f'y_data.npy'),labels)
+        #return windows_dataset
     def __len__(self):
-        return len(self.dataset)
+        return len(self.input_data)
 
     def __getitem__(self, index):
-        sample = self.dataset[index] # output: (input,label,window timestep)
-        input_data = sample[0].T
-        label = sample[1]
+        #sample = self.dataset[index] # output: (input,label,window timestep)
+        input_data = self.input_data[index].T
+        label = self.label[index]
         for process in self.preprocess:
             input_data = process(input_data)
         for transfrom in self.transfroms:
@@ -302,13 +328,13 @@ class EDFX(BaseDataset):
             label = label_trans(label)
         input_data_tmp = torch.zeros(self.max_len, input_data.shape[1])
         input_data_tmp = input_data[0:self.max_len]
-        return input_data_tmp,len(input_data), label
+        return input_data_tmp,len(input_data), label #(data,seq_len,label)
 
     def CV_split_indices(self, train_size_over_valid=0.5, data_ratios=None, max_ratios=None, grouped_subset=True, random_state=29):
         kf = GroupKFold(n_splits=self.n_folds)
-        groups = get_groups(self.dataset)
+        groups = get_groups(self.input_data)
         splits_proportions,fold_indices = _get_split_indices(cv=kf,
-                windows_dataset=self.dataset,
+                windows_dataset=self.input_data,
                 groups=groups,
                 train_size_over_valid=train_size_over_valid,
                 data_ratios=data_ratios,

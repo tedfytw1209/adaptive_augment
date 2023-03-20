@@ -7,7 +7,7 @@ from torch.nn import DataParallel
 
 from .resnet import ResNet
 from .wideresnet import WideResNet
-from .LSTM import LSTM_ecg,LSTM_modal,LSTM_ptb
+from .LSTM import LSTM_ecg,LSTM_modal,LSTM_ptb,har_model
 from .LSTM_attention import LSTM_attention
 from .Sleep_stager import SleepStagerChambon2018
 from .resnet1d import resnet1d_wang,resnet1d101
@@ -169,6 +169,17 @@ def get_model_tseries(model_name='lstm', num_class=10, n_channel=3, use_cuda=Tru
                   'fc_drop': 0.25,
                   }
         net = SleepStagerChambon2018
+    elif model_name == 'har_model':
+        model_config = { #default values
+                'n_hidden':128,
+                'n_layers':1,
+                'n_filters':64,
+                'n_channel':3,
+                'filter_size':5,
+                'drop_prob':0.5,
+                'n_classes': num_class,
+                }
+        net = har_model
     else:
         raise NameError('no model named, %s' % name)
     config.update(model_config)

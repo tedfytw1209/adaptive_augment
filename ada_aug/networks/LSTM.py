@@ -202,7 +202,7 @@ class LSTM_modal(nn.Module): #LSTM for time series
 #for wisdm
 class HARModel(nn.Module): #Can not use with our current CAAP
     def __init__(self, n_hidden=128, n_layers=1, n_filters=64, n_channel=3,
-                 n_classes=18, filter_size=5, drop_prob=0.5):
+                 n_classes=18, filter_size=5, drop_prob=0.5, **kwargs):
         super(HARModel, self).__init__()
         self.drop_prob = drop_prob
         self.n_layers = n_layers
@@ -256,11 +256,11 @@ class HARModel(nn.Module): #Can not use with our current CAAP
         x = F.relu(self.conv3(x))
         x = F.relu(self.conv4(x))
         
-        x = x.view(8, -1, self.n_filters) 
+        x = x.view(8, -1, self.n_filters) #(8(conved seq_len),bs,ch)
         x, hidden = self.lstm1(x)
         x, hidden = self.lstm2(x,hidden)
         if pool:
-            x = x.contiguous().view(-1, self.n_hidden)
+            x = x.contiguous().view(-1, self.n_hidden) #(8*bs,ch)
         return x
     def pool_features(self, x):
         return x.contiguous().view(-1, self.n_hidden)
@@ -282,4 +282,6 @@ class HARModel(nn.Module): #Can not use with our current CAAP
         #else:
         #    hidden = (weight.new(self.n_layers, batch_size, self.n_hidden).zero_(),
         #              weight.new(self.n_layers, batch_size, self.n_hidden).zero_())
-        
+
+def har_model(kwargs):
+    return HARModel(**kwargs)

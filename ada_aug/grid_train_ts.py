@@ -743,8 +743,8 @@ def main():
     #grid search
     #hparams['search_freq'] = tune.grid_search([5,10]) #tune.grid_search(hparams['search_freq'])
     #hparams['search_round'] = tune.grid_search([4,8,16]) #tune.grid_search(hparams['search_round'])
-    hparams['epochs'] = tune.grid_search([50,100])
-    hparams['learning_rate'] = tune.grid_search([0.0001,0.001,0.01])
+    hparams['epochs'] = tune.grid_search([200,400,800])
+    hparams['learning_rate'] = tune.grid_search([0.001,0.01])
     hparams['weight_decay'] = tune.grid_search([0.001,0.01])
     #hparams['k_ops'] = tune.grid_search([1,2])
     #hparams['lambda_aug'] = tune.quniform(hparams['lambda_aug'][0],hparams['lambda_aug'][1],0.01)

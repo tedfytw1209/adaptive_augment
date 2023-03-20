@@ -176,8 +176,8 @@ class EDFX(BaseDataset):
     def _get_data(self,mode='all',seed=42):
         self.input_data = None
         self.label = None
-        self.input_data = np.load(os.path.join(self.dataset_path,f'X_{self.labelgroup}data_{self.lb}.npy'),allow_pickle=True)
-        self.label = np.load(os.path.join(self.dataset_path,f'y_{self.labelgroup}data_{self.lb}.npy'),allow_pickle=True)
+        self.input_data = np.load(os.path.join(self.dataset_path,f'X_data.npy'),allow_pickle=True)
+        self.label = np.load(os.path.join(self.dataset_path,f'y_data.npy'),allow_pickle=True)
         print('Label counts:')
         unique, counts = np.unique(self.label, return_counts=True)
         counts_array = np.asarray((unique, counts)).T
@@ -194,8 +194,7 @@ class EDFX(BaseDataset):
                 select_idxs = np.concatenate([select_idxs,self.fold_indices[fold-1]],axis=0).astype(int)
             self.input_data = self.input_data[select_idxs]
             self.label = self.label[select_idxs]
-            
-    
+                
     def prep_physionet_dataset(
         self,
         mne_data_path=None, #
@@ -318,8 +317,6 @@ class EDFX(BaseDataset):
         #sample = self.dataset[index] # output: (input,label,window timestep)
         input_data = self.input_data[index].T
         label = self.label[index]
-        for process in self.preprocess:
-            input_data = process(input_data)
         for transfrom in self.transfroms:
             input_data = transfrom(input_data)
         for augmentation in self.augmentations:

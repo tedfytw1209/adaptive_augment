@@ -120,6 +120,7 @@ def get_num_class(dataset,labelgroup=''):
         'svhn': 10,
         'reduced_svhn': 10,
         'edfx': 5,
+        'edfxall': 5,
         'ptbxl': 44,
         'ptbxlall':50,
         'ptbxldiagnostic':44,

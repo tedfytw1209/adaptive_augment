@@ -792,8 +792,7 @@ def main():
         stop={"training_iteration": hparams['epochs']},
         config=hparams,
         local_dir=args.ray_dir,
-        num_samples=1, #grid search no need
-        stop = stopper
+        num_samples=1 #grid search no need
     )
     #clean up 12/13
     ray.shutdown()

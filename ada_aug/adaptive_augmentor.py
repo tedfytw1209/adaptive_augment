@@ -605,8 +605,11 @@ class AdaAug_TS(AdaAug):
             plt.figure(figsize=(8, 6), dpi=80)
             fig, (ax1, ax2) = plt.subplots(2, sharex=True, gridspec_kw={'height_ratios': [2, 1]})
             channel_num = img.shape[-1]
+            select_ch = 1
             for i in  range(channel_num):
                 ax1.plot(t, img[:,i])
+                if i==select_ch:
+                    ax1.scatter(t, img[:,i],c=slc,cmap='red')
             if torch.is_tensor(slc):
                 ax2.plot(t,slc[idx])
             if torch.is_tensor(info_reg):

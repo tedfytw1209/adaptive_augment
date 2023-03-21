@@ -1387,11 +1387,11 @@ class KeepAugment(object): #need fix
         print(slc_) #(b,seq)
         slc_ = slc_.detach().cpu()
         slen = slc_.shape[1]
-        t = np.linspace(0, 10, self.sfreq*10) #!!!tmp for ptbxl
+        '''t = np.linspace(0, 10, self.sfreq*10) #!!!tmp for ptbxl
         for idx,e_slc in enumerate(slc_):
             plt.clf()
             plt.plot(t, e_slc)
-            plt.savefig(f'{self.save_dir}/img{idx}_slc.png')
+            plt.savefig(f'{self.save_dir}/img{idx}_slc.png')'''
         return slc_, slc_ch
 
     #kwargs for apply_func, batch_inputs

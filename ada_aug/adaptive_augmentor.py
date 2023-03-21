@@ -607,14 +607,14 @@ class AdaAug_TS(AdaAug):
             channel_num = img.shape[-1]
             select_ch = 1
             each_slc = slc[idx]
-            q_score = np.quantile(each_slc,0.8)
+            q_score = 0.4
             slc_high = (each_slc >= q_score)
             t_sel = t[slc_high]
             slc_sel = each_slc[slc_high]
             img_sel = img[slc_high]
             for i in  range(channel_num):
-                ax1.plot(t, img[:,i])
-                ax1.scatter(t_sel, img_sel[:,i],c='r')
+                ax1.plot(t, img[:,i], zorder=1)
+                ax1.scatter(t_sel, img_sel[:,i],c='r',marker="+", zorder=2)
             
             if torch.is_tensor(slc):
                 ax2.plot(t, each_slc)

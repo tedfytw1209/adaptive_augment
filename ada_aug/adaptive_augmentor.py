@@ -602,7 +602,7 @@ class AdaAug_TS(AdaAug):
             plt.clf()
             if selecting and int(e_lb) not in select_labelidx:
                 continue
-            plt.figure(figsize=(8, 6), dpi=80)
+            plt.figure(figsize=(8, 6), dpi=400)
             fig, (ax1, ax2) = plt.subplots(2, sharex=True, gridspec_kw={'height_ratios': [2, 1]})
             channel_num = img.shape[-1]
             select_ch = 1

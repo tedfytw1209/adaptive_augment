@@ -602,28 +602,29 @@ class AdaAug_TS(AdaAug):
             plt.clf()
             if selecting and int(e_lb) not in select_labelidx:
                 continue
-            plt.figure(figsize=(24, 18), dpi=200)
+            plt.figure(figsize=(24, 18), dpi=400)
             fig, (ax1, ax2) = plt.subplots(2, sharex=True, gridspec_kw={'height_ratios': [2, 1]})
             channel_num = img.shape[-1]
             select_ch = 1
-            for i in  range(channel_num):
-                ax1.plot(t, img[:,i])
-            #ax1.scatter(t, img[:,select_ch],c=slc[idx],cmap='Reds')
             each_slc = slc[idx]
-            q_score = np.quantile(each_slc,0.4)
+            q_score = np.quantile(each_slc,0.8)
             slc_high = (each_slc >= q_score)
             t_sel = t[slc_high]
             slc_sel = each_slc[slc_high]
-            img_sel = img[slc_high,select_ch]
+            img_sel = img[slc_high]
+            for i in  range(channel_num):
+                ax1.plot(t, img[:,i])
+                ax1.scatter(t_sel, img_sel[:,i],c='r')
+            
             if torch.is_tensor(slc):
-                ax2.plot(t, img[:,select_ch])
+                ax2.plot(t, each_slc)
                 #ax2.scatter(t, img[:,select_ch],c=slc[idx],cmap='Reds')
-                ax2.scatter(t_sel,img_sel,marker='ro')
-            '''if torch.is_tensor(info_reg):
+                #ax2.scatter(t_sel,img_sel[:,select_ch],c='r')
+            if torch.is_tensor(info_reg):
                 for i in range(info_reg.shape[1]):
                     x1 = int(info_reg[idx,i,0])
                     x2 = int(info_reg[idx,i,1])
-                    ax2.plot(t[x1:x2],slc[idx,x1:x2],'ro')'''
+                    ax2.plot(t[x1:x2],slc[idx,x1:x2],'ro')
             if torch.is_tensor(ops_idx):
                 op_name = self.ops_names[ops_idx[idx][0]]
             else:

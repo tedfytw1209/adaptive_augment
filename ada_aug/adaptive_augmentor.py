@@ -602,8 +602,7 @@ class AdaAug_TS(AdaAug):
             plt.clf()
             if selecting and int(e_lb) not in select_labelidx:
                 continue
-            plt.figure(figsize=(24, 18), dpi=400)
-            fig, (ax1, ax2) = plt.subplots(2, sharex=True, gridspec_kw={'height_ratios': [2, 1]})
+            fig, (ax1, ax2) = plt.subplots(2, sharex=True, gridspec_kw={'height_ratios': [2, 1]},figsize=(24, 18), dpi=400)
             channel_num = img.shape[-1]
             select_ch = 1
             each_slc = slc[idx]
@@ -614,7 +613,7 @@ class AdaAug_TS(AdaAug):
             img_sel = img[slc_high]
             for i in  range(channel_num):
                 ax1.plot(t, img[:,i], zorder=1)
-            ax1.scatter(t_sel, img_sel[:,select_ch],c='r',marker="+", zorder=2)
+                ax1.scatter(t_sel, img_sel[:,i],c='r',marker="+",s=3.0, zorder=2)
             
             if torch.is_tensor(slc):
                 ax2.plot(t, each_slc)

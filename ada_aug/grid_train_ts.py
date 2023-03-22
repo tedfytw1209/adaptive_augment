@@ -28,10 +28,11 @@ from class_balanced_loss import ClassBalLoss,ClassDiffLoss,ClassDistLoss,make_cl
 from softaug import Soft_Criterion
 import wandb
 import copy
-from utils import plot_conf_wandb, select_output_source, select_noaug_adapt, select_perfrom_source, stat_adapt, sigmoid_adapt, imbalance_adapt,imbalance_adapt2
+from utils import plot_conf_wandb, select_output_source, select_noaug_adapt, select_perfrom_source, stat_adapt, sigmoid_adapt, imbalance_adapt,imbalance_adapt2,MaxStopper
 import ray
 import ray.tune as tune
 from ray.tune.integration.wandb import WandbTrainableMixin
+from ray.tune.stopper import ExperimentPlateauStopper
 
 os.environ['WANDB_START_METHOD'] = 'thread'
 RAY_DIR = './ray_results'
@@ -55,6 +56,7 @@ parser.add_argument('--cpu', type=float, default=4, help='Allocated by Ray')
 parser.add_argument('--gpu', type=float, default=0.12, help='Allocated by Ray')
 ### dataset & params
 parser.add_argument('--epochs', type=int, default=20, help='number of training epochs')
+parser.add_argument('--patience', type=int, default=0, help='number of patience epochs')
 parser.add_argument('--model_path', type=str, default='saved_models', help='path to save the model')
 parser.add_argument('--save', type=str, default='EXP', help='experiment name')
 parser.add_argument('--seed', type=int, default=42, help='seed')
@@ -63,6 +65,7 @@ parser.add_argument('--multilabel', action='store_true', default=False, help='us
 parser.add_argument('--train_portion', type=float, default=1, help='portion of training data')
 parser.add_argument('--default_split', action='store_true', help='use dataset deault split')
 parser.add_argument('--kfold', type=int, default=-1, help='use kfold cross validation')
+parser.add_argument('--maxfold', type=int, default=10, help='max folds')
 parser.add_argument('--not_save', action='store_true', default=False, help='not to save model')
 #policy
 parser.add_argument('--proj_learning_rate', type=float, default=1e-2, help='learning rate for h')
@@ -138,7 +141,7 @@ parser.add_argument('--soft_conf', type=float, default=1.0, help="confidence for
 #info keep
 parser.add_argument('--keep_aug', action='store_true', default=False, help='info keep augment')
 parser.add_argument('--keep_mode', type=str, default='auto', help='info keep mode',choices=['auto','adapt','b','p','t','rand'])
-parser.add_argument('--saliency', type=str, default='max', help='saliency map score target',choices=['pred','target','max'])
+parser.add_argument('--saliency', type=str, default='max', help='saliency map score target',choices=['pred','target','max','atten'])
 parser.add_argument('--keep_prob', type=float, default=1, help='info keep probabilty')
 parser.add_argument('--keep_mix', action='store_true', default=False, help='mixup type of keep')
 parser.add_argument('--adapt_target', type=str, default='len', help='info keep mode',
@@ -220,8 +223,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         #os.environ['WANDB_START_METHOD'] = 'thread' #tmp disable
         #args = self.config['args']
         args = argparse.Namespace(**copy.deepcopy(self.config)) #for grid search
-        #random seed setting
-        utils.reproducibility(args.seed)
+        utils.reproducibility(args.seed) #for reproduce
         #  dataset settings for search
         n_channel = get_num_channel(args.dataset)
         n_class = get_num_class(args.dataset,args.labelgroup)
@@ -236,24 +238,24 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         self.class_noaug, self.noaug_add, self.use_class_w, self.adapt_add = False, False, False, False
         if args.noaug_add:
             self.noaug_add = True
-        if args.noaug_add=='cadd':
-            self.class_noaug = True
-            self.adapt_add = True
-        elif args.noaug_add=='coadd':
-            self.use_class_w = True
-            self.class_noaug = True
-            self.adapt_add = True
-        elif args.noaug_add=='add':
-            self.adapt_add = True
+            if args.noaug_add=='cadd':
+                self.class_noaug = True
+                self.adapt_add = True
+            elif args.noaug_add=='coadd':
+                self.use_class_w = True
+                self.class_noaug = True
+                self.adapt_add = True
+            elif args.noaug_add=='add':
+                self.adapt_add = True
             #other add no need to adapt change
-        
+        max_folds = self.config['maxfold']
         test_fold_idx = self.config['kfold']
         train_val_test_folds = [[],[],[]] #train,valid,test
-        for i in range(10):
-            curr_fold = (i+test_fold_idx)%10 +1 #fold is 1~10
+        for i in range(max_folds):
+            curr_fold = (i+test_fold_idx)%max_folds +1 #fold is 1~10
             if i==0:
                 train_val_test_folds[2].append(curr_fold)
-            elif i==9:
+            elif i==max_folds-1:
                 train_val_test_folds[1].append(curr_fold)
             else:
                 train_val_test_folds[0].append(curr_fold)
@@ -264,7 +266,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             split=args.train_portion, split_idx=0, target_lb=-1,search_size=args.search_size, #!use search size to reduce training dataset
             search=False,test_size=args.test_size,multilabel=args.multilabel,default_split=args.default_split,
             fold_assign=train_val_test_folds,labelgroup=args.labelgroup,bal_trsampler=args.train_sampler,
-            sampler_alpha=args.alpha)
+            sampler_alpha=args.alpha,max_folds=max_folds)
         #addition model config
         add_model_config = {}
         add_model_config['seg_config'] = {'seg_ways':args.seg_ways, 'rr_method':'pan'}
@@ -383,7 +385,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         keepaug_config = {'keep_aug':args.keep_aug,'mode':args.keep_mode,'thres':args.keep_thres,'length':args.keep_len,'thres_adapt':args.thres_adapt,
             'grid_region':args.keep_grid, 'possible_segment': args.keep_seg, 'info_upper': args.keep_bound, 'sfreq':self.sfreq,
             'adapt_target':args.adapt_target,'keep_leads':args.keep_lead,'keep_prob':args.keep_prob,'keep_back':args.keep_back,'lead_sel':args.lead_sel,
-            'keep_mixup':args.keep_mix,'saliency_target':args.saliency,'seed':args.seed}
+            'keep_mixup':args.keep_mix,'saliency_target':args.saliency,'seed':args.seed,'num_ch':n_channel}
         trans_config = {'sfreq':self.sfreq}
         noaugadd_config = {'add_method':args.noaug_add,'max_noaug_add':args.noaug_max,'max_noaug_reduce':args.reduce_mag,'noaug_alpha':args.noaug_alpha,
             'noaug_warmup':args.noaug_warmup}
@@ -736,16 +738,16 @@ def main():
     #hparams
     hparams = dict(vars(args)) #copy args
     hparams['args'] = args
-    if args.kfold==10:
+    if args.kfold==args.maxfold:
         hparams['kfold'] = tune.grid_search([i for i in range(args.kfold)])
     else:
         hparams['kfold'] = tune.grid_search([args.kfold]) #for some fold
     #grid search
     #hparams['search_freq'] = tune.grid_search([5,10]) #tune.grid_search(hparams['search_freq'])
     #hparams['search_round'] = tune.grid_search([4,8,16]) #tune.grid_search(hparams['search_round'])
-    hparams['epochs'] = tune.grid_search([200,400,800])
-    hparams['learning_rate'] = tune.grid_search([0.001,0.01])
-    hparams['weight_decay'] = tune.grid_search([0.001,0.01])
+    hparams['epochs'] = tune.grid_search([50,100,200])
+    hparams['learning_rate'] = tune.grid_search([0.0001,0.001,0.01])
+    hparams['weight_decay'] = tune.grid_search([0.0001,0.001,0.01])
     #hparams['k_ops'] = tune.grid_search([1,2])
     #hparams['lambda_aug'] = tune.quniform(hparams['lambda_aug'][0],hparams['lambda_aug'][1],0.01)
     #hparams['lambda_sim'] = tune.quniform(hparams['lambda_sim'][0],hparams['lambda_sim'][1],0.01)

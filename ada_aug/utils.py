@@ -19,11 +19,12 @@ from ray.tune import Stopper
 sns.set()
 
 class MaxStopper(Stopper):
-    def __init__(self,metric="valid_acc", mode="max",patience=30):
+    def __init__(self,metric="valid_acc", mode="max",patience=30,max_epoch=300):
         self.metric = metric
         self.mode = mode
         self.patience = patience
         self.p_count = 0
+        self.max_epoch = max_epoch
         if mode == 'max':
             self.best_metric = -1e6
         elif mode == 'min':
@@ -41,7 +42,8 @@ class MaxStopper(Stopper):
         else:
             self.best_metric = new_metric
             self.p_count = 0
-        return self.p_count >= self.patience
+        stop_flag = (self.p_count >= self.patience) or (result['_iteration']>=self.max_epoch-1)
+        return stop_flag
 
     def stop_all(self):
         return False

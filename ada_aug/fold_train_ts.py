@@ -663,7 +663,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             self.adaaug.save_history(self.class2label)
             figure, policy = self.adaaug.plot_history()
             wandb.finish()
-        call_back_dic = {'train_acc': train_acc, 'valid_acc': valid_acc, 'test_acc': test_acc}
+        call_back_dic = {'train_acc': train_acc, 'valid_acc': valid_acc, 'test_acc': test_acc, '_iteration':self._iteration}
         return call_back_dic
 
     def _save(self, checkpoint_dir):
@@ -775,9 +775,9 @@ def main():
     #    reduction_factor=3,brackets=1)1
     tune_scheduler = None
     if args.patience>0:
-        stopper = MaxStopper(metric="valid_acc", mode="max",patience=args.patience)
+        stopper = MaxStopper(metric="valid_acc", mode="max",patience=args.patience,max_epoch=hparams['epochs'])
     else:
-        stopper = None
+        stopper = {"training_iteration": hparams['epochs']}
     analysis = tune.run(
         RayModel,
         name=hparams['ray_name'],
@@ -789,7 +789,7 @@ def main():
         checkpoint_score_attr="valid_acc",
         #checkpoint_freq=FLAGS.checkpoint_freq,
         resources_per_trial={"gpu": args.gpu, "cpu": args.cpu},
-        stop={"training_iteration": hparams['epochs']},
+        stop=stopper,
         config=hparams,
         local_dir=args.ray_dir,
         num_samples=1 #grid search no need

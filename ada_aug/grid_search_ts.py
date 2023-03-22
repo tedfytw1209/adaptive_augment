@@ -28,7 +28,7 @@ from class_balanced_loss import ClassBalLoss,ClassDiffLoss,ClassDistLoss,make_cl
     ,make_class_weights_samples
 from softaug import Soft_Criterion
 import wandb
-from utils import plot_conf_wandb, select_output_source, select_embed_source, select_perfrom_source
+from utils import plot_conf_wandb, select_output_source, select_embed_source, select_perfrom_source, MaxStopper
 import copy
 
 import ray
@@ -57,6 +57,7 @@ parser.add_argument('--cpu', type=float, default=4, help='Allocated by Ray')
 parser.add_argument('--gpu', type=float, default=0.12, help='Allocated by Ray')
 ### dataset & params
 parser.add_argument('--epochs', type=int, default=20, help='number of training epochs')
+parser.add_argument('--patience', type=int, default=0, help='number of patience epochs')
 parser.add_argument('--model_path', type=str, default='saved_models', help='path to save the model')
 parser.add_argument('--save', type=str, default='EXP', help='experiment name')
 parser.add_argument('--seed', type=int, default=42, help='seed')
@@ -680,7 +681,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             figure, policy = self.adaaug.plot_history()
             wandb.finish()
             
-        call_back_dic = {'train_acc': train_acc, 'valid_acc': valid_acc, 'test_acc': test_acc}
+        call_back_dic = {'train_acc': train_acc, 'valid_acc': valid_acc, 'test_acc': test_acc, '_iteration':self._iteration}
         return call_back_dic
 
     def _save(self, checkpoint_dir):
@@ -807,6 +808,10 @@ def main():
     #    reduction_factor=3,brackets=1)1
     #bayesopt = BayesOptSearch(metric="valid_loss", mode="min",random_state=args.seed,patience=12,random_search_steps=24)
     tune_scheduler = None
+    if args.patience>0:
+        stopper = MaxStopper(metric="valid_acc", mode="max",patience=args.patience,max_epoch=hparams['epochs'])
+    else:
+        stopper = {"training_iteration": hparams['epochs']}
     analysis = tune.run(
         RayModel,
         name=hparams['ray_name'],
@@ -819,7 +824,7 @@ def main():
         checkpoint_score_attr="valid_acc",
         #checkpoint_freq=FLAGS.checkpoint_freq,
         resources_per_trial={"gpu": args.gpu, "cpu": args.cpu},
-        stop={"training_iteration": hparams['epochs']},
+        stop=stopper,
         config=hparams,
         local_dir=args.ray_dir,
         num_samples=1, #grid search no need

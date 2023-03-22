@@ -614,7 +614,7 @@ class AdaAug_TS(AdaAug):
             img_sel = img[slc_high]
             for i in  range(channel_num):
                 ax1.plot(t, img[:,i], zorder=1)
-                ax1.scatter(t_sel, img_sel[:,i],c='r',marker="+", zorder=2)
+            ax1.scatter(t_sel, img_sel[:,select_ch],c='r',marker="+", zorder=2)
             
             if torch.is_tensor(slc):
                 ax2.plot(t, each_slc)

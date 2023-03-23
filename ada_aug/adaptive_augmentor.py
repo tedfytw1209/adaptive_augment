@@ -608,10 +608,6 @@ class AdaAug_TS(AdaAug):
             select_ch = 1
             each_slc = slc[idx]
             q_score = 0.4
-            slc_high = (each_slc >= q_score)
-            t_sel = t[slc_high]
-            slc_sel = each_slc[slc_high]
-            img_sel = img[slc_high]
             #for i in  range(channel_num):
                 #ax1.plot(t, img[:,i], zorder=1, fmt = 'k')
                 #ax1.scatter(t_sel, img_sel[:,i],c='r',marker="+", zorder=2)
@@ -622,9 +618,14 @@ class AdaAug_TS(AdaAug):
                     x2 = int(info_reg[idx,i,1])
                 start = max(x1-100,0)
                 end = min(x2+100,1000)
+                slc_high = (each_slc[start:end] >= q_score)
+                t_sel = t[slc_high]
+                slc_sel = each_slc[slc_high]
+                img_sel = img[slc_high]
                 for i in  range(channel_num):
-                    plt.plot(t[start:end],img[start:end,i],'r')
-                    plt.plot(t[x1:x2],img[x1:x2,i],'r')
+                    plt.plot(t[start:end],img[start:end,i],fmt='--', zorder=1)
+                    plt.plot(t[x1:x2],img[x1:x2,i],fmt='-', zorder=1)
+                    plt.scatter(t_sel, img_sel,c='r',marker="+", zorder=2)
             if torch.is_tensor(ops_idx):
                 op_name = self.ops_names[ops_idx[idx][0]]
             else:

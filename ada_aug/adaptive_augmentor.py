@@ -620,14 +620,19 @@ class AdaAug_TS(AdaAug):
                 end = min(x2+100,1000)
                 range_mask = np.zeros(each_slc.shape)
                 range_mask[start:end] = 1
-                slc_high = ((each_slc >= q_score) & (range_mask==1))
-                t_sel = t[slc_high]
-                slc_sel = each_slc[slc_high]
-                img_sel = img[slc_high]
+                t_reg = t[start:end]
+                slc_reg = slc[start:end]
+                img_reg = img[start:end]
+                slc_high = (slc_reg >= q_score)
+                t_sel = t_reg[slc_high]
+                slc_sel = slc_reg[slc_high]
+                img_sel = img_reg[slc_high]
+                print('t_sel len',t_sel.shape)
+                print('img_sel len',img_sel.shape)
                 for i in  range(channel_num):
-                    plt.plot(t[start:end],img[start:end,i],fmt='--', zorder=1)
-                    plt.plot(t[x1:x2],img[x1:x2,i],fmt='-', zorder=1)
-                    plt.scatter(t_sel, img_sel,c='r',marker="+", zorder=2)
+                    plt.plot(t[start:end],img[start:end,i],'--', zorder=1)
+                    plt.plot(t[x1:x2],img[x1:x2,i],'-', zorder=1)
+                    plt.scatter(t_sel, img_sel[:,i],c='r',marker="+", zorder=2)
             if torch.is_tensor(ops_idx):
                 op_name = self.ops_names[ops_idx[idx][0]]
             else:

@@ -564,16 +564,16 @@ class AdaAug_TS(AdaAug):
         '''
         select_label_index = [0,17,20]
         magnitudes, weights = self.predict_aug_params(resize_imgs, seq_len, 'exploit',y=policy_y)
-        for opidx in range(self.n_ops):
-            augori_imgs, aug_imgs, info_region, ops_idx = self.get_visualize_aug_images(images, magnitudes, weights,seq_len=seq_len,visualize=True,target=policy_y
-                    ,op_idx=opidx)
-            if self.use_keepaug:
-                slc_out,slc_ch = self.Augment_wrapper.visualize_slc(images, model=self.gf_model)
-            print('Visualize for Debug')
-            print(slc_ch)
-            self.print_imgs(imgs=images,label=target,title='id',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,select_labelidx=select_label_index)
-            self.print_imgs(imgs=augori_imgs,label=target,title='aug',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,select_labelidx=select_label_index)
-            self.print_imgs(imgs=aug_imgs,label=target,title='keepaug',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,select_labelidx=select_label_index)
+        #for opidx in range(self.n_ops):
+        augori_imgs, aug_imgs, info_region, ops_idx = self.get_visualize_aug_images(images, magnitudes, weights,seq_len=seq_len,visualize=True,target=policy_y
+                ,op_idx=0)
+        if self.use_keepaug:
+            slc_out,slc_ch = self.Augment_wrapper.visualize_slc(images, model=self.gf_model)
+        print('Visualize for Debug')
+        print(slc_ch)
+        self.print_imgs(imgs=images,label=target,title='id',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,select_labelidx=select_label_index)
+        #self.print_imgs(imgs=augori_imgs,label=target,title='aug',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,select_labelidx=select_label_index)
+        #self.print_imgs(imgs=aug_imgs,label=target,title='keepaug',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,select_labelidx=select_label_index)
         #identify check
         '''for idx,(img,aug_img) in enumerate(zip(images,aug_imgs)):
             if ops_idx[idx][0]==0: #identity
@@ -602,7 +602,8 @@ class AdaAug_TS(AdaAug):
             plt.clf()
             if selecting and int(e_lb) not in select_labelidx:
                 continue
-            fig, (ax1, ax2) = plt.subplots(2, sharex=True, gridspec_kw={'height_ratios': [2, 1]},figsize=(12, 9), dpi=200)
+            #fig, (ax1, ax2) = plt.subplots(2, sharex=True, gridspec_kw={'height_ratios': [2, 1]},figsize=(12, 9), dpi=200)
+            fig = plt.figure(figsize=(12, 8), dpi=200)
             channel_num = img.shape[-1]
             select_ch = 1
             each_slc = slc[idx]
@@ -611,29 +612,29 @@ class AdaAug_TS(AdaAug):
             t_sel = t[slc_high]
             slc_sel = each_slc[slc_high]
             img_sel = img[slc_high]
-            for i in  range(channel_num):
-                ax1.plot(t, img[:,i], zorder=1)
-                ax1.scatter(t_sel, img_sel[:,i],c='r',marker="+", zorder=2)
+            #for i in  range(channel_num):
+                #ax1.plot(t, img[:,i], zorder=1, fmt = 'k')
+                #ax1.scatter(t_sel, img_sel[:,i],c='r',marker="+", zorder=2)
             
-            if torch.is_tensor(slc):
-                ax2.plot(t, each_slc)
-                #ax2.scatter(t, img[:,select_ch],c=slc[idx],cmap='Reds')
-                #ax2.scatter(t_sel,img_sel[:,select_ch],c='r')
             if torch.is_tensor(info_reg):
                 for i in range(info_reg.shape[1]):
                     x1 = int(info_reg[idx,i,0])
                     x2 = int(info_reg[idx,i,1])
-                    ax2.plot(t[x1:x2],slc[idx,x1:x2],'ro')
+                start = max(x1-100,0)
+                end = min(x2+100,1000)
+                for i in  range(channel_num):
+                    fig.plot(t[start:end],img[start:end,i],'r')
+                    fig.plot(t[x1:x2],img[x1:x2,i],'r')
             if torch.is_tensor(ops_idx):
                 op_name = self.ops_names[ops_idx[idx][0]]
             else:
                 op_name = ''
             if title:
                 plt.title(f'{title}{op_name}_{e_lb}')
-            save_path = os.path.join(self.save_dir,f'img{idx}_label{e_lb}')
-            if not os.path.exists(save_path):
-                os.makedirs(save_path)
-            plt.savefig(os.path.join(save_path,f'img{idx}_{title}{op_name}_{e_lb}.png'))
+            save_path = self.save_dir
+            #if not os.path.exists(save_path):
+            #    os.makedirs(save_path)
+            plt.savefig(os.path.join(save_path,f'img{idx}_{e_lb}.png'))
             #plt one each
             '''for i in  range(channel_num):
                 plt.clf()

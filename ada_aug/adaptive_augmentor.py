@@ -598,6 +598,8 @@ class AdaAug_TS(AdaAug):
             selecting = True
         else:
             selecting = False
+        colors_map = ['blue','orange','green','red','purple',
+                      'brown','pink','gray','olive','cyan']
         for idx,(img,e_lb) in enumerate(zip(imgs,label)):
             plt.clf()
             if selecting and int(e_lb) not in select_labelidx:
@@ -630,9 +632,9 @@ class AdaAug_TS(AdaAug):
                 print('t_sel len',t_sel.shape)
                 print('img_sel len',img_sel.shape)
                 for i in  range(channel_num):
-                    c_name = 'C%d'%i
-                    plt.plot(t[start:end],img[start:end,i],'--'+c_name, zorder=1)
-                    plt.plot(t[x1:x2],img[x1:x2,i],'-'+c_name, zorder=1)
+                    c_name = 'tab:'+colors_map[i]
+                    plt.plot(t[start:end],img[start:end,i],'--',c=c_name, zorder=1)
+                    plt.plot(t[x1:x2],img[x1:x2,i],'-',c=c_name, zorder=1)
                     plt.scatter(t_sel, img_sel[:,i],c='r',marker="+", zorder=2)
             if torch.is_tensor(ops_idx):
                 op_name = self.ops_names[ops_idx[idx][0]]

@@ -623,8 +623,8 @@ class AdaAug_TS(AdaAug):
                 start = max(x1-100,0)
                 end = min(x2+100,1000)
                 for i in  range(channel_num):
-                    fig.plot(t[start:end],img[start:end,i],'r')
-                    fig.plot(t[x1:x2],img[x1:x2,i],'r')
+                    plt.plot(t[start:end],img[start:end,i],'r')
+                    plt.plot(t[x1:x2],img[x1:x2,i],'r')
             if torch.is_tensor(ops_idx):
                 op_name = self.ops_names[ops_idx[idx][0]]
             else:

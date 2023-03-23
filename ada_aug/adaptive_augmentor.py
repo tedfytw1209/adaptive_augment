@@ -618,7 +618,9 @@ class AdaAug_TS(AdaAug):
                     x2 = int(info_reg[idx,i,1])
                 start = max(x1-100,0)
                 end = min(x2+100,1000)
-                slc_high = (each_slc[start:end] >= q_score)
+                range_mask = np.zeros(each_slc.shape)
+                range_mask[start:end] = 1
+                slc_high = ((each_slc >= q_score) & range_mask)
                 t_sel = t[slc_high]
                 slc_sel = each_slc[slc_high]
                 img_sel = img[slc_high]

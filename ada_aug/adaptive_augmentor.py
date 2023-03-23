@@ -562,7 +562,7 @@ class AdaAug_TS(AdaAug):
         NST_, PMI, RAO/RAE, RVH, SEHYP, 
         STTC(20), WPW, _AVB]
         '''
-        select_label_index = [0,17,20]
+        select_label_index = [17]
         magnitudes, weights = self.predict_aug_params(resize_imgs, seq_len, 'exploit',y=policy_y)
         #for opidx in range(self.n_ops):
         augori_imgs, aug_imgs, info_region, ops_idx = self.get_visualize_aug_images(images, magnitudes, weights,seq_len=seq_len,visualize=True,target=policy_y

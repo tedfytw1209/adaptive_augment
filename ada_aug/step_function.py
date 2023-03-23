@@ -46,6 +46,18 @@ def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_
     for step, (input, seq_len, target) in enumerate(train_queue):
         input = input.float().cuda()
         target = target.cuda(non_blocking=True)
+        #visualize
+        if visualize:
+            input_search, seq_len, target_search = input, seq_len, target
+            input_search = input_search.float().cuda()
+            target_search = target_search.cuda()
+            policy_y = None
+            if class_adaptive: #target to onehot
+                if not multilabel:
+                    policy_y = nn.functional.one_hot(target_search, num_classes=n_class).cuda().float()
+                else:
+                    policy_y = target_search.cuda().float()
+            adaaug.visualize_result(input_search, seq_len,policy_y,target_search)
         #  get augmented training data from adaaug
         policy_y = None
         if class_adaptive: #target to onehot
@@ -140,19 +152,7 @@ def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_
             predicted = torch.sigmoid(logits.data)
         preds.append(predicted.detach().cpu())
         targets.append(target.detach().cpu())
-    #visualize
-    if visualize:
-        input_search, seq_len, target_search = next(iter(train_queue))
-        input_search = input_search.float().cuda()
-        target_search = target_search.cuda()
-        policy_y = None
-        if class_adaptive: #target to onehot
-            if not multilabel:
-                policy_y = nn.functional.one_hot(target_search, num_classes=n_class).cuda().float()
-            else:
-                policy_y = target_search.cuda().float()
-        adaaug.visualize_result(input_search, seq_len,policy_y,target_search)
-        exit()
+    
     #table dic
     table_dic = {}
     tr_add_up = torch.clamp(tr_output_matrix.sum(dim=1,keepdim=True),min=1e-9)

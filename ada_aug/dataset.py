@@ -451,7 +451,7 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
         too_minor_sample = np.array(too_minor_sample).astype(int)
         tot_train_idx = np.concatenate((tot_train_idx,too_minor_sample)).astype(int) #add back minor sample, 11/09
         if all_train:
-            tot_train_idx = tot_train_idx + search_idx
+            tot_train_idx = np.concatenate((tot_train_idx,search_idx)).astype(int)
         print(tot_train_idx)
         print(search_idx)
         print(f'Train len: {len(tot_train_idx)},Search len: {len(search_idx)}')
@@ -473,7 +473,7 @@ def get_ts_dataloaders(dataset_name, batch, num_workers, dataroot, cutout,
         too_minor_sample = np.array(too_minor_sample).astype(int)
         tot_train_idx = np.concatenate((tot_train_idx,too_minor_sample)).astype(int) #add back minor sample, 11/09
         if all_train:
-            tot_train_idx = tot_train_idx + search_idx
+            tot_train_idx = np.concatenate((tot_train_idx,search_idx)).astype(int)
         print(tot_train_idx)
         print(search_idx)
         print(f'Train len: {len(tot_train_idx)},Search len: {len(search_idx)}')

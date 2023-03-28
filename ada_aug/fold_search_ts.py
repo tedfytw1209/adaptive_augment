@@ -279,7 +279,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             args.dataset, args.batch_size, args.num_workers,
             args.dataroot, args.cutout, args.cutout_length,
             split=args.train_portion, split_idx=0, target_lb=-1,
-            search=True, search_divider=sdiv,search_size=args.search_size,
+            search=True, search_divider=sdiv,search_size=args.search_size,all_train=args.randaug, #train+search
             test_size=args.test_size,multilabel=args.multilabel,default_split=args.default_split,valid_search=args.valid_search,
             fold_assign=train_val_test_folds,labelgroup=args.labelgroup,bal_ssampler=args.search_sampler,bal_trsampler=args.train_sampler,
             sampler_alpha=args.alpha,max_folds=max_folds)
@@ -683,8 +683,9 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 if args.mix_type=='loss':
                     tables_dic['aug_output'] = plot_conf_wandb(self.result_table_dic['aug_output'],title='aug_output')
                 wandb.log(tables_dic)
-            self.adaaug.save_history(self.class2label)
-            figure, policy = self.adaaug.plot_history()
+            if self.policy_apply:
+                self.adaaug.save_history(self.class2label)
+                figure, policy = self.adaaug.plot_history()
             wandb.finish()
             
         call_back_dic = {'train_acc': train_acc, 'valid_acc': valid_acc, 'test_acc': test_acc, '_iteration':self._iteration}

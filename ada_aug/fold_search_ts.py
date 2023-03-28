@@ -102,6 +102,8 @@ parser.add_argument('--train_sampler', type=str, default='', help='for train sam
         choices=['weight','wmaxrel',''])
 parser.add_argument('--search_sampler', type=str, default='', help='for search sampler',
         choices=['weight','wmaxrel',''])
+parser.add_argument('--randaug', action='store_true', default=False, help="mimic randaug training")
+parser.add_argument('--randm', type=float, default=0.5, help="m for randaugment (only usable when randaug=true)")
 # diff loss mix
 parser.add_argument('--diff_aug', action='store_true', default=False, help='use valid select')
 parser.add_argument('--same_train', action='store_true', default=False, help='use valid select')
@@ -469,6 +471,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 transfrom_dic=trans_config,
                 preprocessors=preprocessors,
                 train_bn=args.train_bn, #only search need
+                randaug_m=args.randm,
                 seed=args.seed)
         else:
             keepaug_config['length'] = keepaug_config['length'][0]
@@ -491,6 +494,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 transfrom_dic=trans_config,
                 preprocessors=preprocessors,
                 train_bn=args.train_bn, #only search need
+                randaug_m=args.randm,
                 seed=args.seed)
         #to self
         self.n_channel = n_channel
@@ -509,6 +513,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
         self.pre_train_acc = 0.0
         self.result_table_dic = {}
         self.class_dist = None
+        self.policy_apply = not args.randaug
     def step(self):#use step replace _train
         args = argparse.Namespace(**copy.deepcopy(self.config)) #for grid search
         if self._iteration==0:
@@ -530,7 +535,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 'lambda_sim':args.lambda_sim,'class_adaptive':args.class_adapt,'lambda_noaug':args.lambda_noaug,'train_perfrom':self.pre_train_acc,
                 'loss_type':args.loss_type, 'adv_criterion': self.adv_criterion, 'teacher_model':self.ema_model, 'sim_criterion':self.sim_criterion,
                 'noaug_reg':args.noaug_reg,'class_weight': self.class_weight,'mixup': args.mixup,'mixup_alpha': args.mixup_alpha,'aug_mix': args.aug_mix,
-                'extra_criterions':self.extra_losses,'policy_dist':args.policy_dist,'optim_type':args.optim_type,
+                'extra_criterions':self.extra_losses,'policy_dist':args.policy_dist,'optim_type':args.optim_type,'policy_apply_all':self.policy_apply,
                 'sim_reweight':args.sim_rew,'warmup_epoch': args.pwarmup,'mix_type':args.mix_type,'visualize':args.visualize}
         
         # searching, !!!12/14 tmp add neumann search for testing new gradient method

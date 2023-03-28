@@ -564,7 +564,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
             difficult_aug=False,same_train=False,reweight=True,sim_reweight=False,mix_type='embed', warmup_epoch = 0
             ,lambda_sim = 1.0,lambda_aug = 1.0,loss_type='minus',lambda_noaug = 0,train_perfrom = 0.0,noaug_reg='',
             class_adaptive=False,adv_criterion=None,sim_criterion=None,class_weight=None,extra_criterions=[],
-            policy_dist='pwk',optim_type='',policy_model=None,
+            policy_dist='pwk',optim_type='',policy_model=None,policy_apply_all=True,
             teacher_model=None,map_select=False,mixup=False,mixup_alpha=1.0,aug_mix=False,visualize=False):
     objs = utils.AvgrageMeter()
     top1 = utils.AvgrageMeter()
@@ -648,7 +648,8 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
         #print(f'Origin pre-input {input}') #!tmp for debug
         timer = time.time()
         if epoch>=warmup_epoch:
-            aug_images, tr_policy = adaaug(input, seq_len, mode='exploit', y=policy_y, policy_apply=policy_apply)
+            use_policy = policy_apply_all and policy_apply
+            aug_images, tr_policy = adaaug(input, seq_len, mode='exploit', y=policy_y, policy_apply=use_policy)
             #sum of policy, not class wise
             #tr_policy_matrix += torch.cat(tr_policy,dim=1).detach().cpu().sum(0) #[mags,weights], correct
             tr_policy_matrix += select_npolicy(tr_policy,policy_dist=policy_dist).detach().cpu().sum(0) #(n_policy)
@@ -729,7 +730,7 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
 
         # exploration
         timer = time.time()
-        if epoch>= warmup_epoch and step % search_freq == search_freq-1: #warmup
+        if epoch>= warmup_epoch and step % search_freq == search_freq-1 and policy_apply_all: #warmup/not search policy
             policy_apply = True #start learning policy
             #difficult, train input, target
             gf_model.eval() #11/9 add

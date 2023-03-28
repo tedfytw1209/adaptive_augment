@@ -334,10 +334,10 @@ class AdaAug_TS(AdaAug):
             self.h_model.train()
             T = self.search_temp
             MAG_T = self.mag_search_temp
-        a_params = self.h_model(self.gf_model.extract_features(X.cuda(),seq_len),y=y)
-        bs, _ = a_params.shape
+        bs, s, ch = X.shape
         #policy
         if policy_apply:
+            a_params = self.h_model(self.gf_model.extract_features(X.cuda(),seq_len),y=y)
             magnitudes, weights = torch.split(a_params, self.n_ops, dim=1)
             magnitudes = torch.sigmoid(magnitudes/MAG_T)
             weights = torch.nn.functional.softmax(weights/T, dim=-1)
@@ -820,11 +820,11 @@ class AdaAugkeep_TS(AdaAug):
             self.h_model.train()
             T = self.search_temp
             MAG_T = self.mag_search_temp
-        a_params = self.h_model(self.gf_model.extract_features(X.cuda(),seq_len),y=y)
-        bs, _ = a_params.shape
-        #mags: mag for ops, weights: weight for ops, keeplen_ws: keeplen weights, keep_thres: keep threshold
-        magnitudes, weights, keeplen_ws, keep_thres = torch.split(a_params, [self.n_ops, self.n_ops, self.adapt_len, 1], dim=1)
+        bs, s, ch = X.shape
         if policy_apply:
+            a_params = self.h_model(self.gf_model.extract_features(X.cuda(),seq_len),y=y)
+            #mags: mag for ops, weights: weight for ops, keeplen_ws: keeplen weights, keep_thres: keep threshold
+            magnitudes, weights, keeplen_ws, keep_thres = torch.split(a_params, [self.n_ops, self.n_ops, self.adapt_len, 1], dim=1)
             magnitudes = torch.sigmoid(magnitudes/MAG_T)
             weights = torch.nn.functional.softmax(weights/T, dim=-1)
             keeplen_ws = torch.nn.functional.softmax(keeplen_ws/T, dim=-1)
@@ -832,6 +832,7 @@ class AdaAugkeep_TS(AdaAug):
             magnitudes = torch.ones(bs,self.n_ops).cuda() * self.randaug_m #to mimic randaug
             weights = torch.ones(bs,self.n_ops) / self.n_ops
             keeplen_ws = torch.ones(bs,self.adapt_len) / self.adapt_len
+            keep_thres = torch.ones(bs,1) * self.keepaug_config['thres']
         #threshold
         if self.thres_adapt:
             keep_thres = torch.sigmoid(keep_thres/MAG_T)

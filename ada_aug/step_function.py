@@ -1032,6 +1032,8 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
     #wandb dic
     out_dic = {}
     out_dic['train_loss'] = objs.avg
+    if search_total == 0:
+        search_total = 1e-6
     for k in sorted(ex_losses):
         out_dic[k] = ex_losses[k] / search_total
     if epoch>= warmup_epoch:

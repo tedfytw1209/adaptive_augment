@@ -101,6 +101,7 @@ parser.add_argument('--mapselect', action='store_true', default=False, help='use
 parser.add_argument('--valselect', action='store_true', default=False, help='use valid select')
 parser.add_argument('--notwarmup', action='store_true', default=False, help='use valid select')
 parser.add_argument('--randaug', action='store_true', default=False, help="mimic randaug training")
+parser.add_argument('--randm', type=float, default=0.5, help="m for randaugment (only usable when randaug=true)")
 parser.add_argument('--augselect', type=str, default='', help="augmentation selection")
 parser.add_argument('--alpha', type=float, default=1.0, help="alpha adpat")
 parser.add_argument('--train_sampler', type=str, default='', help='for train sampler',
@@ -121,6 +122,7 @@ parser.add_argument('--noaug_add', type=str, default='', help='add regular for n
         choices=['cadd','add','coadd','fixadd','constadd',''])
 parser.add_argument('--noaug_max', type=float, default=0.5, help='max noaugment regular')
 parser.add_argument('--noaug_alpha', type=float, default=1.0, help='noaugment alpha for noaug add formula')
+parser.add_argument('--noaug_k', type=int, default=10, help='noaugment k for noaug add grid search')
 parser.add_argument('--noaug_pow', type=float, default=1.0, help='power for noaug weight')
 parser.add_argument('--noaug_warmup', type=int, default=0, help='noaugment warmup steps (if need)')
 parser.add_argument('--reduce_mag', type=float, default=0, help='max reduce magnitude (default 0 is no reduce mag')
@@ -408,6 +410,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 transfrom_dic=trans_config,
                 preprocessors=preprocessors,
                 fix_noaug_max=fix_noaug_max,
+                randaug_m=args.randm,
                 seed=args.seed)
         else:
             keepaug_config['length'] = keepaug_config['length'][0]
@@ -427,6 +430,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 transfrom_dic=trans_config,
                 preprocessors=preprocessors,
                 fix_noaug_max=fix_noaug_max,
+                randaug_m=args.randm,
                 seed=args.seed)
         #to self
         self.n_channel = n_channel
@@ -748,6 +752,8 @@ def main():
     #hparams['epochs'] = tune.grid_search([50,100,200])
     hparams['learning_rate'] = tune.grid_search([0.0001,0.001,0.01])
     hparams['weight_decay'] = tune.grid_search([0.0001,0.001])
+    noaug_k = hparams['noaug_k']
+    hparams['noaug_alpha'] = tune.grid_search([(i+1)/noaug_k for i in noaug_k])
     #hparams['k_ops'] = tune.grid_search([1,2])
     #hparams['lambda_aug'] = tune.quniform(hparams['lambda_aug'][0],hparams['lambda_aug'][1],0.01)
     #hparams['lambda_sim'] = tune.quniform(hparams['lambda_sim'][0],hparams['lambda_sim'][1],0.01)
@@ -809,7 +815,7 @@ def main():
         stop=stopper,
         config=hparams,
         local_dir=args.ray_dir,
-        num_samples=1, #grid search no need
+        num_samples=1 #grid search no need
     )
     #clean up 12/13
     ray.shutdown()

@@ -261,7 +261,7 @@ class AdaAug_TS(AdaAug):
     def __init__(self, after_transforms, n_class, gf_model, h_model, save_dir=None, visualize=False,
                     config=default_config,keepaug_config=default_config, multilabel=False, augselect='',class_adaptive=False,
                     sub_mix=1.0,search_temp=1.0,mag_search_temp=1.0,noaug_add=False,transfrom_dic={},preprocessors=[],
-                    noaug_config={},train_bn=False,seed=None,fix_noaug_max=False):
+                    noaug_config={},train_bn=False,seed=None,fix_noaug_max=False,randaug_m=0.5):
         super(AdaAug_TS, self).__init__(after_transforms, n_class, gf_model, h_model, save_dir, config)
         #other already define in AdaAug
         self.generator = torch.Generator(device='cuda')
@@ -317,6 +317,7 @@ class AdaAug_TS(AdaAug):
             self.delta_func = perturb_param_wide
         else:
             self.delta_func = perturb_param
+        self.randaug_m = randaug_m
 
     def predict_aug_params(self, X, seq_len, mode,y=None,policy_apply=True):
         self.gf_model.eval()
@@ -335,14 +336,16 @@ class AdaAug_TS(AdaAug):
             MAG_T = self.mag_search_temp
         a_params = self.h_model(self.gf_model.extract_features(X.cuda(),seq_len),y=y)
         bs, _ = a_params.shape
+        #policy
         if policy_apply:
             magnitudes, weights = torch.split(a_params, self.n_ops, dim=1)
             magnitudes = torch.sigmoid(magnitudes/MAG_T)
             weights = torch.nn.functional.softmax(weights/T, dim=-1)
         else: #all unifrom distribution when not using policy
             #print('Using random augments when warm up')
-            magnitudes = torch.ones(bs,self.n_ops).cuda() * 0.5 #!!!tmp change to mimic randaug
+            magnitudes = torch.ones(bs,self.n_ops).cuda() * self.randaug_m #!!!tmp change to mimic randaug
             weights = torch.ones(bs,self.n_ops).cuda() / self.n_ops
+        #cadd
         if self.add_method=='fixadd': #add fix amount noaug
             weights[:,0] = self.noaug_max
             weights[:,1:] = (1.0 - self.noaug_max) * weights[:,1:] / torch.sum(weights[:,1:],dim=1, keepdim=True).detach()
@@ -706,7 +709,7 @@ class AdaAugkeep_TS(AdaAug):
     def __init__(self, after_transforms, n_class, gf_model, h_model, save_dir=None, visualize=False,
                     config=default_config,keepaug_config=default_config, multilabel=False, augselect='',class_adaptive=False,ind_mix=False,
                     sub_mix=1.0,search_temp=1.0,mag_search_temp=1.0,noaug_add=False,transfrom_dic={},preprocessors=[],
-                    noaug_config={},train_bn=False,seed=None,fix_noaug_max=False):
+                    noaug_config={},train_bn=False,seed=None,fix_noaug_max=False,randaug_m=0.5):
         super(AdaAugkeep_TS, self).__init__(after_transforms, n_class, gf_model, h_model, save_dir, config)
         #other already define in AdaAug
         self.generator = torch.Generator(device='cuda')
@@ -800,6 +803,7 @@ class AdaAugkeep_TS(AdaAug):
             self.delta_func = perturb_param_wide
         else:
             self.delta_func = perturb_param
+        self.randaug_m = randaug_m
 
     def predict_aug_params(self, X, seq_len, mode,y=None,policy_apply=True):
         self.gf_model.eval()
@@ -825,7 +829,7 @@ class AdaAugkeep_TS(AdaAug):
             weights = torch.nn.functional.softmax(weights/T, dim=-1)
             keeplen_ws = torch.nn.functional.softmax(keeplen_ws/T, dim=-1)
         else:
-            magnitudes = torch.rand(bs,self.n_ops)
+            magnitudes = torch.ones(bs,self.n_ops).cuda() * self.randaug_m #to mimic randaug
             weights = torch.ones(bs,self.n_ops) / self.n_ops
             keeplen_ws = torch.ones(bs,self.adapt_len) / self.adapt_len
         #threshold

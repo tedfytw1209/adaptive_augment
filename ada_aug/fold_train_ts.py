@@ -101,6 +101,7 @@ parser.add_argument('--mapselect', action='store_true', default=False, help='use
 parser.add_argument('--valselect', action='store_true', default=False, help='use valid select')
 parser.add_argument('--notwarmup', action='store_true', default=False, help='use valid select')
 parser.add_argument('--randaug', action='store_true', default=False, help="mimic randaug training")
+parser.add_argument('--randm', type=float, default=0.5, help="m for randaugment (only usable when randaug=true)")
 parser.add_argument('--augselect', type=str, default='', help="augmentation selection")
 parser.add_argument('--alpha', type=float, default=1.0, help="alpha adpat")
 parser.add_argument('--train_sampler', type=str, default='', help='for train sampler',
@@ -408,6 +409,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 transfrom_dic=trans_config,
                 preprocessors=preprocessors,
                 fix_noaug_max=fix_noaug_max,
+                randaug_m=args.randm,
                 seed=args.seed)
         else:
             keepaug_config['length'] = keepaug_config['length'][0]
@@ -427,6 +429,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 transfrom_dic=trans_config,
                 preprocessors=preprocessors,
                 fix_noaug_max=fix_noaug_max,
+                randaug_m=args.randm,
                 seed=args.seed)
         #to self
         self.n_channel = n_channel

@@ -369,8 +369,8 @@ class AdaAug_TS(AdaAug):
         
         return magnitudes, weights
 
-    def add_history(self, images, seq_len, targets,y=None):
-        magnitudes, weights = self.predict_aug_params(images, seq_len, 'exploit',y=y)
+    def add_history(self, images, seq_len, targets,y=None,policy_apply=True):
+        magnitudes, weights = self.predict_aug_params(images, seq_len, 'exploit',y=y,policy_apply=policy_apply)
         mag_list, weight_list = [],[] #list for each class
         zero_tensor = torch.zeros(1,self.n_ops)
         for k in range(self.n_class):

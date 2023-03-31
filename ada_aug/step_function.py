@@ -60,7 +60,7 @@ def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_
             adaaug.visualize_result(input_search, seq_len,policy_y,target_search)
         #  get augmented training data from adaaug
         policy_y = None
-        if class_adaptive: #target to onehot
+        if class_adaptive or not policy_apply: #target to onehot, tmp fix 3/31
             if not multilabel:
                 policy_y = nn.functional.one_hot(target, num_classes=n_class).cuda().float()
             else:
@@ -135,7 +135,7 @@ def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_
             logging.info('train: step=%03d loss=%e top1acc=%f top5acc=%f', global_step, objs.avg, top1.avg, top5.avg)
 
         # log the policy
-        policy = adaaug.add_history(input, seq_len, target,y=policy_y)
+        policy = adaaug.add_history(input, seq_len, target,y=policy_y,policy_apply=policy_apply)
         tr_class_augm += policy[0] #sum of policy
         tr_class_augw += policy[1] #sum of policy
         # Accuracy / AUROC

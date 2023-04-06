@@ -104,6 +104,7 @@ parser.add_argument('--search_sampler', type=str, default='', help='for search s
         choices=['weight','wmaxrel',''])
 parser.add_argument('--randaug', action='store_true', default=False, help="mimic randaug training")
 parser.add_argument('--randm', type=float, default=0.5, help="m for randaugment (only usable when randaug=true)")
+parser.add_argument('--ori_train', action='store_true', default=False, help="only use original data for training")
 # diff loss mix
 parser.add_argument('--diff_aug', action='store_true', default=False, help='use valid select')
 parser.add_argument('--same_train', action='store_true', default=False, help='use valid select')
@@ -543,6 +544,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 'loss_type':args.loss_type, 'adv_criterion': self.adv_criterion, 'teacher_model':self.ema_model, 'sim_criterion':self.sim_criterion,
                 'noaug_reg':args.noaug_reg,'class_weight': self.class_weight,'mixup': args.mixup,'mixup_alpha': args.mixup_alpha,'aug_mix': args.aug_mix,
                 'extra_criterions':self.extra_losses,'policy_dist':args.policy_dist,'optim_type':args.optim_type,'policy_apply_all':self.policy_apply,
+                'ori_train':args.ori_train,
                 'sim_reweight':args.sim_rew,'warmup_epoch': args.pwarmup,'mix_type':args.mix_type,'visualize':args.visualize}
         
         # searching, !!!12/14 tmp add neumann search for testing new gradient method

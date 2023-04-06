@@ -459,22 +459,41 @@ class ClassDistLoss(torch.nn.Module):
             print('similar loss: ',classdist_loss) #!tmp
         return classdist_loss
 
-#class KD loss ref, not using
-class CriterionKD(nn.Module):
+class ClassBiasLoss(nn.Module):
     '''
-    knowledge distillation loss
+    knowledge distillation loss & reweight factor for class bias loss
     '''
-    def __init__(self, temperature=1):
-        super(CriterionKD, self).__init__()
+    def __init__(self, temperature=1,reweight=False,macro=False):
+        super(ClassBiasLoss, self).__init__()
         self.temperature = temperature
+        self.reweight = reweight
+        self.macro = macro
+        self.loss_target = 'output'
 
-    def forward(self, pred, soft):
-        B, C, h, w = soft.size()
-        scale_pred = pred.permute(0,2,3,1).contiguous().view(-1,C)
-        scale_soft = soft.permute(0,2,3,1).contiguous().view(-1,C)
-        p_s = F.log_softmax(scale_pred / self.temperature, dim=1)
-        p_t = F.softmax(scale_soft / self.temperature, dim=1)
-        loss = F.kl_div(p_s, p_t, reduction='batchmean') * (self.temperature**2)
+    def forward(self, logits, targets=None, sim_targets=None):
+        bs, n_class = sim_targets.shape
+        p_logits = F.log_softmax(logits / self.temperature, dim=1)
+        p_targets = F.log_softmax(sim_targets / self.temperature, dim=1)
+        kl_values = torch.sum(F.kl_div(p_logits, p_targets, reduction='none'),dim=1) #(bs,n_class)->(bs)
+        #print('w_aug',w_aug)
+        #macro
+        if self.macro:
+            sim_onehot = nn.functional.one_hot(targets, num_classes=n_class).detach().float()
+            w_sim = (sim_onehot / (sim_onehot.sum(0)+1e-6)).sum(1) #class mean, sum up: (bs)
+            w_sim /= (w_sim.mean().detach() + 1e-6)
+            kl_values_p = w_sim * kl_values #(bs)
+        else:
+            kl_values_p = kl_values #(bs)
+        #rew for only bias sample
+        if self.reweight:
+            #p_aug = logits.softmax(dim=1)[torch.arange(bs), sim_targets].clone().detach()
+            p_orig = sim_targets.softmax(dim=1)[torch.arange(bs), targets].detach()
+            w_aug = torch.sqrt(p_orig) #a=0.5
+            w_aug /= (w_aug.mean().detach() + 1e-6)
+            loss = (w_aug * kl_values_p).mean() * (self.temperature**2)
+        else:
+            loss = kl_values_p.mean() * (self.temperature**2)
+        
         return loss
 
 #train class weight loss

@@ -23,7 +23,7 @@ from dataset import get_ts_dataloaders, get_num_class, get_label_name, get_datas
 from operation_tseries import TS_OPS_NAMES,ECG_OPS_NAMES,TS_ADD_NAMES,MAG_TEST_NAMES,NOMAG_TEST_NAMES
 from step_function import train,infer,search_train,search_infer,search_train_neumann #!!! tmp add
 from non_saturating_loss import NonSaturatingLoss,Wasserstein_loss
-from class_balanced_loss import ClassBalLoss,ClassDiffLoss,ClassDistLoss,make_class_balance_count,make_class_weights,make_loss,make_class_weights_maxrel \
+from class_balanced_loss import ClassBalLoss,ClassDiffLoss,ClassDistLoss,ClassBiasLoss,make_class_balance_count,make_class_weights,make_loss,make_class_weights_maxrel \
     ,make_class_weights_samples
 from softaug import Soft_Criterion
 import wandb
@@ -125,6 +125,9 @@ parser.add_argument('--feature_mask', type=str, default='', help='add regular fo
         choices=['dropout','select','average','classonly',''])
 parser.add_argument('--class_dist', type=str, default='', help='class distance loss from and calculate ways')
 parser.add_argument('--lambda_dist', type=float, default=1.0, help="class distance weight")
+parser.add_argument('--cbias_loss', action='store_true', default=False, help='class bias loss or not')
+parser.add_argument('--cbias_rew', action='store_true', default=False, help='class bias loss reweight or not')
+parser.add_argument('--cbias_macro', action='store_true', default=False, help='class bias macro or not')
 parser.add_argument('--class_sim', action='store_true', default=False, help='class distance use similar or not')
 parser.add_argument('--policy_dist', type=str, default='pwk', help='Assume mags:w,weights:p,(keeplen):k,(thres)')
 parser.add_argument('--noaug_reg', type=str, default='', help='add regular for noaugment ',
@@ -402,6 +405,10 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
             self.class_criterion = ClassDistLoss(distance_func='conf',loss_choose='conf'
             ,similar=args.class_sim,lamda=args.lambda_dist,num_classes=n_class,use_loss=False,noaug_target=args.noaug_target)
             self.extra_losses.append(self.class_criterion)
+        #class bias loss
+        if args.cbias_loss:
+            cbias_criterion = ClassBiasLoss(temperature=1,reweight=args.cbias_rew,macro=args.cbias_macro)
+            self.extra_losses.append(cbias_criterion)
         #  AdaAug settings for search
         ind_mix,sub_mix = False,False
         if 'ind' in args.mix_method:

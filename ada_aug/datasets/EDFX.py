@@ -184,16 +184,17 @@ class EDFX(BaseDataset):
         print(counts_array)
         if mode=='all':
             print("Using origin data format")
-        elif isinstance(mode,list): #make split indice
+        elif isinstance(mode,list) or mode=='foldall': #make split indice
             train_ovr = (self.n_folds - 2)
             splits_proportions,fold_indices = self.CV_split_indices(train_ovr,random_state=seed)
             self.split_indices = splits_proportions
             self.fold_indices = fold_indices
-            select_idxs = np.array([])
-            for fold in mode: # fold:1~10, fold_indices:0~9
-                select_idxs = np.concatenate([select_idxs,self.fold_indices[fold-1]],axis=0).astype(int)
-            self.input_data = self.input_data[select_idxs]
-            self.label = self.label[select_idxs]
+            if isinstance(mode,list):
+                select_idxs = np.array([])
+                for fold in mode: # fold:1~10, fold_indices:0~9
+                    select_idxs = np.concatenate([select_idxs,self.fold_indices[fold-1]],axis=0).astype(int)
+                self.input_data = self.input_data[select_idxs]
+                self.label = self.label[select_idxs]
                 
     def prep_physionet_dataset(
         self,

@@ -62,7 +62,7 @@ class WISDM(BaseDataset):
                 labels.extend(label)
             self.input_data = input_datas
             self.label = labels
-        elif isinstance(mode,list):
+        elif isinstance(mode,list) or mode=='foldall':
             input_datas , labels = [], []
             data_modes = ['train','valid','test']
             for i in range(3):
@@ -99,11 +99,15 @@ class WISDM(BaseDataset):
                         tr_idx = np.concatenate([tr_idx,fold_idx],axis=0).astype(int)
                 self.split_indices.append([test_k, self.sub_tr_ratio, tr_idx, valid_idx, test_idx])
             #select fold
-            select_idxs = np.array([])
-            for fold in mode: # fold:1~10, fold_indices:0~9
-                select_idxs = np.concatenate([select_idxs,self.fold_indices[fold-1]],axis=0).astype(int)
-            self.input_data = input_datas[select_idxs]
-            self.label = labels[select_idxs]
+            if isinstance(mode,list):
+                select_idxs = np.array([])
+                for fold in mode: # fold:1~10, fold_indices:0~9
+                    select_idxs = np.concatenate([select_idxs,self.fold_indices[fold-1]],axis=0).astype(int)
+                self.input_data = input_datas[select_idxs]
+                self.label = labels[select_idxs]
+            else:
+                self.input_data = input_datas
+                self.label = labels
         elif mode=='tottrain':
             input_datas , labels = [], []
             data_modes = ['train','valid']

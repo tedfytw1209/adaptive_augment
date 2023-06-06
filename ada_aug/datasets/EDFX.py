@@ -340,3 +340,5 @@ class EDFX(BaseDataset):
                 grouped_subset=grouped_subset,
                 random_state=random_state)
         return splits_proportions,fold_indices #(k, ratio, sub_tr_idx, valid_idx, test_idx) * 5
+    def get_split_indices(self):
+        return self.split_indices

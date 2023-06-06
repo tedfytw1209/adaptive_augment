@@ -185,7 +185,7 @@ class EDFX(BaseDataset):
         if mode=='all':
             print("Using origin data format")
         elif isinstance(mode,list) or mode=='foldall': #make split indice
-            train_ovr = (self.n_folds - 2)
+            train_ovr = (self.n_folds - 2) / (self.n_folds-1)
             splits_proportions,fold_indices = self.CV_split_indices(train_ovr,random_state=seed)
             self.split_indices = splits_proportions
             self.fold_indices = fold_indices

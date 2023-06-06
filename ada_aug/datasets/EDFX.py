@@ -146,7 +146,7 @@ def _get_split_indices(
                     random_state=random_state
                 )
             splits_proportions.append(
-                (k, ratio, sub_tr_idx, valid_idx, test_idx)
+                (k-1, ratio, sub_tr_idx, valid_idx, test_idx)
             )
             fold_indices.append(test_idx) #index of each fold
     return splits_proportions, fold_indices

@@ -469,14 +469,15 @@ class ClassBiasLoss(nn.Module):
         self.reweight = reweight
         self.macro = macro
         self.loss_target = 'output'
+        self.loss_func = torch.nn.KLDivLoss(reduction='none',log_target=True)
 
     def forward(self, logits, targets=None, sim_targets=None):
-        print('logits: ',logits)
-        print('sim_targets: ',sim_targets)
+        #print('logits: ',logits)
+        #print('sim_targets: ',sim_targets)
         bs, n_class = sim_targets.shape
         p_logits = F.log_softmax(logits / self.temperature, dim=1)
         p_targets = F.log_softmax(sim_targets / self.temperature, dim=1)
-        kl_values = torch.sum(F.kl_div(p_logits, p_targets, reduction='none'),dim=1) #(bs,n_class)->(bs)
+        kl_values = torch.sum(self.loss_func(p_logits, p_targets),dim=1) #(bs,n_class)->(bs)
         #print('w_aug',w_aug)
         #macro
         if self.macro:

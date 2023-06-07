@@ -129,6 +129,7 @@ parser.add_argument('--lambda_dist', type=float, default=1.0, help="class distan
 parser.add_argument('--cbias_loss', action='store_true', default=False, help='class bias loss or not')
 parser.add_argument('--cbias_rew', action='store_true', default=False, help='class bias loss reweight or not')
 parser.add_argument('--cbias_macro', action='store_true', default=False, help='class bias macro or not')
+parser.add_argument('--extra_lambda', type=float, default=1.0, help="cbias lambda")
 parser.add_argument('--class_sim', action='store_true', default=False, help='class distance use similar or not')
 parser.add_argument('--policy_dist', type=str, default='pwk', help='Assume mags:w,weights:p,(keeplen):k,(thres)')
 parser.add_argument('--noaug_reg', type=str, default='', help='add regular for noaugment ',
@@ -544,7 +545,7 @@ class RayModel(WandbTrainableMixin, tune.Trainable):
                 'loss_type':args.loss_type, 'adv_criterion': self.adv_criterion, 'teacher_model':self.ema_model, 'sim_criterion':self.sim_criterion,
                 'noaug_reg':args.noaug_reg,'class_weight': self.class_weight,'mixup': args.mixup,'mixup_alpha': args.mixup_alpha,'aug_mix': args.aug_mix,
                 'extra_criterions':self.extra_losses,'policy_dist':args.policy_dist,'optim_type':args.optim_type,'policy_apply_all':self.policy_apply,
-                'ori_train':args.ori_train,
+                'ori_train':args.ori_train,'extra_lambda':args.extra_lambda,
                 'sim_reweight':args.sim_rew,'warmup_epoch': args.pwarmup,'mix_type':args.mix_type,'visualize':args.visualize}
         
         # searching, !!!12/14 tmp add neumann search for testing new gradient method

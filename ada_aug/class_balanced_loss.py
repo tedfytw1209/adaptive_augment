@@ -471,6 +471,8 @@ class ClassBiasLoss(nn.Module):
         self.loss_target = 'output'
 
     def forward(self, logits, targets=None, sim_targets=None):
+        print('logits: ',logits)
+        print('sim_targets: ',sim_targets)
         bs, n_class = sim_targets.shape
         p_logits = F.log_softmax(logits / self.temperature, dim=1)
         p_targets = F.log_softmax(sim_targets / self.temperature, dim=1)

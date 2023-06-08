@@ -923,8 +923,8 @@ def search_train(args, train_queue, search_queue, tr_search_queue, gf_model, ada
                         raise
                     if torch.is_tensor(e_loss):
                         loss += e_loss.mean() * extra_lambda
-                        ex_losses[str(e_criterion.__class__.__name__)] += e_loss.detach().item()
-                        print('Extra class distance loss:', e_loss.detach().item())
+                        ex_losses[str(e_criterion.__class__.__name__)] += e_loss.detach().item() * extra_lambda
+                        print('Extra class distance loss:', e_loss.detach().item() * extra_lambda)
                 #!!!10/13 bug fix, tmp *4 for plr!!!
                 loss = loss * 4 / search_round
                 if torch.any(torch.isnan(loss)) or torch.any(torch.isinf(loss)): #!tmp

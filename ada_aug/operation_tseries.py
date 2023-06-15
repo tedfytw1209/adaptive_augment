@@ -4,6 +4,7 @@ from enum import auto
 from numbers import Real
 from operator import invert
 import random
+from typing import Any
 import numpy as np
 import torch
 import torch.nn as nn
@@ -872,6 +873,7 @@ class RandAugment:
             print('Augmentation add ECG_AUGMENT_LIST')
             self.augment_list += ECG_AUGMENT_LIST.copy()
         self.augment_ids = [i for i in range(len(self.augment_list))]
+        self.augment_len = len(self.augment_list)
         self.aug_rng = RandomState(rd_seed)
         self.rng = default_rng(rd_seed)
         #self.rng = check_random_state(rd_seed)
@@ -879,14 +881,14 @@ class RandAugment:
         self.sfreq = sfreq
         print(f'Using RandAug {self.augment_list}, m={m}, n={n}')
         self.preprocessor=preprocessor
-    def __call__(self, img, seq_len=None):
+    def __call__(self, img, seq_len=None,prob=None):
         #print(img.shape)
         max_seq_len , channel = img.shape
         if seq_len==None:
             seq_len = max_seq_len
         img = img.permute(1,0).view(1,channel,max_seq_len)
         tmp_img = img[:,:,:seq_len] #12/18 add or not!!!
-        op_ids = self.rng.choice(self.augment_ids, size=self.n)
+        op_ids = self.rng.choice(self.augment_ids, size=self.n,p=prob)
         for id in op_ids:
             op, minval, maxval = self.augment_list[id]
             val = float(self.m) * float(maxval - minval) + minval
@@ -895,6 +897,46 @@ class RandAugment:
                 seq_len=seq_len,preprocessor=self.preprocessor)
             img[:,:,:seq_len] = aug_img #tmp fix, may become slower
         return img.permute(0,2,1).detach().view(max_seq_len,channel) #back to (len,channel)
+
+class Cadd_wrapper: ###need further testing###
+    def __init__(self,Augment,noaug_max=0.9,noaug_alpha=1.0,output_source='valid',prevalid=True):
+        self.Augment = Augment
+        self.noaug_add = 'cadd'
+        self.aug_len = Augment.augment_len
+        self.noaug_max = noaug_max
+        self.noaug_alpha = noaug_alpha
+        self.output_source = output_source
+        self.prevalid = prevalid
+        self.noaug_tensor = self.noaug_max * nn.functional.one_hot(torch.tensor([0]), num_classes=self.aug_len).float()
+        self.alpha = None #default not init value
+        self.n_class = None #default not init value
+
+    def load_classperform(self,class_perform):
+        class_noaugw = 1.0 - class_perform
+        print(f'noaug weight: {class_noaugw}')
+        self.alpha = self.noaug_alpha * torch.tensor(class_noaugw).view(1,-1).cuda() + self.noaug_bias
+        self.alpha = torch.clamp(self.alpha,min=0.0,max=1.0)
+        print('class_w for noaug cadd: ',class_noaugw)
+        print('new alpha for noaug cadd: ',self.alpha)
+        n_class = len(class_noaugw)
+        self.n_class = n_class
+        noaug_config = {}
+        noaug_config['noaug_alpha'] = self.noaug_alpha
+        noaug_config['noaug_maxval'] = self.noaug_max
+        for c in range(n_class):
+            noaug_config[f'noaug_add_c{c}'] = self.alpha[0,c]
+        return noaug_config
+    def __call__(self, img, label, seq_len=None):
+        #alpha: (1,n_class), y: (batch_szie,n_class)=>(batch_size,1) one hotted
+        y = nn.functional.one_hot(label, num_classes=self.n_class).float()
+        batch_alpha = torch.sum(self.alpha * y,dim=-1,keepdim=True) / torch.sum(y,dim=-1,keepdim=True)
+        weights = np.ones((1,self.aug_len)).float() / self.aug_len
+        #print('self.alpha: ',self.alpha)
+        #print('y:', y)
+        #print('batch_alpha (more means add more noaug)', batch_alpha)
+        weights = (1.0-batch_alpha) * weights + batch_alpha * \
+            (self.noaug_tensor + weights * (1.0-self.noaug_max))
+        return self.Augment(img,seq_len,p=weights)
 
 class TransfromAugment:
     def __init__(self, names,m ,p=0.5,n=1, rd_seed=None,sfreq=100,aug_dict=None):

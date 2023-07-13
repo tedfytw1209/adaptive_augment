@@ -60,7 +60,7 @@ def train(args, train_queue, model, criterion, optimizer,scheduler, epoch, grad_
             adaaug.visualize_result(input_search, seq_len,policy_y,target_search)
         #  get augmented training data from adaaug
         policy_y = None
-        if class_adaptive or not policy_apply: #target to onehot, tmp fix 3/31
+        if class_adaptive or not policy_apply or adaaug.class_adaptive: #target to onehot, tmp fix 3/31, 7/13
             if not multilabel:
                 policy_y = nn.functional.one_hot(target, num_classes=n_class).cuda().float()
             else:

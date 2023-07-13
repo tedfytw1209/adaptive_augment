@@ -259,7 +259,7 @@ class AdaAug(nn.Module):
 
 class AdaAug_TS(AdaAug):
     def __init__(self, after_transforms, n_class, gf_model, h_model, save_dir=None, visualize=False,
-                    config=default_config,keepaug_config=default_config, multilabel=False, augselect='',class_adaptive=False,
+                    config=default_config,keepaug_config=default_config, multilabel=False, augselect='',class_adaptive=False,policy_class_adaptive=False,
                     sub_mix=1.0,search_temp=1.0,mag_search_temp=1.0,noaug_add=False,transfrom_dic={},preprocessors=[],
                     noaug_config={},train_bn=False,seed=None,fix_noaug_max=False,randaug_m=0.5):
         super(AdaAug_TS, self).__init__(after_transforms, n_class, gf_model, h_model, save_dir, config)
@@ -285,6 +285,7 @@ class AdaAug_TS(AdaAug):
             self.Search_wrapper = Normal_search
         self.multilabel = multilabel
         self.class_adaptive = class_adaptive
+        self.policy_class_adaptive = policy_class_adaptive
         self.visualize = visualize
         self.noaug_add = noaug_add
         self.noaug_config = noaug_config
@@ -335,9 +336,14 @@ class AdaAug_TS(AdaAug):
             T = self.search_temp
             MAG_T = self.mag_search_temp
         bs, s, ch = X.shape
+        #policy class adaptive
+        if not self.policy_class_adaptive:
+            policy_y = None
+        else:
+            policy_y = y
         #policy
         if policy_apply:
-            a_params = self.h_model(self.gf_model.extract_features(X.cuda(),seq_len),y=y)
+            a_params = self.h_model(self.gf_model.extract_features(X.cuda(),seq_len),y=policy_y)
             magnitudes, weights = torch.split(a_params, self.n_ops, dim=1)
             magnitudes = torch.sigmoid(magnitudes/MAG_T)
             weights = torch.nn.functional.softmax(weights/T, dim=-1)
@@ -707,7 +713,7 @@ class AdaAug_TS(AdaAug):
 
 class AdaAugkeep_TS(AdaAug):
     def __init__(self, after_transforms, n_class, gf_model, h_model, save_dir=None, visualize=False,
-                    config=default_config,keepaug_config=default_config, multilabel=False, augselect='',class_adaptive=False,ind_mix=False,
+                    config=default_config,keepaug_config=default_config, multilabel=False, augselect='',class_adaptive=False,policy_class_adaptive=False,ind_mix=False,
                     sub_mix=1.0,search_temp=1.0,mag_search_temp=1.0,noaug_add=False,transfrom_dic={},preprocessors=[],
                     noaug_config={},train_bn=False,seed=None,fix_noaug_max=False,randaug_m=0.5):
         super(AdaAugkeep_TS, self).__init__(after_transforms, n_class, gf_model, h_model, save_dir, config)
@@ -771,6 +777,7 @@ class AdaAugkeep_TS(AdaAug):
             exit()
         self.multilabel = multilabel
         self.class_adaptive = class_adaptive
+        self.policy_class_adaptive = policy_class_adaptive
         self.visualize = visualize
         self.noaug_add = noaug_add
         self.noaug_config = noaug_config

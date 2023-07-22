@@ -353,7 +353,7 @@ class AdaAug_TS(AdaAug):
             magnitudes = torch.sigmoid(magnitudes/MAG_T)
             weights = torch.nn.functional.softmax(weights/T, dim=-1)
         else: #all unifrom distribution when not using policy
-            #print('Using random augments when warm up')
+            print('Using randaugment')
             magnitudes = torch.ones(bs,self.n_ops).cuda() * self.randaug_m #!!!tmp change to mimic randaug
             weights = torch.ones(bs,self.n_ops).cuda() / self.n_ops
         #cadd

@@ -534,8 +534,8 @@ def Translation(X, magnitude, random_state=None, *args, **kwargs):
 #scaling voltage
 def scaling(x,rng, sigma=0.1):
     # https://arxiv.org/pdf/1706.00527.pdf
-    factor = rng.normal(loc=1., scale=sigma, size=(x.shape[0],x.shape[1])) #diff batch&channel
-    return np.multiply(x, factor[:,:,np.newaxis])
+    factor = rng.normal(loc=1., scale=sigma, size=(x.shape[0],x.shape[2])) #diff batch&time step
+    return np.multiply(x, factor[:,np.newaxis,:])
 def Scaling(X, magnitude, random_state=None, *args, **kwargs):
     rng = check_random_state(random_state)
     x = X.detach().cpu().numpy()
@@ -593,7 +593,7 @@ def window_warp(x,rng, window_ratio=0.1, scales=[0.5, 2.],start=1,end=None): #re
     return ret
 def Window_Warp(X, magnitude, random_state=None, *args, **kwargs):
     rng = check_random_state(random_state)
-    x = X.permute(0,2,1).detach().cpu().numpy()
+    x = X.permute(0,2,1).detach().cpu().numpy() #(bs,ch,ts)->(bs,ts,ch) 
     new_x = window_warp(x,rng,magnitude)
     new_x = torch.from_numpy(new_x).float().permute(0,2,1) #back
     return new_x

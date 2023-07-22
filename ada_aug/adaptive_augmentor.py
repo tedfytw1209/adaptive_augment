@@ -112,23 +112,28 @@ def select_augments(augselect):
         aug_dict = LEADS_AUGMENT_DICT
     else:
         aug_dict = AUGMENT_DICT
-    ops_names = TS_OPS_NAMES.copy()
-    if augselect.startswith('goodtrans'): #only use good transfrom
-        ops_names = GOOD_ECG_NAMES.copy()
-        if 'lead' in augselect:
-            aug_dict = LEADS_GOOD_ECG_DICT
-        else:
-            aug_dict = GOOD_ECG_DICT
-    if 'tsadd' in augselect:
-        ops_names = ops_names + TS_ADD_NAMES.copy()
-    if 'ecg_noise' in augselect:
-        ops_names = ECG_NOISE_NAMES.copy()
-        if 'lead' in augselect:
-            aug_dict = LEADS_ECG_NOISE_DICT
-        else:
-            aug_dict = ECG_NOISE_DICT
-    elif 'ecg' in augselect:
-        ops_names = ops_names + ECG_OPS_NAMES.copy()
+    if augselect=='window_warp':
+        ops_names = ['identity','Window_Warp']
+    elif augselect=='scaling':
+        ops_names = ['identity','Scaling']
+    else:
+        ops_names = TS_OPS_NAMES.copy()
+        if augselect.startswith('goodtrans'): #only use good transfrom
+            ops_names = GOOD_ECG_NAMES.copy()
+            if 'lead' in augselect:
+                aug_dict = LEADS_GOOD_ECG_DICT
+            else:
+                aug_dict = GOOD_ECG_DICT
+        if 'tsadd' in augselect:
+            ops_names = ops_names + TS_ADD_NAMES.copy()
+        if 'ecg_noise' in augselect:
+            ops_names = ECG_NOISE_NAMES.copy()
+            if 'lead' in augselect:
+                aug_dict = LEADS_ECG_NOISE_DICT
+            else:
+                aug_dict = ECG_NOISE_DICT
+        elif 'ecg' in augselect:
+            ops_names = ops_names + ECG_OPS_NAMES.copy()
     return ops_names, aug_dict
 class AdaAug(nn.Module):
     def __init__(self, after_transforms, n_class, gf_model, h_model, save_dir=None, 

@@ -77,15 +77,20 @@ class Projection_TSeries(nn.Module):
     def __init__(self, in_features, n_layers, n_hidden=128,label_num=0,label_embed=0, augselect='', proj_addition=0, 
         feature_mask="", input_act=False,proj_b=True,embed_b=True,bn=False):
         super(Projection_TSeries, self).__init__()
-        self.ops_names = TS_OPS_NAMES.copy()
-        if augselect.startswith('goodtrans'): #only use good transfrom
-            self.ops_names = GOOD_ECG_NAMES.copy()
-        if 'tsadd' in augselect:
-            self.ops_names = self.ops_names + TS_ADD_NAMES.copy()
-        if 'ecg_noise' in augselect:
-            self.ops_names = ECG_NOISE_NAMES.copy()
-        elif 'ecg' in augselect:
-            self.ops_names = self.ops_names + ECG_OPS_NAMES.copy()
+        if augselect=='window_warp':
+            self.ops_names = ['identity','Window_Warp']
+        elif augselect=='scaling':
+            self.ops_names = ['identity','Scaling']
+        else:
+            self.ops_names = TS_OPS_NAMES.copy()
+            if augselect.startswith('goodtrans'): #only use good transfrom
+                self.ops_names = GOOD_ECG_NAMES.copy()
+            if 'tsadd' in augselect:
+                self.ops_names = self.ops_names + TS_ADD_NAMES.copy()
+            if 'ecg_noise' in augselect:
+                self.ops_names = ECG_NOISE_NAMES.copy()
+            elif 'ecg' in augselect:
+                self.ops_names = self.ops_names + ECG_OPS_NAMES.copy()
         self.ops_len = len(self.ops_names)
         print('Projection Using ',self.ops_names)
         print('In_features: ',in_features) #already add y_feature_len if needed

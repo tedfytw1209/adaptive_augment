@@ -586,9 +586,16 @@ class AdaAug_TS(AdaAug):
         print('Visualize for Debug')
         print(slc_ch)
         Select_ch = None
-        self.print_imgs(imgs=images,label=target,title='id',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,select_labelidx=select_label_index,select_ch=Select_ch)
-        self.print_imgs(imgs=augori_imgs,label=target,title='aug',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,select_labelidx=select_label_index,select_ch=Select_ch)
-        self.print_imgs(imgs=aug_imgs,label=target,title='keepaug',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,select_labelidx=select_label_index,select_ch=Select_ch)
+        self.print_imgs(imgs=images,label=target,title='id',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,
+                        select_labelidx=select_label_index,select_ch=Select_ch,mode='signal')
+        self.print_imgs(imgs=augori_imgs,label=target,title='aug',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,
+                        select_labelidx=select_label_index,select_ch=Select_ch,mode='signal')
+        self.print_imgs(imgs=augori_imgs,label=target,title='aug',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,
+                        select_labelidx=select_label_index,select_ch=Select_ch,mode='segment')
+        self.print_imgs(imgs=aug_imgs,label=target,title='keepaug',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,
+                        select_labelidx=select_label_index,select_ch=Select_ch,mode='slc')
+        self.print_imgs(imgs=aug_imgs,label=target,title='keepaug',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,
+                        select_labelidx=select_label_index,select_ch=Select_ch,mode='all')
         #identify check
         '''for idx,(img,aug_img) in enumerate(zip(images,aug_imgs)):
             if ops_idx[idx][0]==0: #identity
@@ -606,7 +613,7 @@ class AdaAug_TS(AdaAug):
         elif mode == 'inference':
             return images
     
-    def print_imgs(self,imgs,label,title='',slc=None,info_reg=None,ops_idx=None,select_labelidx=[],select_ch=None):
+    def print_imgs(self,imgs,label,title='',slc=None,info_reg=None,ops_idx=None,select_labelidx=[],select_ch=None,mode='all'):
         imgs = imgs.cpu().detach().numpy()
         t = np.linspace(0, 10, 1000)
         if len(select_labelidx)>0:
@@ -648,15 +655,29 @@ class AdaAug_TS(AdaAug):
                 if select_ch==None:
                     for i in  range(channel_num):
                         c_name = 'tab:'+colors_map[i%9]
-                        plt.plot(t[start:end],img[start:end,i],'--',c=c_name, zorder=1)
-                        plt.plot(t[x1:x2],img[x1:x2,i],'-',c=c_name, zorder=1)
-                        plt.scatter(t_sel, img_sel[:,i],c='r',marker="+", zorder=2)
+                        if mode=='all':
+                            plt.plot(t[start:end],img[start:end,i],'--',c=c_name, zorder=1)
+                            plt.plot(t[x1:x2],img[x1:x2,i],'-',c=c_name, zorder=1)
+                            plt.scatter(t_sel, img_sel[:,i],c='r',marker="+", zorder=2)
+                        elif mode=='signal':
+                            plt.plot(t[start:end],img[start:end,i],'-',c=c_name, zorder=1)
+                        elif mode=='segment':
+                            plt.plot(t[x1:x2],img[x1:x2,i],'-',c=c_name, zorder=1)
+                        elif mode=='slc':
+                            plt.plot(each_slc[start:end],each_slc[start:end,i],'-',c=c_name, zorder=1)
                 else:
                     i = select_ch
                     c_name = 'tab:'+colors_map[i%9]
-                    plt.plot(t[start:end],img[start:end,i],'--',c=c_name, zorder=1)
-                    plt.plot(t[x1:x2],img[x1:x2,i],'-',c=c_name, zorder=1)
-                    plt.scatter(t_sel, img_sel[:,i],c='r',marker="+", zorder=2)
+                    if mode=='all':
+                        plt.plot(t[start:end],img[start:end,i],'--',c=c_name, zorder=1)
+                        plt.plot(t[x1:x2],img[x1:x2,i],'-',c=c_name, zorder=1)
+                        plt.scatter(t_sel, img_sel[:,i],c='r',marker="+", zorder=2)
+                    elif mode=='signal':
+                        plt.plot(t[start:end],img[start:end,i],'-',c=c_name, zorder=1)
+                    elif mode=='segment':
+                        plt.plot(t[x1:x2],img[x1:x2,i],'-',c=c_name, zorder=1)
+                    elif mode=='slc':
+                        plt.plot(each_slc[start:end],each_slc[start:end,i],'-',c=c_name, zorder=1)
             if torch.is_tensor(ops_idx):
                 op_name = self.ops_names[ops_idx[idx][0]]
             else:

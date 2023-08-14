@@ -579,8 +579,9 @@ class AdaAug_TS(AdaAug):
         select_label_index = [17]
         magnitudes, weights = self.predict_aug_params(resize_imgs, seq_len, 'exploit',y=policy_y)
         #for opidx in range(self.n_ops):
+        op_select = 6
         augori_imgs, aug_imgs, info_region, ops_idx = self.get_visualize_aug_images(images, magnitudes, weights,seq_len=seq_len,visualize=True,target=policy_y
-                ,op_idx=0)
+                ,op_idx=op_select)
         if self.use_keepaug:
             slc_out,slc_ch = self.Augment_wrapper.visualize_slc(images, model=self.gf_model)
         print('Visualize for Debug')
@@ -590,7 +591,7 @@ class AdaAug_TS(AdaAug):
                         select_labelidx=select_label_index,select_ch=Select_ch,mode='signal')
         self.print_imgs(imgs=augori_imgs,label=target,title='aug',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,
                         select_labelidx=select_label_index,select_ch=Select_ch,mode='signal')
-        self.print_imgs(imgs=augori_imgs,label=target,title='aug',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,
+        self.print_imgs(imgs=augori_imgs,label=target,title='augseg',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,
                         select_labelidx=select_label_index,select_ch=Select_ch,mode='segment')
         self.print_imgs(imgs=aug_imgs,label=target,title='keepaug',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,
                         select_labelidx=select_label_index,select_ch=Select_ch,mode='slc')

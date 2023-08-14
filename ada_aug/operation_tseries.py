@@ -835,11 +835,14 @@ def apply_augment(img, name, level, rd_seed=None,sfreq=100,seq_len=None,preproce
     img[:,:,:seq_len] = aug_img #tmp fix, may become slower
     return img.permute(0,2,1).detach().view(max_seq_len,channel) #back to (len,channel)
 
-def plot_line(t,x,title=None):
+def plot_line(t,x,title=None,ch=None):
     plt.clf()
     channel_num = x.shape[-1]
-    for i in  range(channel_num):
-        plt.plot(t, x[:,i])
+    if ch==None:
+        for i in range(channel_num):
+            plt.plot(t, x[:,i])
+    else:
+        plt.plot(t, x[:,ch])
     if title:
         plt.title(title)
     plt.show()
@@ -2381,6 +2384,7 @@ if __name__ == '__main__':
     sin_wave = 2 * np.sin(factor)
     plot_line(t,sin_wave)'''
     #
+    '''
     plot_line(t,x,title='identity')
     for name in test_ops:
         for m in [0.5]:
@@ -2390,6 +2394,7 @@ if __name__ == '__main__':
             print(x_aug.mean(0))
             print(x_aug.shape)
             plot_line(t,x_aug,f'{name}_m:{m}')
+    '''
     #beat aug
     '''plot_line(t,x,title='identity')
     for each_mode in ['b','p','t']:
@@ -2401,19 +2406,19 @@ if __name__ == '__main__':
                 print(x_aug.shape)
                 plot_line(t,x_aug,f'{name}_mode:{each_mode}_m:{m}')'''
     #keep aug
-    '''plot_line(t,x,title='identity')
-    x_tensor = torch.unsqueeze(x_tensor,dim=0)
+    plot_line(t,x,title='identity')
+    x_tensor = torch.unsqueeze(x,dim=0)
     for each_mode in ['b','p','t']:
         for name in test_ops:
             for m in [0.5,0.98]:
                 print(each_mode,'='*10,name,'='*10,m)
-                info_aug = KeepAugment(transfrom=TransfromAugment([name],m=m,p=1.0),mode=each_mode,length=200,default_select='paste')
+                info_aug = KeepAugment(transfrom=TransfromAugment([name],m=m,p=1.0),mode=each_mode,length=100,default_select='paste')
                 print(x_tensor.shape)
                 x_aug = info_aug(x_tensor)
                 print(x_tensor.shape)
                 x_aug = torch.squeeze(x_aug,dim=0).numpy()
                 print(x_aug.shape)
-                plot_line(t,x_aug,f'{name}_mode:{each_mode}_m:{m}')'''
+                plot_line(t,x_aug,f'{name}_mode:{each_mode}_m:{m}')
     #randaug
     '''randaug = RandAugment(1,0,rd_seed=42)
     name = 'random_time_mask'

@@ -2361,7 +2361,7 @@ if __name__ == '__main__':
     fold_9_list = [folds[:8],[folds[8]],[folds[9]]]
     print(fold_9_list)
     #dataset = PTBXL(dataset_path='../CWDA_research/CWDA/datasets/Datasets/ptbxl-dataset',mode=fold_9_list,labelgroup='all',multilabel=False)
-    dataset = PTBXL(dataset_path='../Dataset/ptbxl-dataset',mode=fold_9_list[0],labelgroup='all',multilabel=False)
+    dataset = PTBXL(dataset_path='../Dataset/ptbxl-dataset',mode=fold_9_list[0],labelgroup='form',multilabel=False)
     print(dataset[0])
     print(dataset[0][0].shape)
     sample = dataset[0]

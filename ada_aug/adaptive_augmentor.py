@@ -688,7 +688,7 @@ class AdaAug_TS(AdaAug):
             save_path = self.save_dir
             #if not os.path.exists(save_path):
             #    os.makedirs(save_path)
-            plt.savefig(os.path.join(save_path,f'img{idx}_{e_lb}.png'))
+            plt.savefig(os.path.join(save_path,f'img{idx}_{e_lb}_{title}.png'))
             #plt one each
             '''for i in  range(channel_num):
                 plt.clf()

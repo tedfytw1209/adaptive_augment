@@ -585,9 +585,10 @@ class AdaAug_TS(AdaAug):
             slc_out,slc_ch = self.Augment_wrapper.visualize_slc(images, model=self.gf_model)
         print('Visualize for Debug')
         print(slc_ch)
-        self.print_imgs(imgs=images,label=target,title='id',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,select_labelidx=select_label_index)
-        #self.print_imgs(imgs=augori_imgs,label=target,title='aug',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,select_labelidx=select_label_index)
-        #self.print_imgs(imgs=aug_imgs,label=target,title='keepaug',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,select_labelidx=select_label_index)
+        Select_ch = None
+        self.print_imgs(imgs=images,label=target,title='id',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,select_labelidx=select_label_index,select_ch=Select_ch)
+        self.print_imgs(imgs=augori_imgs,label=target,title='aug',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,select_labelidx=select_label_index,select_ch=Select_ch)
+        self.print_imgs(imgs=aug_imgs,label=target,title='keepaug',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,select_labelidx=select_label_index,select_ch=Select_ch)
         #identify check
         '''for idx,(img,aug_img) in enumerate(zip(images,aug_imgs)):
             if ops_idx[idx][0]==0: #identity
@@ -605,7 +606,7 @@ class AdaAug_TS(AdaAug):
         elif mode == 'inference':
             return images
     
-    def print_imgs(self,imgs,label,title='',slc=None,info_reg=None,ops_idx=None,select_labelidx=[]):
+    def print_imgs(self,imgs,label,title='',slc=None,info_reg=None,ops_idx=None,select_labelidx=[],select_ch=None):
         imgs = imgs.cpu().detach().numpy()
         t = np.linspace(0, 10, 1000)
         if len(select_labelidx)>0:
@@ -621,7 +622,6 @@ class AdaAug_TS(AdaAug):
             #fig, (ax1, ax2) = plt.subplots(2, sharex=True, gridspec_kw={'height_ratios': [2, 1]},figsize=(12, 9), dpi=200)
             fig = plt.figure(figsize=(12, 8), dpi=200)
             channel_num = img.shape[-1]
-            select_ch = 1
             each_slc = slc[idx]
             q_score = 0.4
             #for i in  range(channel_num):
@@ -632,8 +632,8 @@ class AdaAug_TS(AdaAug):
                 for i in range(info_reg.shape[1]):
                     x1 = int(info_reg[idx,i,0])
                     x2 = int(info_reg[idx,i,1])
-                start = max(x1-100,0)
-                end = min(x2+100,1000)
+                start = max(x1-200,0)
+                end = min(x2+200,1000)
                 range_mask = np.zeros(each_slc.shape)
                 range_mask[start:end] = 1
                 t_reg = t[start:end]
@@ -645,7 +645,14 @@ class AdaAug_TS(AdaAug):
                 img_sel = img_reg[slc_high]
                 print('t_sel len',t_sel.shape)
                 print('img_sel len',img_sel.shape)
-                for i in  range(channel_num):
+                if select_ch==None:
+                    for i in  range(channel_num):
+                        c_name = 'tab:'+colors_map[i%9]
+                        plt.plot(t[start:end],img[start:end,i],'--',c=c_name, zorder=1)
+                        plt.plot(t[x1:x2],img[x1:x2,i],'-',c=c_name, zorder=1)
+                        plt.scatter(t_sel, img_sel[:,i],c='r',marker="+", zorder=2)
+                else:
+                    i = select_ch
                     c_name = 'tab:'+colors_map[i%9]
                     plt.plot(t[start:end],img[start:end,i],'--',c=c_name, zorder=1)
                     plt.plot(t[x1:x2],img[x1:x2,i],'-',c=c_name, zorder=1)

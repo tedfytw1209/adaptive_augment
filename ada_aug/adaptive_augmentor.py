@@ -665,7 +665,7 @@ class AdaAug_TS(AdaAug):
                         elif mode=='segment':
                             plt.plot(t[x1:x2],img[x1:x2,i],'-',c=c_name, zorder=1)
                         elif mode=='slc':
-                            plt.plot(each_slc[start:end],each_slc[start:end],'-',c=c_name, zorder=1)
+                            plt.plot(t[start:end],each_slc[start:end],'-',c=c_name, zorder=1)
                             break
                 else:
                     i = select_ch
@@ -679,7 +679,7 @@ class AdaAug_TS(AdaAug):
                     elif mode=='segment':
                         plt.plot(t[x1:x2],img[x1:x2,i],'-',c=c_name, zorder=1)
                     elif mode=='slc':
-                        plt.plot(each_slc[start:end],each_slc[start:end],'-',c=c_name, zorder=1)
+                        plt.plot(t[start:end],each_slc[start:end],'-',c=c_name, zorder=1)
             if torch.is_tensor(ops_idx):
                 op_name = self.ops_names[ops_idx[idx][0]]
             else:

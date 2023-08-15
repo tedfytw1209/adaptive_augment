@@ -579,14 +579,14 @@ class AdaAug_TS(AdaAug):
         select_label_index = [17]
         magnitudes, weights = self.predict_aug_params(resize_imgs, seq_len, 'exploit',y=policy_y)
         #for opidx in range(self.n_ops):
-        op_select = 6
+        op_select = 2
         augori_imgs, aug_imgs, info_region, ops_idx = self.get_visualize_aug_images(images, magnitudes, weights,seq_len=seq_len,visualize=True,target=policy_y
                 ,op_idx=op_select)
         if self.use_keepaug:
             slc_out,slc_ch = self.Augment_wrapper.visualize_slc(images, model=self.gf_model)
         print('Visualize for Debug')
         print(slc_ch)
-        Select_ch = 1
+        Select_ch = None
         self.print_imgs(imgs=images,label=target,title='id',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,
                         select_labelidx=select_label_index,select_ch=Select_ch,mode='signal')
         self.print_imgs(imgs=images,label=target,title='idseg',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,
@@ -640,8 +640,8 @@ class AdaAug_TS(AdaAug):
                 for i in range(info_reg.shape[1]):
                     x1 = int(info_reg[idx,i,0])
                     x2 = int(info_reg[idx,i,1])
-                start = max(x1-200,0)
-                end = min(x2+200,1000)
+                start = max(x1-150,0)
+                end = min(x2+150,1000)
                 range_mask = np.zeros(each_slc.shape)
                 range_mask[start:end] = 1
                 t_reg = t[start:end]

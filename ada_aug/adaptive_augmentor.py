@@ -589,11 +589,11 @@ class AdaAug_TS(AdaAug):
         Select_ch = None
         self.print_imgs(imgs=images,label=target,title='id',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,
                         select_labelidx=select_label_index,select_ch=Select_ch,mode='signal')
+        self.print_imgs(imgs=images,label=target,title='idseg',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,
+                        select_labelidx=select_label_index,select_ch=Select_ch,mode='segment')
         self.print_imgs(imgs=augori_imgs,label=target,title='aug',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,
                         select_labelidx=select_label_index,select_ch=Select_ch,mode='signal')
-        self.print_imgs(imgs=augori_imgs,label=target,title='augseg',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,
-                        select_labelidx=select_label_index,select_ch=Select_ch,mode='segment')
-        self.print_imgs(imgs=aug_imgs,label=target,title='keepaug',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,
+        self.print_imgs(imgs=aug_imgs,label=target,title='slc',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,
                         select_labelidx=select_label_index,select_ch=Select_ch,mode='slc')
         self.print_imgs(imgs=aug_imgs,label=target,title='keepaug',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,
                         select_labelidx=select_label_index,select_ch=Select_ch,mode='all')

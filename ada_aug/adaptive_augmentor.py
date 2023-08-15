@@ -586,7 +586,7 @@ class AdaAug_TS(AdaAug):
             slc_out,slc_ch = self.Augment_wrapper.visualize_slc(images, model=self.gf_model)
         print('Visualize for Debug')
         print(slc_ch)
-        Select_ch = None
+        Select_ch = 1
         self.print_imgs(imgs=images,label=target,title='id',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,
                         select_labelidx=select_label_index,select_ch=Select_ch,mode='signal')
         self.print_imgs(imgs=images,label=target,title='idseg',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,

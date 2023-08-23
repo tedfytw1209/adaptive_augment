@@ -577,7 +577,8 @@ class AdaAug_TS(AdaAug):
         STTC(20), WPW, _AVB]
         '''
         select_label_index = [17]
-        magnitudes, weights = self.predict_aug_params(resize_imgs, seq_len, 'exploit',y=policy_y)
+        #set all magnitudes to 0.5
+        magnitudes, weights = self.predict_aug_params(resize_imgs, seq_len, 'exploit',y=policy_y,policy_apply=False)
         #for opidx in range(self.n_ops):
         op_select = 2
         augori_imgs, aug_imgs, info_region, ops_idx = self.get_visualize_aug_images(images, magnitudes, weights,seq_len=seq_len,visualize=True,target=policy_y
@@ -628,7 +629,7 @@ class AdaAug_TS(AdaAug):
             if selecting and int(e_lb) not in select_labelidx:
                 continue
             #fig, (ax1, ax2) = plt.subplots(2, sharex=True, gridspec_kw={'height_ratios': [2, 1]},figsize=(12, 9), dpi=200)
-            fig = plt.figure(figsize=(12, 8), dpi=200)
+            fig = plt.figure(figsize=(15, 6), dpi=400)
             channel_num = img.shape[-1]
             each_slc = slc[idx]
             q_score = 0.4
@@ -640,8 +641,8 @@ class AdaAug_TS(AdaAug):
                 for i in range(info_reg.shape[1]):
                     x1 = int(info_reg[idx,i,0])
                     x2 = int(info_reg[idx,i,1])
-                start = max(x1-150,0)
-                end = min(x2+150,1000)
+                start = max(x1-100,0)
+                end = min(x2+100,1000)
                 range_mask = np.zeros(each_slc.shape)
                 range_mask[start:end] = 1
                 t_reg = t[start:end]
@@ -663,6 +664,7 @@ class AdaAug_TS(AdaAug):
                         elif mode=='signal':
                             plt.plot(t[start:end],img[start:end,i],'-',c=c_name, zorder=1)
                         elif mode=='segment':
+                            plt.plot(t[start:end],img[start:end,i],'--',c=c_name, zorder=1)
                             plt.plot(t[x1:x2],img[x1:x2,i],'-',c=c_name, zorder=1)
                         elif mode=='slc':
                             plt.plot(t[start:end],each_slc[start:end],'-',c=c_name, zorder=1)
@@ -677,6 +679,7 @@ class AdaAug_TS(AdaAug):
                     elif mode=='signal':
                         plt.plot(t[start:end],img[start:end,i],'-',c=c_name, zorder=1)
                     elif mode=='segment':
+                        plt.plot(t[start:end],img[start:end,i],'--',c=c_name, zorder=1)
                         plt.plot(t[x1:x2],img[x1:x2,i],'-',c=c_name, zorder=1)
                     elif mode=='slc':
                         plt.plot(t[start:end],each_slc[start:end],'-',c=c_name, zorder=1)

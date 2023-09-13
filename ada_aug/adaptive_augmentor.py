@@ -572,8 +572,8 @@ class AdaAug_TS(AdaAug):
         '''
         sub diag mlb/lb: [AMI, CLBBB, CRBBB, ILBBB, IMI, 
         IRBBB, ISCA, ISCI, ISC_, IVCD,
-        LAFB/LPFB, LAO/LAE, LMI, LVH, NORM(14),
-        NST_, PMI, RAO/RAE, RVH, SEHYP, 
+        LAFB/LPFB, LAO/LAE(11), LMI, LVH, NORM(14),
+        NST_, PMI, RAO/RAE(17), RVH, SEHYP, 
         STTC(20), WPW, _AVB]
         '''
         select_label_index = [17]

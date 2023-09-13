@@ -580,14 +580,14 @@ class AdaAug_TS(AdaAug):
         #set all magnitudes to 0.5
         magnitudes, weights = self.predict_aug_params(resize_imgs, seq_len, 'exploit',y=policy_y,policy_apply=False)
         #for opidx in range(self.n_ops):
-        op_select = 2
+        op_select = 6
         augori_imgs, aug_imgs, info_region, ops_idx = self.get_visualize_aug_images(images, magnitudes, weights,seq_len=seq_len,visualize=True,target=policy_y
                 ,op_idx=op_select)
         if self.use_keepaug:
             slc_out,slc_ch = self.Augment_wrapper.visualize_slc(images, model=self.gf_model)
         print('Visualize for Debug')
         print(slc_ch)
-        Select_ch = None
+        Select_ch = 1 #lead 2
         self.print_imgs(imgs=images,label=target,title='id',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,
                         select_labelidx=select_label_index,select_ch=Select_ch,mode='signal')
         self.print_imgs(imgs=images,label=target,title='idseg',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,

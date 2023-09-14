@@ -598,6 +598,7 @@ class AdaAug_TS(AdaAug):
                         select_labelidx=select_label_index,select_ch=Select_ch,mode='slc')
         self.print_imgs(imgs=aug_imgs,label=target,title='keepaug',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,
                         select_labelidx=select_label_index,select_ch=Select_ch,mode='all')
+        
         #identify check
         '''for idx,(img,aug_img) in enumerate(zip(images,aug_imgs)):
             if ops_idx[idx][0]==0: #identity
@@ -693,6 +694,10 @@ class AdaAug_TS(AdaAug):
             #if not os.path.exists(save_path):
             #    os.makedirs(save_path)
             plt.savefig(os.path.join(save_path,f'img{idx}_{e_lb}_{title}.png'))
+            #save data
+            if title=='id':
+                imgs_data = img.cpu().detach().numpy()
+                np.save(os.path.join(self.save_dir,f'img{idx}_{e_lb}_data'), imgs_data)
             #plt one each
             '''for i in  range(channel_num):
                 plt.clf()

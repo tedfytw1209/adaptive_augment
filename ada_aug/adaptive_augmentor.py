@@ -696,7 +696,7 @@ class AdaAug_TS(AdaAug):
             plt.savefig(os.path.join(save_path,f'img{idx}_{e_lb}_{title}.png'))
             #save data
             if title=='id':
-                imgs_data = img.cpu().detach().numpy()
+                imgs_data = img
                 np.save(os.path.join(self.save_dir,f'img{idx}_{e_lb}_data'), imgs_data)
             #plt one each
             '''for i in  range(channel_num):

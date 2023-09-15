@@ -576,7 +576,7 @@ class AdaAug_TS(AdaAug):
         NST_, PMI, RAO/RAE(17), RVH, SEHYP, 
         STTC(20), WPW, _AVB]
         '''
-        select_label_index = [17]
+        select_label_index = [11]
         #set all magnitudes to 0.5
         magnitudes, weights = self.predict_aug_params(resize_imgs, seq_len, 'exploit',y=policy_y,policy_apply=False)
         #for opidx in range(self.n_ops):
@@ -590,14 +590,14 @@ class AdaAug_TS(AdaAug):
         Select_ch = 1 #lead 2
         self.print_imgs(imgs=images,label=target,title='id',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,
                         select_labelidx=select_label_index,select_ch=Select_ch,mode='signal')
-        self.print_imgs(imgs=images,label=target,title='idseg',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,
-                        select_labelidx=select_label_index,select_ch=Select_ch,mode='segment')
+        #self.print_imgs(imgs=images,label=target,title='idseg',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,
+        #                select_labelidx=select_label_index,select_ch=Select_ch,mode='segment')
         self.print_imgs(imgs=augori_imgs,label=target,title='aug',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,
                         select_labelidx=select_label_index,select_ch=Select_ch,mode='signal')
-        self.print_imgs(imgs=aug_imgs,label=target,title='slc',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,
-                        select_labelidx=select_label_index,select_ch=Select_ch,mode='slc')
-        self.print_imgs(imgs=aug_imgs,label=target,title='keepaug',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,
-                        select_labelidx=select_label_index,select_ch=Select_ch,mode='all')
+        #self.print_imgs(imgs=aug_imgs,label=target,title='slc',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,
+        #                select_labelidx=select_label_index,select_ch=Select_ch,mode='slc')
+        #self.print_imgs(imgs=aug_imgs,label=target,title='keepaug',slc=slc_out,info_reg=info_region,ops_idx=ops_idx,
+        #                select_labelidx=select_label_index,select_ch=Select_ch,mode='all')
         
         #identify check
         '''for idx,(img,aug_img) in enumerate(zip(images,aug_imgs)):

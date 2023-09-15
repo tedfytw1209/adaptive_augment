@@ -576,7 +576,7 @@ class AdaAug_TS(AdaAug):
         NST_, PMI, RAO/RAE(17), RVH, SEHYP, 
         STTC(20), WPW, _AVB]
         '''
-        select_label_index = [11]
+        select_label_index = [14]
         #set all magnitudes to 0.5
         magnitudes, weights = self.predict_aug_params(resize_imgs, seq_len, 'exploit',y=policy_y,policy_apply=False)
         #for opidx in range(self.n_ops):

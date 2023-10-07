@@ -30,7 +30,7 @@ if __name__ == '__main__':
     label = sample[2]
     '''
     #get sample from .npy
-    fpath = "./intro_case/img5_14_data.npy"
+    fpath = "../intro_case/img5_14_data.npy"
     data = np.load(fpath, mmap_mode=None, allow_pickle=True)
     x = torch.from_numpy(data)
     label = 14

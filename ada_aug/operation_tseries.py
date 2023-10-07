@@ -23,6 +23,7 @@ from scipy.interpolate import CubicSpline
 from operations_ecg import *
 from numpy.random import default_rng
 from numpy.random import RandomState
+import os
 
 #for model: (len, channel)
 #for this file (channel, len)!
@@ -790,6 +791,7 @@ GOOD_ECG_LIST = [
 GOOD_ECG_DICT = {fn.__name__: (fn, v1, v2) for fn, v1, v2 in GOOD_ECG_LIST}
 
 AUGMENT_DICT = {fn.__name__: (fn, v1, v2) for fn, v1, v2 in TS_AUGMENT_LIST+ECG_AUGMENT_LIST+TS_ADD_LIST+TS_EXP_LIST+INFO_EXP_LIST}
+ALL_DICT = {fn.__name__: (fn, v1, v2) for fn, v1, v2 in TS_AUGMENT_LIST+ECG_AUGMENT_LIST+TS_ADD_LIST+TS_EXP_LIST+INFO_EXP_LIST+ECG_NOISE_LIST}
 selopt = ['cut','paste']
 SELECTIVE_DICT = {
     'identity':selopt[1], #identity
@@ -835,17 +837,22 @@ def apply_augment(img, name, level, rd_seed=None,sfreq=100,seq_len=None,preproce
     img[:,:,:seq_len] = aug_img #tmp fix, may become slower
     return img.permute(0,2,1).detach().view(max_seq_len,channel) #back to (len,channel)
 
-def plot_line(t,x,title=None,ch=None):
+def plot_line(t,x,title=None,ch=None,start=0,end=-1,save_path=None):
     plt.clf()
+    #fig = plt.figure(figsize=(12, 15), dpi=400)
     channel_num = x.shape[-1]
     if ch==None:
         for i in range(channel_num):
-            plt.plot(t, x[:,i])
+            plt.plot(t[start:end], x[start:end,i])
     else:
-        plt.plot(t, x[:,ch])
+        plt.plot(t[start:end], x[start:end,ch])
     if title:
         plt.title(title)
-    plt.show()
+    if save_path==None:
+        plt.show()
+    else:
+        plt.savefig(os.path.join(save_path,f'img_{title}.png'))
+        np.save(os.path.join(save_path,f'data_{title}'), x)
 
 def lt(a,b):
     return a < b

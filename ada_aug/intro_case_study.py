@@ -32,7 +32,7 @@ if __name__ == '__main__':
     #get sample from .npy
     fpath = "../intro_case/img5_14_data.npy"
     data = np.load(fpath, mmap_mode=None, allow_pickle=True)
-    x = torch.from_numpy(data)
+    x = data
     label = 14
     print(x.shape)
     print(x)
@@ -40,7 +40,7 @@ if __name__ == '__main__':
     t = np.linspace(0, TimeS_dict['ptbxl'], 1000)
     print(t.shape)
     print(x.shape)
-    test_ops = TS_OPS_NAMES
+    test_ops = ['Scaling',"Amplifying",'Magnitude_Warp']
     '''rng = check_random_state(None)
     rd_start = rng.uniform(0, 2*np.pi, size=(1, 1))
     rd_hz = 1
@@ -50,16 +50,22 @@ if __name__ == '__main__':
     print(factor.shape)
     sin_wave = 2 * np.sin(factor)
     plot_line(t,sin_wave)'''
-    #
-    plot_line(t,x,title='identity')
+    #4.8~5.8s, lead
+    Select_ch = 1 #lead 2
+    #sel_start = int(0.8 * 100)
+    #sel_end = int(1.8 * 100)
+    sel_start = int(4.8 * 100)
+    sel_end = int(5.8 * 100)
+    plot_line(t,x,title='img5_14_identity',ch=Select_ch,start=sel_start,end=sel_end,save_path='../intro_case/tmp')
     for name in test_ops:
-        for m in [0.5]:
-            x_tensor = torch.from_numpy(x).float().clone()
-            trans_aug = TransfromAugment([name],m=m,n=1,p=1,aug_dict=AUGMENT_DICT)
-            x_aug = trans_aug(x_tensor).numpy()
-            print(x_aug.mean(0))
-            print(x_aug.shape)
-            plot_line(t,x_aug,f'{name}_m:{m}')
+        for m in [0.2,0.3,0.4,0.5]:
+            for i in range(50):
+                x_tensor = torch.from_numpy(x).float().clone()
+                trans_aug = TransfromAugment([name],m=m,n=1,p=1,aug_dict=ALL_DICT)
+                x_aug = trans_aug(x_tensor).numpy()
+                print(x_aug.mean(0))
+                print(x_aug.shape)
+                plot_line(t,x_aug,f'{name}_m{m}_t{i}',ch=Select_ch,start=sel_start,end=sel_end,save_path='../intro_case/tmp')
     #beat aug
     '''plot_line(t,x,title='identity')
     for each_mode in ['b','p','t']:

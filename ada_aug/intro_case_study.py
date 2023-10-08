@@ -58,14 +58,14 @@ if __name__ == '__main__':
     sel_end = int(5.8 * 100)
     plot_line(t,x,title='img5_14_identity',ch=Select_ch,start=sel_start,end=sel_end,save_path='../intro_case/tmp')
     for name in test_ops:
-        for m in [0.3,0.4]:
+        for m in [0.2,0.3,0.4]:
             for i in range(20):
                 x_tensor = torch.from_numpy(x).float().clone()
                 trans_aug = TransfromAugment([name],m=m,n=1,p=1,aug_dict=ALL_DICT)
                 x_aug = trans_aug(x_tensor).numpy()
                 #tmp change
                 factor = np.ones(x_aug.shape)
-                factor[540:570,:] = 1.5
+                factor[540:560,:] = 1.8
                 x_aug = np.multiply(x_aug, factor)
                 print(x_aug.mean(0))
                 print(x_aug.shape)

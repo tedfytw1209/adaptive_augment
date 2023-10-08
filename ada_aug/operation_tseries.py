@@ -2380,7 +2380,7 @@ if __name__ == '__main__':
     label = sample[2]
     print(t.shape)
     print(x.shape)
-    test_ops = TS_OPS_NAMES
+    test_ops = EXP_TEST_NAMES
     '''rng = check_random_state(None)
     rd_start = rng.uniform(0, 2*np.pi, size=(1, 1))
     rd_hz = 1
@@ -2391,17 +2391,17 @@ if __name__ == '__main__':
     sin_wave = 2 * np.sin(factor)
     plot_line(t,sin_wave)'''
     #
-    '''
+
     plot_line(t,x,title='identity')
     for name in test_ops:
-        for m in [0.5]:
+        for m in [0.98]:
             x_tensor = torch.from_numpy(x).float().clone()
-            trans_aug = TransfromAugment([name],m=m,n=1,p=1,aug_dict=LEADS_AUGMENT_DICT)
+            trans_aug = TransfromAugment([name],m=m,n=1,p=1,aug_dict=ALL_DICT)
             x_aug = trans_aug(x_tensor).numpy()
             print(x_aug.mean(0))
             print(x_aug.shape)
             plot_line(t,x_aug,f'{name}_m:{m}')
-    '''
+
     #beat aug
     '''plot_line(t,x,title='identity')
     for each_mode in ['b','p','t']:
@@ -2413,7 +2413,7 @@ if __name__ == '__main__':
                 print(x_aug.shape)
                 plot_line(t,x_aug,f'{name}_mode:{each_mode}_m:{m}')'''
     #keep aug
-    plot_line(t,x,title='identity')
+    '''plot_line(t,x,title='identity')
     x_tensor = torch.unsqueeze(x,dim=0)
     for each_mode in ['b','p','t']:
         for name in test_ops:
@@ -2425,7 +2425,7 @@ if __name__ == '__main__':
                 print(x_tensor.shape)
                 x_aug = torch.squeeze(x_aug,dim=0).numpy()
                 print(x_aug.shape)
-                plot_line(t,x_aug,f'{name}_mode:{each_mode}_m:{m}')
+                plot_line(t,x_aug,f'{name}_mode:{each_mode}_m:{m}')'''
     #randaug
     '''randaug = RandAugment(1,0,rd_seed=42)
     name = 'random_time_mask'

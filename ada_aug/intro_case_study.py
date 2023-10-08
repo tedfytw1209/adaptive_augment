@@ -65,7 +65,7 @@ if __name__ == '__main__':
                 x_aug = trans_aug(x_tensor).numpy()
                 #tmp change
                 factor = np.ones(x_aug.shape)
-                factor[sel_start:sel_end,:] = 1.5
+                factor[540:570,:] = 1.5
                 x_aug = np.multiply(x_aug, factor)
                 print(x_aug.mean(0))
                 print(x_aug.shape)

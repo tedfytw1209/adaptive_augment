@@ -31,7 +31,7 @@ if __name__ == '__main__':
     '''
     #get sample from .npy
     #fpath = "../intro_case/img5_14_data.npy"
-    fpath = "../data_img40_17_identity.npy"
+    fpath = "../intro_case/img40_17_data.npy"
     data = np.load(fpath, mmap_mode=None, allow_pickle=True)
     x = data
     label = 14

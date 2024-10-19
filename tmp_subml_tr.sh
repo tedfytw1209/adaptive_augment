@@ -1,9 +1,0 @@
-
-
-CUDA_VISIBLE_DEVICES=5,6 python ada_aug/fold_train_ts.py --temperature 3 --delta 0.3 --search_dataset ptbxl --gf_model_path search/ptbxl/20220909-180200-ptbsubml_resnet_kfold-AdaAug/ --h_model_path search/ptbxl/20220909-180200-ptbsubml_resnet_kfold-AdaAug/ --gf_model_name resnet_wang --k_ops 0 --report_freq 10 --num_workers 2 --epochs 50 --batch_size 128 --learning_rate 0.01 --dataset ptbxl  --model_name resnet_wang --labelgroup subdiagnostic --multilabel --save ptbsubml_resnettr_kfold_noaug --ray_name ptbsubml_resnettr_kfold_noaug --gpu 0.33 --cpu 2 --weight_decay 0.01 --train_portion 1 --dataroot /mnt/data2/teddy/ptbxl-dataset --kfold 10 --valselect --mapselect
-
-CUDA_VISIBLE_DEVICES=5,6 python ada_aug/fold_train_ts.py --temperature 3 --delta 0.3 --search_dataset ptbxl --gf_model_path search/ptbxl/20220909-192731-ptbsubml_resnet_kfold-AdaAugcada/ --h_model_path search/ptbxl/20220909-192731-ptbsubml_resnet_kfold-AdaAugcada/ --gf_model_name resnet_wang --k_ops 1 --report_freq 10 --num_workers 2 --epochs 50 --batch_size 128 --learning_rate 0.01 --dataset ptbxl  --model_name resnet_wang --labelgroup subdiagnostic --multilabel --save ptbsubml_resnettr_kfold_cada --ray_name ptbsubml_resnettr_kfold_cada --gpu 0.33 --cpu 2 --weight_decay 0.01 --train_portion 1 --dataroot /mnt/data2/teddy/ptbxl-dataset --kfold 10 --valselect --class_adapt --class_embed --mapselect
-
-CUDA_VISIBLE_DEVICES=5,6 python ada_aug/fold_search_ts.py --k_ops 1 --report_freq 5 --num_workers 2 --epochs 50 --batch_size 128  --learning_rate 0.01  --dataset ptbxl --model_name resnet_wang --save ptbsubml_resnet_kfold --gpu 0.33 --cpu 2 --ray_name ptbsubml_resnet_kfold --kfold 10 --weight_decay 0.01 --proj_learning_rate 0.0001 --search_freq 10  --temperature 3 --dataroot /mnt/data2/teddy/ptbxl-dataset --train_portion 0.5 --search_size 0.5 --labelgroup subdiagnostic --multilabel --valselect --search_round 4 --class_adapt --class_embed --mapselect --policy_loss classdiff
-
-

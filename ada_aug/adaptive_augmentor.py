@@ -135,6 +135,25 @@ def select_augments(augselect):
         elif 'ecg' in augselect:
             ops_names = ops_names + ECG_OPS_NAMES.copy()
     return ops_names, aug_dict
+
+class AdaAug_Empty(nn.Module):
+    def __init__(self, after_transforms):
+        super(AdaAug, self).__init__()
+        self.after_transforms = after_transforms
+    def forward(self, images, mode):
+        if mode == 'explore':
+            return self.after_transforms(images)
+        elif mode == 'exploit':
+            return self.after_transforms(images)
+        elif mode == 'inference':
+            return images
+    def add_history(self, *args):
+        return None
+    def save_history(self, *args):
+        return None
+    def plot_history(self):
+        return None
+
 class AdaAug(nn.Module):
     def __init__(self, after_transforms, n_class, gf_model, h_model, save_dir=None, 
                     config=default_config):

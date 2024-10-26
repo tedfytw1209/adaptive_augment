@@ -8,7 +8,7 @@ import argparse
 import torch.nn as nn
 import torch.utils
 
-from adaptive_augmentor import AdaAug
+from adaptive_augmentor import AdaAug, AdaAug_Empty
 from networks import get_model
 from networks.projection import Projection
 from dataset import get_num_class, get_dataloaders, get_label_name, get_dataset_dimension
@@ -40,9 +40,9 @@ parser.add_argument('--report_freq', type=float, default=50, help='report freque
 parser.add_argument('--save', type=str, default='EXP', help='experiment name')
 parser.add_argument('--seed', type=int, default=0, help='seed')
 parser.add_argument('--search_dataset', type=str, default='./', help='search dataset name')
-parser.add_argument('--gf_model_name', type=str, default='./', help='gf_model name')
-parser.add_argument('--gf_model_path', type=str, default='./', help='gf_model path')
-parser.add_argument('--h_model_path', type=str, default='./', help='h_model path')
+parser.add_argument('--gf_model_name', type=str, default='', help='gf_model name')
+parser.add_argument('--gf_model_path', type=str, default='', help='gf_model path')
+parser.add_argument('--h_model_path', type=str, default='', help='h_model path')
 parser.add_argument('--k_ops', type=int, default=1, help="number of augmentation applied during training")
 parser.add_argument('--delta', type=float, default=0.3, help="degree of perturbation in magnitude")
 parser.add_argument('--temperature', type=float, default=1.0, help="temperature")
@@ -88,7 +88,7 @@ def main():
         args.dataset, args.batch_size, args.num_workers,
         args.dataroot, args.cutout, args.cutout_length,
         split=args.train_portion, split_idx=0, target_lb=-1,
-        search=True)
+        search=True, random_seed=args.seed, multilabel=args.multilabel)
 
     logging.info(f'Dataset: {args.dataset}')
     logging.info(f'  |total: {len(train_queue.dataset)}')
@@ -132,39 +132,43 @@ def main():
         trained_epoch = 0
         n_epoch = args.epochs
 
-    #  load trained adaaug sub models
-    search_n_class = get_num_class(args.search_dataset)
-    gf_model = get_model(model_name=args.gf_model_name,
-                            num_class=search_n_class,
-                            use_cuda=True, data_parallel=False)
+    #  load trained adaaug sub models (add opt)
+    if args.gf_model_name and args.gf_model_path and args.h_model_path:
+        search_n_class = get_num_class(args.search_dataset)
+        gf_model = get_model(model_name=args.gf_model_name,
+                                num_class=search_n_class,
+                                use_cuda=True, data_parallel=False)
 
-    h_model = Projection(in_features=gf_model.fc.in_features,
-                            n_layers=args.n_proj_layer,
-                            n_hidden=args.n_proj_hidden).cuda()
+        h_model = Projection(in_features=gf_model.fc.in_features,
+                                n_layers=args.n_proj_layer,
+                                n_hidden=args.n_proj_hidden).cuda()
 
-    utils.load_model(gf_model, f'{args.gf_model_path}/gf_weights.pt', location=args.gpu)
-    utils.load_model(h_model, f'{args.h_model_path}/h_weights.pt', location=args.gpu)
+        utils.load_model(gf_model, f'{args.gf_model_path}/gf_weights.pt', location=args.gpu)
+        utils.load_model(h_model, f'{args.h_model_path}/h_weights.pt', location=args.gpu)
 
-    for param in gf_model.parameters():
-        param.requires_grad = False
+        for param in gf_model.parameters():
+            param.requires_grad = False
 
-    for param in h_model.parameters():
-        param.requires_grad = False
+        for param in h_model.parameters():
+            param.requires_grad = False
 
-    after_transforms = train_queue.dataset.after_transforms
-    adaaug_config = {'sampling': 'prob',
-                    'k_ops': args.k_ops,
-                    'delta': args.delta,
-                    'temp': args.temperature,
-                    'search_d': get_dataset_dimension(args.search_dataset),
-                    'target_d': get_dataset_dimension(args.dataset)}
+        after_transforms = train_queue.dataset.after_transforms
+        adaaug_config = {'sampling': 'prob',
+                        'k_ops': args.k_ops,
+                        'delta': args.delta,
+                        'temp': args.temperature,
+                        'search_d': get_dataset_dimension(args.search_dataset),
+                        'target_d': get_dataset_dimension(args.dataset)}
 
-    adaaug = AdaAug(after_transforms=after_transforms,
-                    n_class=search_n_class,
-                    gf_model=gf_model,
-                    h_model=h_model,
-                    save_dir=args.save,
-                    config=adaaug_config)
+        adaaug = AdaAug(after_transforms=after_transforms,
+                        n_class=search_n_class,
+                        gf_model=gf_model,
+                        h_model=h_model,
+                        save_dir=args.save,
+                        config=adaaug_config)
+    else:
+        after_transforms = train_queue.dataset.after_transforms
+        adaaug = AdaAug_Empty(after_transforms=after_transforms)
 
     #  start training
     for i_epoch in range(n_epoch):

@@ -4,7 +4,7 @@ import torchvision
 from sklearn.model_selection import StratifiedShuffleSplit,ShuffleSplit
 from torch.utils.data import Sampler, Subset, SubsetRandomSampler
 from torchvision import transforms
-from datasets import EDFX,PTBXL,Chapman,WISDM,ICBEB,Georgia
+from datasets import EDFX,PTBXL,Chapman,WISDM,ICBEB,Georgia,MIMIC_LT
 import random
 from sklearn.preprocessing import StandardScaler
 from utils import make_weights_for_balanced_classes,make_weights_for_balanced_classes_maxrel,seed_worker
@@ -143,6 +143,7 @@ def get_num_class(dataset,labelgroup=''):
         'icbeball' : 9,
         'georgia' : 22,
         'georgiaall' : 22, #!!! unknown now
+        'mimic_lt': 26,
     }
     return dataset_dic[dataset+labelgroup]
 
@@ -159,12 +160,13 @@ def get_num_channel(dataset):
         'chapmands':12,
         'icbeb' : 12,
         'georgia' : 12,
+        'mimic_lt': 3,
     }[dataset]
 
 
 def get_dataloaders(dataset, batch, num_workers, dataroot, cutout,
                     cutout_length, split=0.5, split_idx=0, target_lb=-1,
-                    search=True, search_divider=1, search_size=0, tr_search=False):
+                    search=True, search_divider=1, search_size=0, tr_search=False, random_seed=0,multilabel=False):
     '''
     If search is True, dataloader will give batches of image without after_transforms,
     the transform will be done by augment agent
@@ -235,22 +237,21 @@ def get_dataloaders(dataset, batch, num_workers, dataroot, cutout,
         search_dataset.labels = targets
         search_dataset.targets = targets
         testset = torchvision.datasets.SVHN(root=dataroot, split='test', download=True, transform=None)
+    elif dataset == 'mimic_lt':
+        total_trainset = MIMIC_LT(root_dir=dataroot, mode='trainval')
+        testset = MIMIC_LT(root_dir=dataroot, mode='train')
+        search_dataset = None
     else:
         raise ValueError('invalid dataset name=%s' % dataset)
 
     train_sampler = None
     if split < 1.0:
-        sss = StratifiedShuffleSplit(n_splits=5, test_size=1-split, random_state=0)
-        sss = sss.split(list(range(len(total_trainset))), total_trainset.targets)
+        #sss = StratifiedShuffleSplit(n_splits=5, test_size=1-split, random_state=0)
+        sss = ShuffleSplit(n_splits=5, test_size=1-split, random_state=random_seed)
+        sss = sss.split(list(range(len(total_trainset))))
         for _ in range(split_idx + 1):
             train_idx, valid_idx = next(sss)
-
         print(len(valid_idx))
-
-        if target_lb >= 0:
-            train_idx = [i for i in train_idx if total_trainset.targets[i] == target_lb]
-            valid_idx = [i for i in valid_idx if total_trainset.targets[i] == target_lb]
-
         train_sampler = SubsetRandomSampler(train_idx)
         valid_sampler = SubsetSampler(valid_idx)
     else:
